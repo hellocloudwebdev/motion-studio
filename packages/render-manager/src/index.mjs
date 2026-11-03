@@ -30,6 +30,7 @@ export async function renderHyperFramesProject(project, options = {}) {
   const workerCount = Math.max(1, Math.min(4, Number(options.workers || 1)));
   const quality = options.quality || 'draft';
   const fps = project.project.frameRate.numerator / project.project.frameRate.denominator;
+  if (![24, 30, 60].includes(fps)) throw new Error('HyperFrames 0.8.86 CLI supports output FPS 24, 30 or 60; this project uses ' + fps + '. Add an explicit frame-rate conversion stage before rendering.');
   const onLine = options.onLine || (() => {});
   const signal = options.signal;
   await mkdir(outputRoot, { recursive: true });
@@ -72,7 +73,7 @@ export async function renderHyperFramesProject(project, options = {}) {
   const expectedDuration = fullDurationSeconds;
   const checks = {
     dimensionsMatch: media.width === expectedWidth && media.height === expectedHeight,
-    frameRateMatch: String(media.frameRate).replaceAll('/1', '') === String(fps),
+    frameRateMatch: (() => { const [n, d = '1'] = String(media.frameRate).split('/'); return Math.abs(Number(n) / Number(d) - fps) < 0.001; })(),
     durationWithinOneFrame: Math.abs(media.durationSeconds - expectedDuration) <= 1 / fps + 0.02,
     hasVideo: Boolean(media.width && media.height && media.videoCodec),
     nonEmpty: outputStat.size > 0
