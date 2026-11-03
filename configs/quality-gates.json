@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "repair": { "maxCycles": 2, "targetedRerender": true, "retestRequired": true },
+  "technical": ["ir-valid", "frame-rate-match", "dimensions-match", "duration-match", "assets-resolved", "audio-sync", "codec-valid"],
+  "typography": ["font-present", "glyph-coverage", "no-overflow", "safe-area", "readable-size"],
+  "visual": ["no-black-frames", "no-flicker", "transition-continuity", "composition-balanced"],
+  "delivery": ["file-exists", "probe-passes", "final-export-verified"]
+}
