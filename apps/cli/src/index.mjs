@@ -25,7 +25,8 @@ if (['validate', 'route', 'qa', 'graph', 'compile', 'render'].includes(command))
   const validation = validateProject(project);
   if (command === 'validate') { print(validation); if (!validation.valid) process.exitCode = 1; }
   else if (command === 'route') {
-    const routing = routeScenes(project, { availableEngines: args.filter(x => !x.startsWith('--')) });
+    const availableEngines = args.filter(x => !x.startsWith('--'));
+    const routing = routeScenes(project, { availableEngines: availableEngines.length ? availableEngines : undefined });
     print(routing);
   } else if (command === 'qa') {
     const routing = routeScenes(project);
