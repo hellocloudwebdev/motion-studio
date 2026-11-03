@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Motion Studio Reference",
+  "type": "object",
+  "required": ["id", "kind", "title", "source", "usageStatus", "techniques"],
+  "properties": {
+    "id": { "type": "string" },
+    "kind": { "enum": ["video", "image", "article", "tutorial", "design", "audio", "other"] },
+    "title": { "type": "string" },
+    "creator": { "type": "string" },
+    "source": { "type": "string", "format": "uri" },
+    "retrievedAt": { "type": "string", "format": "date-time" },
+    "usageStatus": { "enum": ["licensed", "public-domain", "user-owned", "reference-only", "unknown"] },
+    "techniques": { "type": "array", "items": { "type": "string" } },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  },
+  "additionalProperties": true
+}
