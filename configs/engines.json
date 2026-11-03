@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "engines": {
+    "hyperframes": { "role": "programmatic-2d", "capabilities": ["2d-motion", "kinetic-typography", "charts", "shapes", "web-layout"] },
+    "after-effects": { "role": "motion-compositing", "capabilities": ["compositing", "vfx", "tracking", "roto", "advanced-typography", "motion-graphics"] },
+    "blender": { "role": "3d", "capabilities": ["3d", "simulation", "product-visualization", "camera-animation", "lighting"] },
+    "threejs": { "role": "webgl-3d", "capabilities": ["webgl", "shader", "procedural-3d", "interactive-3d"] },
+    "ffmpeg": { "role": "media-pipeline", "capabilities": ["transcode", "trim", "scale", "audio-mix", "image-sequence", "media-probe"] },
+    "premiere-pro": { "role": "editorial-assembly", "capabilities": ["timeline-editing", "audio-assembly", "captions", "final-cut"] }
+  },
+  "executionPolicy": { "maxWorkers": 1, "draftPreview": true, "resumeFromCheckpoint": true }
+}
