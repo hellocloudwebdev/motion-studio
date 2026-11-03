@@ -1,0 +1,14 @@
+{
+  "canvas": { "width": 1920, "height": 1080 },
+  "baseScalePx": {
+    "hero": 108,
+    "sceneHeading": 72,
+    "supportingHeadline": 50,
+    "body": 36,
+    "caption": 27,
+    "footnote": 20
+  },
+  "minimumReadablePx": 18,
+  "safeAreaPercent": 5,
+  "fontFallbackPolicy": "explicit-and-recorded"
+}
