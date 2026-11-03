@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProject } from '../../core/src/index.mjs';
@@ -39,8 +39,68 @@ function cssFor(layer, fontFamily) {
     styles.push('text-align:' + (typo.alignment || 'left'));
     styles.push('white-space:pre-wrap', 'overflow-wrap:anywhere');
   }
-  if (layer.kind === 'image') styles.push('object-fit:' + (style.objectFit || 'cover'));
+  if (['image', 'video'].includes(layer.kind)) styles.push('object-fit:' + (style.objectFit || 'cover'));
   return styles.join(';');
+}
+
+function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, placeholder) {
+  const layerId = safeId(scene.id + '-' + layer.id);
+  const durationFrames = Number(layer.durationFrames ?? Math.max(1, scene.durationFrames - localStartFrame));
+  const motion = layer.motion?.preset || 'fade';
+  const buildAttrs = startFrame => ' id="' + layerId + '" class="clip ms-layer ms-' + esc(layer.kind) + '"' +
+    ' data-start="' + seconds(startFrame, frameRate) + '"' +
+    ' data-duration="' + seconds(durationFrames, frameRate) + '"' +
+    ' data-track-index="' + Number(layer.trackIndex ?? index) + '"' +
+    ' data-motion="' + esc(motion) + '"';
+  const style = ' style="' + esc(cssFor(layer, null)) + '"';
+  const content = layer.content?.text ?? layer.content ?? layer.text ?? '';
+  let local = '', global = '';
+  if (layer.kind === 'text') {
+    local = '<div' + buildAttrs(localStartFrame) + style + '>' + esc(content) + '</div>';
+    global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + style + '>' + esc(content) + '</div>';
+  } else if (layer.kind === 'shape') {
+    local = '<div' + buildAttrs(localStartFrame) + style + ' aria-hidden="true"></div>';
+    global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + style + ' aria-hidden="true"></div>';
+  } else if (layer.kind === 'image' && assetUri) {
+    const imgStyle = style + ' object-fit:' + esc(layer.style?.objectFit || 'cover');
+    local = '<img' + buildAttrs(localStartFrame) + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(assetUri) + '"' + imgStyle + ' />';
+    global = '<img' + buildAttrs(globalStartFrame + localStartFrame) + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(assetUri) + '"' + imgStyle + ' />';
+  } else if (layer.kind === 'video' && assetUri) {
+    local = '<video' + buildAttrs(localStartFrame) + ' src="' + esc(assetUri) + '" muted playsinline preload="auto" data-has-audio="false"' + style + '></video>';
+    global = '<video' + buildAttrs(globalStartFrame + localStartFrame) + ' src="' + esc(assetUri) + '" muted playsinline preload="auto" data-has-audio="false"' + style + '></video>';
+  } else if (layer.kind === 'audio' && assetUri) {
+    const volume = Number(layer.volume ?? 1);
+    local = '<audio' + buildAttrs(localStartFrame) + ' src="' + esc(assetUri) + '" preload="auto" data-volume="' + volume + '"></audio>';
+    global = '<audio' + buildAttrs(globalStartFrame + localStartFrame) + ' src="' + esc(assetUri) + '" preload="auto" data-volume="' + volume + '"></audio>';
+  } else if (placeholder) {
+    const label = '[ASSET REQUIRED: ' + (layer.assetId || layer.kind) + ']';
+    const placeholderStyle = ' style="position:absolute;left:40px;top:40px;padding:24px;background:#7f1d1d;color:#fff;font:700 28px Arial;width:calc(100% - 128px)"';
+    local = '<div' + buildAttrs(localStartFrame) + ' class="clip ms-layer ms-missing-asset"' + placeholderStyle + '>' + esc(label) + '</div>';
+    global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + ' class="clip ms-layer ms-missing-asset"' + placeholderStyle + '>' + esc(label) + '</div>';
+  }
+  return { local, global };
+}
+
+function documentHtml({ compositionId, title, width, height, duration, elements, background = '#101010' }) {
+  const script = '<script src="./assets/gsap.min.js"></script>\n<script>\n(function(){\n' +
+    ' const compositionId=' + JSON.stringify(compositionId) + ';\n' +
+    ' const duration=' + Number(duration) + ';\n' +
+    ' const tl=gsap.timeline({paused:true});\n' +
+    ' document.querySelectorAll(".ms-layer").forEach(function(el){\n' +
+    '   const start=Number(el.dataset.start||0);\n' +
+    '   const motion=el.dataset.motion||"fade";\n' +
+    '   if(motion==="fade-up"||motion==="slide-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration:0.65,ease:"power3.out"},start);}\n' +
+    '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration:0.6,ease:"power3.out"},start);}\n' +
+    '   else {tl.fromTo(el,{opacity:0},{opacity:1,duration:0.25,ease:"power1.out"},start);}\n' +
+    ' });\n' +
+    ' tl.set({}, {}, duration);\n' +
+    ' window.__timelines=window.__timelines||{};\n' +
+    ' window.__timelines[compositionId]=tl;\n' +
+    '})();\n</script>';
+  return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(title) + '</title>\n' +
+    '<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:' + esc(background) + '} [data-composition-id]{position:relative;overflow:hidden;width:100%;height:100%;background:' + esc(background) + '} .ms-layer{will-change:transform,opacity} img,video{display:block}</style>\n</head>\n<body>\n' +
+    '<div data-composition-id="' + esc(compositionId) + '" data-width="' + Number(width) + '" data-height="' + Number(height) + '">\n' +
+    elements.join('\n') + '\n</div>\n' + script + '\n</body>\n</html>\n';
 }
 
 export async function compileHyperFramesProject(project, options = {}) {
@@ -59,20 +119,30 @@ export async function compileHyperFramesProject(project, options = {}) {
   await mkdir(path.join(outputDir, 'renders'), { recursive: true });
 
   async function resolveAsset(assetId) {
-    if (!assetId) throw new Error('Media layer is missing assetId.');
+    if (!assetId) return null;
     if (copiedAssets.has(assetId)) return copiedAssets.get(assetId);
     const asset = assets.get(assetId);
-    if (!asset) throw new Error('Unknown assetId: ' + assetId);
-    if (isExternalUri(asset.uri)) {
-      warnings.push({ code: 'EXTERNAL_ASSET', assetId, message: 'External asset remains URL-linked; render is not fully offline-reproducible.' });
+    if (!asset) {
+      warnings.push({ code: 'ASSET_REFERENCE_MISSING', assetId, message: 'Asset reference is not defined in Canonical Video IR.' });
+      return null;
+    }
+    if (/^https?:\/\//i.test(asset.uri || '')) {
+      warnings.push({ code: 'EXTERNAL_ASSET', assetId, message: 'External asset URL is not offline-reproducible.' });
       copiedAssets.set(assetId, asset.uri);
       return asset.uri;
     }
     const raw = asset.uri?.startsWith('file://') ? fileURLToPath(asset.uri) : asset.uri;
-    if (typeof raw !== 'string' || !raw.trim()) throw new Error('Asset ' + assetId + ' requires a local uri.');
+    if (typeof raw !== 'string' || !raw.trim()) return null;
     const sourcePath = path.resolve(sourceRoot, raw);
     const relative = path.relative(sourceRoot, sourcePath);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Asset path escapes the approved project root: ' + assetId);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Asset path escapes approved project root: ' + assetId);
+    try {
+      const info = await stat(sourcePath);
+      if (!info.isFile()) throw new Error('Asset path is not a file: ' + assetId);
+    } catch {
+      warnings.push({ code: 'ASSET_FILE_MISSING', assetId, message: 'Local asset file is not present: ' + raw });
+      return null;
+    }
     const extension = path.extname(sourcePath).toLowerCase();
     const destinationName = safeId(assetId) + extension;
     const destination = path.join(outputDir, 'assets', destinationName);
@@ -82,66 +152,65 @@ export async function compileHyperFramesProject(project, options = {}) {
     return uri;
   }
 
-  const sceneEntries = [];
+  const sceneEntries = [], rootMarkup = [];
   let cumulativeFrame = 0;
+  const frameRate = project.project.frameRate;
+  const displayFont = project.brand?.fonts?.display || project.brand?.fonts?.body || 'Arial';
   for (const scene of selectedScenes) {
-    const sceneHtml = [];
+    const sceneMarkup = [];
     for (let index = 0; index < (scene.layers || []).length; index += 1) {
       const layer = scene.layers[index];
       const hintedEngine = layer.engineHint;
       if (hintedEngine && !['auto', 'hyperframes'].includes(hintedEngine)) {
-        warnings.push({ code: 'NON_HYPERFRAMES_LAYER', sceneId: scene.id, layerId: layer.id, engine: hintedEngine, message: 'Layer is routed to a different engine and is not emitted by the HyperFrames renderer.' });
+        warnings.push({ code: 'NON_HYPERFRAMES_LAYER', sceneId: scene.id, layerId: layer.id, engine: hintedEngine, message: 'Layer is routed to another engine and is excluded from this HTML renderer.' });
         continue;
       }
-      const layerId = safeId(layer.id);
-      const startFrame = Number(layer.startFrame ?? 0);
-      const durationFrames = Number(layer.durationFrames ?? Math.max(1, scene.durationFrames - startFrame));
-      const attrs = ' id="' + layerId + '" class="clip ms-layer ms-' + esc(layer.kind) + '"' +
-        ' data-start="' + seconds(startFrame, project.project.frameRate) + '"' +
-        ' data-duration="' + seconds(durationFrames, project.project.frameRate) + '"' +
-        ' data-track-index="' + Number(layer.trackIndex ?? index) + '"';
-      const style = ' style="' + esc(cssFor(layer, project.brand?.fonts?.display || project.brand?.fonts?.body)) + '"';
-      if (layer.kind === 'text') {
-        const text = layer.content?.text ?? layer.content ?? layer.text ?? '';
-        sceneHtml.push('<div' + attrs + style + '>' + esc(text) + '</div>');
-      } else if (layer.kind === 'shape') {
-        sceneHtml.push('<div' + attrs + style + ' aria-hidden="true"></div>');
-      } else if (layer.kind === 'image') {
-        const src = await resolveAsset(layer.assetId);
-        sceneHtml.push('<img' + attrs + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(src) + '"' + style + ' />');
-      } else if (layer.kind === 'video') {
-        const src = await resolveAsset(layer.assetId);
-        sceneHtml.push('<video' + attrs + ' src="' + esc(src) + '" muted playsinline preload="auto" data-has-audio="false"></video>');
-      } else if (layer.kind === 'audio') {
-        const src = await resolveAsset(layer.assetId);
-        sceneHtml.push('<audio' + attrs + ' src="' + esc(src) + '" preload="auto" data-volume="' + Number(layer.volume ?? 1) + '"></audio>');
-      } else {
-        warnings.push({ code: 'UNSUPPORTED_LAYER_KIND', sceneId: scene.id, layerId: layer.id, kind: layer.kind, message: 'Layer kind is not yet compiled by the HyperFrames adapter.' });
+      if (!['text', 'shape', 'image', 'video', 'audio'].includes(layer.kind)) {
+        warnings.push({ code: 'UNSUPPORTED_LAYER_KIND', sceneId: scene.id, layerId: layer.id, kind: layer.kind, message: 'This layer kind is not yet emitted by the HyperFrames adapter.' });
+        continue;
       }
+      const localStartFrame = Number(layer.startFrame ?? 0);
+      const globalStartFrame = cumulativeFrame;
+      const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
+      const markup = layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, ['image', 'video', 'audio'].includes(layer.kind) && !assetUri);
+      sceneMarkup.push(markup.local);
+      rootMarkup.push(markup.global);
     }
-    const sceneDuration = seconds(scene.durationFrames, project.project.frameRate);
+    const sceneDuration = seconds(scene.durationFrames, frameRate);
     const sceneId = safeId(scene.id);
     const compositionId = 'scene-' + sceneId;
-    const html = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(scene.name) + '</title>\n<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101010} [data-composition-id]{position:relative;overflow:hidden;width:100%;height:100%;background:' + esc(project.brand?.colors?.background || '#101010') + '} .ms-layer{will-change:transform,opacity} .ms-image{object-fit:cover}</style>\n</head>\n<body>\n<div data-composition-id="' + compositionId + '" data-width="' + project.project.canvas.width + '" data-height="' + project.project.canvas.height + '" data-duration="' + sceneDuration + '">\n' + sceneHtml.join('\n') + '\n</div>\n<script src="./assets/gsap.min.js"></script>\n<script>\n(function(){\n const compositionId=' + JSON.stringify(compositionId) + ';\n const duration=' + sceneDuration + ';\n const tl=gsap.timeline({paused:true});\n document.querySelectorAll(".ms-layer").forEach(function(el){\n   const start=Number(el.dataset.start||0);\n   const motion=el.dataset.motion;\n   if(motion==="fade-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration:0.65,ease:"power3.out"},start);}\n   else {tl.fromTo(el,{opacity:0},{opacity:1,duration:0.25,ease:"power1.out"},start);}\n });\n tl.set({}, {}, duration);\n window.__timelines=window.__timelines||{};\n window.__timelines[compositionId]=tl;\n})();\n</script>\n</body>\n</html>\n';
-    await writeFile(path.join(outputDir, sceneId + '.html'), html, 'utf8');
+    const sceneDoc = documentHtml({
+      compositionId, title: scene.name, width: project.project.canvas.width, height: project.project.canvas.height,
+      duration: sceneDuration, elements: sceneMarkup, background: project.brand?.colors?.background || '#101010'
+    });
+    await writeFile(path.join(outputDir, sceneId + '.html'), sceneDoc, 'utf8');
     sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: sceneId + '.html' });
     cumulativeFrame += scene.durationFrames;
   }
 
   await cp(DEFAULT_GSAP, path.join(outputDir, 'assets', 'gsap.min.js'));
+  const rootDuration = seconds(cumulativeFrame, frameRate);
+  const rootCompositionId = 'motion-studio-root';
+  const rootDoc = documentHtml({
+    compositionId: rootCompositionId, title: project.project.name, width: project.project.canvas.width, height: project.project.canvas.height,
+    duration: rootDuration, elements: rootMarkup, background: project.brand?.colors?.background || '#101010'
+  });
+  await writeFile(path.join(outputDir, 'index.html'), rootDoc, 'utf8');
   const manifest = {
     schemaVersion: '1.0.0',
     compiler: 'motion-studio-hyperframes-adapter',
     projectId: project.project.id,
     projectRevision: project.project.revision || 1,
-    frameRate: project.project.frameRate,
+    rootCompositionId,
+    frameRate,
     canvas: project.project.canvas,
-    totalDurationFrames: selectedScenes.reduce((sum, scene) => sum + scene.durationFrames, 0),
+    totalDurationFrames: cumulativeFrame,
+    durationSeconds: rootDuration,
+    entrypoint: 'index.html',
     scenes: sceneEntries,
     workerPolicy: { defaultWorkers: 1 },
     warnings
   };
   await writeFile(path.join(outputDir, 'render-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  await writeFile(path.join(outputDir, 'index.html'), '<!doctype html><html><body><main data-composition-id="motion-studio-root" data-width="' + project.project.canvas.width + '" data-height="' + project.project.canvas.height + '"><h1>Motion Studio render package</h1><p>Render individual scene HTML files from render-manifest.json using the scene-specific composition.</p></main></body></html>\n');
   return { outputDir, manifest, warnings };
 }
