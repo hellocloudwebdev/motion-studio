@@ -24,7 +24,7 @@ async function packageVersion(name) {
   } catch { return { installed: false, version: null }; }
 }
 commandVersion('Node.js', process.execPath, ['--version']);
-commandVersion('npm', 'npm', ['--version']);
+checks.push({ name: 'npm', available: commandExists('npm'), version: null });
 commandVersion('FFmpeg', 'ffmpeg', ['-version']);
 commandVersion('FFprobe', 'ffprobe', ['-version']);
 commandVersion('Blender', 'blender', ['--version']);
