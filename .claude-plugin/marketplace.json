@@ -1,0 +1,6 @@
+{
+  "name": "motion-studio-extensions",
+  "owner": { "name": "Motion Studio contributors" },
+  "metadata": { "description": "Motion Studio skills and specialist agents", "version": "0.2.0" },
+  "plugins": [{ "name": "motion-studio", "source": "./", "description": "AI video production workflow" }]
+}
