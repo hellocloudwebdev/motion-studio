@@ -1,0 +1,8 @@
+{
+  "name": "motion-studio",
+  "version": "0.2.0",
+  "description": "AI video production agents, skills and local MCP tools.",
+  "author": { "name": "Motion Studio contributors" },
+  "skills": "../skills",
+  "agents": "../agents"
+}
