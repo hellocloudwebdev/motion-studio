@@ -1,0 +1,23 @@
+{
+  "name": "motion-studio",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Engine-independent AI video production system with local creative-software bridges.",
+  "type": "module",
+  "engines": { "node": ">=22.0.0" },
+  "workspaces": ["packages/*", "apps/*", "servers/*"],
+  "scripts": {
+    "test": "node --test packages/*/test/*.test.mjs packages/*/src/*.test.mjs apps/*/test/*.test.mjs tests/install/*.test.mjs",
+    "studio": "node apps/cli/src/index.mjs",
+    "mcp": "node servers/mcp-server/src/index.mjs",
+    "runtime": "node apps/local-runtime/src/server.mjs",
+    "validate:example": "node apps/cli/src/index.mjs validate templates/startup-ad/project.json",
+    "route:example": "node apps/cli/src/index.mjs route templates/startup-ad/project.json",
+    "doctor": "node scripts/doctor.mjs",
+    "test:installer": "node --test tests/install/*.test.mjs",
+    "setup": "node scripts/install.mjs"
+  },
+  "license": "MIT",
+  "bin": { "motion-studio": "./apps/cli/src/index.mjs" },
+  "dependencies": { "gsap": "^3.14.2", "three": "^0.181.2" }
+}
