@@ -2,7 +2,7 @@
 
 **Motion Studio** is a cross-platform AI video-production environment. It coordinates specialist agents, skills, templates, creative software and quality gates through a versioned Canonical Video Project IR.
 
-> **Current release: 0.2.0 installer foundation.** This repository includes Windows/macOS/Linux bootstrap scripts, npm dependency installation, FFmpeg and Blender package-manager integration, HyperFrames CLI installation, host skill copying, local MCP registration and a system doctor. Engine execution adapters remain phased implementation work; the installer does not claim to make an unimplemented renderer production-ready.
+> **Current release: 0.2.0 installer foundation.** The repository includes Windows/macOS/Linux bootstrap scripts, npm workspace installation, FFmpeg and Blender package-manager integration, HyperFrames CLI/browser setup, host skill staging, generic MCP configuration and a local environment doctor. Renderer execution adapters remain phased implementation work; installation does not claim to make an unimplemented renderer production-ready.
 
 ## Install on a new PC
 
@@ -17,13 +17,13 @@ Set-ExecutionPolicy -Scope Process Bypass
 chmod +x install.sh && ./install.sh
 ```
 
-The bootstrapper checks Node.js 22+, installs a user-local Node runtime when needed, stages Motion Studio into a stable per-user app directory, and invokes the cross-platform installer. The installer installs workspace dependencies (GSAP and Three.js), FFmpeg, HyperFrames CLI and browser support, and offers Blender. It stages skills for supported hosts and configures MCP where supported.
+The bootstrapper requires Node.js 22+ (Windows uses WinGet to install Node LTS when needed; macOS/Linux bootstrap a checksum-verified Node.js 26 runtime when needed). The installer stages Motion Studio into a per-user application directory, installs workspace dependencies, and installs HyperFrames CLI/browser support. With `--yes`, it attempts FFmpeg and Blender installation through the available OS package manager. It stages skills for Claude Code, Codex and Cursor, configures Cursor MCP, registers MCP with detected Claude/Codex CLIs, and writes generic MCP configuration for Z Code and DeepSeek-compatible hosts.
 
-Use `./install.sh --yes` or `.\install.ps1 --yes` for non-interactive setup. Use `--minimal`, `--skip-software`, `--skip-hosts` or `--dry-run` to control setup. See `docs/INSTALLATION.md`.
+Use `./install.sh --yes` or `.\install.ps1 --yes` for non-interactive installation of supported free/open-source components. Use `--minimal`, `--skip-software`, `--skip-hosts` or `--dry-run` to control setup. See `docs/INSTALLATION.md`.
 
 ## Licensed software
 
-After Effects, Premiere Pro, Adobe Media Encoder, Illustrator, Photoshop and Audition require Adobe Creative Cloud installation and a valid license/sign-in. These cannot be legitimately installed or activated silently. See `docs/SOFTWARE-MATRIX.md`.
+After Effects, Premiere Pro, Adobe Media Encoder, Illustrator, Photoshop and Audition require Adobe Creative Cloud installation and a valid license/sign-in. They cannot be legitimately installed or activated silently. See `docs/SOFTWARE-MATRIX.md`.
 
 ## Locked production stack
 
@@ -45,18 +45,18 @@ After Effects, Premiere Pro, Adobe Media Encoder, Illustrator, Photoshop and Aud
 - **Engine router** selects engines for each scene layer.
 - **QA and repair** classify defects, assign specialists and re-inspect changed output.
 - **Memory and learning** retain project decisions and propose versioned skill changes.
-- **Adapters** expose shared capabilities through supported AI hosts and generic MCP.
+- **Adapters** expose shared capabilities through host-specific configuration and generic MCP.
 
 ## Verify
 
 ```bash
-node scripts/doctor.mjs
+npm install
 npm test
-npm run test:installer
 npm run validate:example
 npm run route:example
+node scripts/doctor.mjs
 ```
 
 ## Current capability boundary
 
-This release makes the repository and setup process portable. It does not yet provide finished render adapters for all advertised engines. The MCP server supports project templates, IR validation, scene routing, execution graph generation, deterministic QA and typography scale planning. Actual rendering remains disabled until a concrete adapter passes compatibility checks and returns verifiable output.
+This is a working planning and integration foundation, not yet a finished automated video renderer. The MCP server exposes project-template creation, IR validation, scene routing, execution-graph generation, deterministic QA and typography-scale planning. Actual rendering remains disabled until a concrete adapter passes compatibility checks and returns verifiable output.
