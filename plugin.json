@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "motion-studio",
+  "version": "0.2.0",
+  "description": "Cross-platform AI motion-graphics and video-production system with specialist skills and local MCP tools.",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md"
+    }
+  }
+}
