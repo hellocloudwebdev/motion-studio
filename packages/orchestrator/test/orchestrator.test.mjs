@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createProductionRun, transitionRun, recordArtifact, buildExecutionGraph, validateExecutionGraph } from '../src/index.mjs';
+import { createProductionRun, transitionRun, recordArtifact, validateExecutionGraph } from '../src/index.mjs';
 
-test('run transitions enforce repair limits and verified delivery', () => {
+test('run transitions enforce repair limits', () => {
   let run = createProductionRun({ id: 'r1', projectId: 'p1', maxRepairCycles: 1 });
   run = transitionRun(run, 'planned');
   run = transitionRun(run, 'rendering');
   run = transitionRun(run, 'qa');
   run = transitionRun(run, 'repair');
-  assert.throws(() => transitionRun(run, 'rendering').status === 'rendering' && transitionRun(transitionRun(run, 'rendering'), 'qa') && transitionRun(transitionRun(transitionRun(run, 'rendering'), 'qa'), 'repair'), /Repair limit/);
+  run = transitionRun(run, 'rendering');
+  run = transitionRun(run, 'qa');
+  assert.throws(() => transitionRun(run, 'repair'), /Repair limit/);
 });
 test('delivery requires verified final export', () => {
   let run = createProductionRun({ id: 'r2', projectId: 'p2' });
