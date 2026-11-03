@@ -1,0 +1,5 @@
+{
+  "name": "motion-studio-local",
+  "owner": { "name": "Motion Studio contributors" },
+  "plugins": [{ "name": "motion-studio", "source": "../../", "version": "0.2.0" }]
+}
