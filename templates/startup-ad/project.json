@@ -1,0 +1,180 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "opendoor-startup-ad",
+    "name": "Opendoor — Startup Advertisement",
+    "objective": "Introduce an hourly house-party space platform and drive social engagement.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 5
+    },
+    "totalDurationFrames": 1800,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "A better place for every house party.",
+    "audience": "Young adults aged 18–25 in India.",
+    "message": "Find a private, ready-to-host space for your next gathering."
+  },
+  "brand": {
+    "colors": {
+      "primary": "#F5A623",
+      "ink": "#171717",
+      "surface": "#FFF8EE"
+    },
+    "fonts": {
+      "display": "Inter",
+      "body": "Inter"
+    }
+  },
+  "assets": [],
+  "scenes": [
+    {
+      "id": "scene-001",
+      "name": "The problem",
+      "durationFrames": 240,
+      "intent": "Show the friction of planning a house party.",
+      "layers": [
+        {
+          "id": "s1-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes"
+        },
+        {
+          "id": "s1-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "typography": {
+            "family": "Inter",
+            "sizePx": 108,
+            "safeArea": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-002",
+      "name": "The reveal",
+      "durationFrames": 300,
+      "intent": "Introduce Opendoor as the solution.",
+      "layers": [
+        {
+          "id": "s2-product",
+          "kind": "3d",
+          "engineHint": "blender",
+          "requiredCapabilities": [
+            "3d",
+            "lighting"
+          ]
+        },
+        {
+          "id": "s2-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "typography": {
+            "family": "Inter",
+            "sizePx": 92,
+            "safeArea": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-003",
+      "name": "How it works",
+      "durationFrames": 360,
+      "intent": "Explain discovery, booking and hosting.",
+      "layers": [
+        {
+          "id": "s3-ui",
+          "kind": "image",
+          "engineHint": "hyperframes"
+        },
+        {
+          "id": "s3-copy",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "typography": {
+            "family": "Inter",
+            "sizePx": 64,
+            "safeArea": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-004",
+      "name": "The experience",
+      "durationFrames": 420,
+      "intent": "Build emotional appeal with the gathering experience.",
+      "layers": [
+        {
+          "id": "s4-footage",
+          "kind": "video",
+          "engineHint": "ffmpeg"
+        },
+        {
+          "id": "s4-overlay",
+          "kind": "text",
+          "engineHint": "after-effects",
+          "requiredCapabilities": [
+            "advanced-typography"
+          ],
+          "typography": {
+            "family": "Inter",
+            "sizePx": 72,
+            "safeArea": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-005",
+      "name": "Call to action",
+      "durationFrames": 480,
+      "intent": "Close with a clear social call to action.",
+      "layers": [
+        {
+          "id": "s5-logo",
+          "kind": "shape",
+          "engineHint": "hyperframes"
+        },
+        {
+          "id": "s5-cta",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "typography": {
+            "family": "Inter",
+            "sizePx": 96,
+            "safeArea": true
+          }
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1920,
+        "height": 1080,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false
+      }
+    ]
+  }
+}
