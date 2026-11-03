@@ -2,7 +2,7 @@ name: Motion Studio CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "milestone/**"]
   pull_request:
   workflow_dispatch:
 
@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [22, 24]
+        node: [24, 26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -23,3 +23,4 @@ jobs:
       - run: npm test
       - run: npm run validate:example
       - run: npm run route:example
+      - run: npm run compile:example
