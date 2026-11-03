@@ -118,7 +118,7 @@
         {
           "id": "s4-footage",
           "kind": "video",
-          "engineHint": "ffmpeg"
+          "engineHint": "hyperframes"
         },
         {
           "id": "s4-overlay",
