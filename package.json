@@ -1,10 +1,10 @@
 {
   "name": "motion-studio",
-  "version": "0.2.0",
+  "version": "0.3.0-alpha.1",
   "private": true,
-  "description": "Engine-independent AI video production system with local creative-software bridges.",
+  "description": "Engine-independent AI video production system with HyperFrames rendering and local Adobe MCP bridges.",
   "type": "module",
-  "engines": { "node": ">=22.0.0" },
+  "engines": { "node": ">=24.0.0" },
   "workspaces": ["packages/*", "apps/*", "servers/*"],
   "scripts": {
     "test": "node --test",
@@ -13,10 +13,19 @@
     "runtime": "node apps/local-runtime/src/server.mjs",
     "validate:example": "node apps/cli/src/index.mjs validate templates/startup-ad/project.json",
     "route:example": "node apps/cli/src/index.mjs route templates/startup-ad/project.json",
+    "compile:example": "node apps/cli/src/index.mjs compile templates/startup-ad/project.json",
     "doctor": "node scripts/doctor.mjs",
     "setup": "node scripts/install.mjs"
   },
   "license": "MIT",
   "bin": { "motion-studio": "./apps/cli/src/index.mjs" },
-  "dependencies": { "gsap": "^3.14.2", "three": "^0.181.2" }
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@kumoproductions/mcp-aftereffects": "0.3.2",
+    "premiere-pro-mcp": "1.28.0",
+    "hyperframes": "0.8.86",
+    "gsap": "3.14.2",
+    "three": "0.181.2",
+    "zod": "3.25.0"
+  }
 }
