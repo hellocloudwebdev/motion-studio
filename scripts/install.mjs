@@ -37,12 +37,24 @@ function run(command, args, label, optional = false, cwd = sourceRoot) {
   console.log('[Motion Studio] ' + label);
   if (dryRun) return { ok: true, status: 0 };
   const result = spawnSync(command, args, { stdio: 'inherit', shell: false, cwd, env: process.env });
+
   if (result.error || result.status !== 0) {
     const message = label + ' failed: ' + (result.error?.message || result.status);
     if (optional) { report.warnings.push(message); return { ok: false, status: result.status }; }
     throw new Error(message);
   }
   return { ok: true, status: 0 };
+}
+function runNpm(args, label, cwd = appRoot, optional = false) {
+  if (platform !== 'win32') return run('npm', args, label, optional, cwd);
+  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  return run(process.execPath, [npmCli, ...args], label, optional, cwd);
+}
+function runHostCli(command, args, label) {
+  if (platform !== 'win32') return run(command, args, label, true, appRoot);
+  const quote = value => '"' + String(value).replaceAll('"', '""') + '"';
+  const commandLine = [command, ...args].map(quote).join(' ');
+  return run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], label, true, appRoot);
 }
 function openUrl(url) {
   if (dryRun) return;
@@ -144,12 +156,12 @@ async function stageHosts() {
 
   if (commandExists('claude')) {
     for (const [name, server] of Object.entries(servers)) {
-      run('claude', ['mcp', 'add', '--transport', 'stdio', '--scope', 'user', name, '--', server.command, ...server.args], 'Registering Claude Code ' + name, true);
+      runHostCli('claude', ['mcp', 'add', '--transport', 'stdio', '--scope', 'user', name, '--', server.command, ...server.args], 'Registering Claude Code ' + name);
     }
   }
   if (commandExists('codex')) {
     for (const [name, server] of Object.entries(servers)) {
-      run('codex', ['mcp', 'add', name, '--', server.command, ...server.args], 'Registering Codex ' + name, true);
+      runHostCli('codex', ['mcp', 'add', name, '--', server.command, ...server.args], 'Registering Codex ' + name);
     }
   }
 }
@@ -184,14 +196,14 @@ async function main() {
       await cp(sourceRoot, appRoot, { recursive: true, force: true, filter: src => !src.includes(path.sep + '.git' + path.sep) && !src.includes(path.sep + 'node_modules' + path.sep) });
     }
   }
-  if (!minimal && yes) installSystem('ffmpeg');
+  if (!minimal && yes) { installSystem('ffmpeg'); installSystem('blender'); }
   if (!minimal && yes && flags.has('--install-blender')) installSystem('blender');
 
   if (!dryRun) {
-    run('npm', ['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', false, appRoot);
-    const hyperframes = path.join(appRoot, 'node_modules', '.bin', platform === 'win32' ? 'hyperframes.cmd' : 'hyperframes');
-    if (platform === 'win32') run('cmd.exe', ['/c', hyperframes, 'browser', 'ensure'], 'Preparing HyperFrames browser', true, appRoot);
-    else run(hyperframes, ['browser', 'ensure'], 'Preparing HyperFrames browser', true, appRoot);
+    runNpm(['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
+    const appRequire = createRequire(path.join(appRoot, 'package.json'));
+    const hyperframesEntry = appRequire.resolve('hyperframes');
+    run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
   }
 
   report.detected = detectAdobeApplications();
@@ -203,20 +215,22 @@ async function main() {
     } else {
       if (!report.detected.afterEffects.installed) report.needsUserAction.push('Install After Effects from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
       if (!report.detected.premierePro.installed) report.needsUserAction.push('Install Premiere Pro from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+      if (!report.detected.afterEffects.installed || !report.detected.premierePro.installed) openUrl('https://creativecloud.adobe.com/apps/download/creative-cloud');
     }
     if (report.detected.afterEffects.installed) {
       report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, mode: 'read-only-default', arbitraryEval: false };
+      report.needsUserAction.push('In After Effects, enable Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network, then launch After Effects for MCP control.');
     } else report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
     if (report.detected.premierePro.installed) {
-      const version = Number(report.detected.premierePro.version || 0);
-      if (version >= 2025) await setupPremiereToken();
+      const detectedYear = Number(report.detected.premierePro.version || 0);
+      if (detectedYear >= 2026) await setupPremiereToken();
       else {
-        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP compatibility', status: 'needs-user-action' };
-        report.needsUserAction.push('Close Premiere Pro, then run install.ps1 --install-premiere-cep to install the upstream signed CEP compatibility connector.');
+        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'compatibility decision required', status: 'needs-user-action' };
+        report.needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
       }
     } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', host: 'missing', status: 'needs-user-install' };
     if (installCep && report.detected.premierePro.installed) {
-      run('npm', ['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', false, appRoot);
+      runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
       report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP', status: 'install-command-completed' };
     }
   }
