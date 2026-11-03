@@ -2,7 +2,15 @@
   "mcpServers": {
     "motion-studio": {
       "command": "node",
-      "args": ["scripts/mcp-launcher.mjs"]
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/mcp-launcher.mjs"]
+    },
+    "aftereffects": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/adobe-mcp-launcher.mjs", "aftereffects"]
+    },
+    "premiere-pro": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/adobe-mcp-launcher.mjs", "premiere"]
     }
   }
 }
