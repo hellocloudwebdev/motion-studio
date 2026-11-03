@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "motion-studio": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/mcp-launcher.mjs"]
+    }
+  }
+}
