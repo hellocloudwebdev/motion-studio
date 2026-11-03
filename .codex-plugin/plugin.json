@@ -1,0 +1,7 @@
+{
+  "name": "motion-studio",
+  "version": "0.2.0",
+  "description": "AI video production skills and MCP integration.",
+  "skills": "../skills",
+  "mcp": "../mcp.json"
+}
