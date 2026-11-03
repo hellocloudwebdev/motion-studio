@@ -5,10 +5,11 @@
   "description": "Engine-independent AI video production system with local creative-software bridges.",
   "type": "module",
   "engines": { "node": ">=22.0.0" },
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": ["packages/*", "apps/*", "servers/*"],
   "scripts": {
     "test": "node --test",
     "studio": "node apps/cli/src/index.mjs",
+    "mcp": "node servers/mcp-server/src/index.mjs",
     "validate:example": "node apps/cli/src/index.mjs validate templates/startup-ad/project.json",
     "route:example": "node apps/cli/src/index.mjs route templates/startup-ad/project.json",
     "doctor": "node scripts/doctor.mjs",
