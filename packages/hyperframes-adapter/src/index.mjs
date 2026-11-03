@@ -43,7 +43,7 @@ function cssFor(layer, fontFamily) {
   return styles.join(';');
 }
 
-function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, placeholder) {
+function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, placeholder, fontFamily) {
   const layerId = safeId(scene.id + '-' + layer.id);
   const durationFrames = Number(layer.durationFrames ?? Math.max(1, scene.durationFrames - localStartFrame));
   const motion = layer.motion?.preset || 'fade';
@@ -52,7 +52,7 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
     ' data-duration="' + seconds(durationFrames, frameRate) + '"' +
     ' data-track-index="' + Number(layer.trackIndex ?? index) + '"' +
     ' data-motion="' + esc(motion) + '"';
-  const style = ' style="' + esc(cssFor(layer, null)) + '"';
+  const style = ' style="' + esc(cssFor(layer, fontFamily)) + '"';
   const content = layer.content?.text ?? layer.content ?? layer.text ?? '';
   let local = '', global = '';
   if (layer.kind === 'text') {
@@ -75,8 +75,9 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
   } else if (placeholder) {
     const label = '[ASSET REQUIRED: ' + (layer.assetId || layer.kind) + ']';
     const placeholderStyle = ' style="position:absolute;left:40px;top:40px;padding:24px;background:#7f1d1d;color:#fff;font:700 28px Arial;width:calc(100% - 128px)"';
-    local = '<div' + buildAttrs(localStartFrame) + ' class="clip ms-layer ms-missing-asset"' + placeholderStyle + '>' + esc(label) + '</div>';
-    global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + ' class="clip ms-layer ms-missing-asset"' + placeholderStyle + '>' + esc(label) + '</div>';
+    const placeholderAttrs = startFrame => ' id="' + layerId + '" class="clip ms-layer ms-missing-asset" data-start="' + seconds(startFrame, frameRate) + '" data-duration="' + seconds(durationFrames, frameRate) + '" data-track-index="' + Number(layer.trackIndex ?? index) + '" data-motion="fade"';
+    local = '<div' + placeholderAttrs(localStartFrame) + placeholderStyle + '>' + esc(label) + '</div>';
+    global = '<div' + placeholderAttrs(globalStartFrame + localStartFrame) + placeholderStyle + '>' + esc(label) + '</div>';
   }
   return { local, global };
 }
@@ -172,7 +173,7 @@ export async function compileHyperFramesProject(project, options = {}) {
       const localStartFrame = Number(layer.startFrame ?? 0);
       const globalStartFrame = cumulativeFrame;
       const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
-      const markup = layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, ['image', 'video', 'audio'].includes(layer.kind) && !assetUri);
+      const markup = layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, ['image', 'video', 'audio'].includes(layer.kind) && !assetUri, displayFont);
       sceneMarkup.push(markup.local);
       rootMarkup.push(markup.global);
     }
