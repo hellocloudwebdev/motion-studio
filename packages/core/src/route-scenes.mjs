@@ -1,5 +1,5 @@
 const DEFAULT_CAPABILITIES = {
-  'hyperframes': ['2d-motion', 'kinetic-typography', 'charts', 'shapes', 'web-layout'],
+  'hyperframes': ['2d-motion', 'kinetic-typography', 'charts', 'shapes', 'web-layout', 'image', 'video-clip', 'audio-clip'],
   'after-effects': ['compositing', 'vfx', 'tracking', 'roto', 'advanced-typography', 'motion-graphics'],
   'blender': ['3d', 'simulation', 'product-visualization', 'camera-animation', 'lighting'],
   'threejs': ['webgl', 'shader', 'procedural-3d', 'interactive-3d'],
@@ -9,10 +9,12 @@ const DEFAULT_CAPABILITIES = {
 function inferEngine(layer) {
   if (layer.engineHint && layer.engineHint !== 'auto') return layer.engineHint;
   const caps = new Set(layer.requiredCapabilities || []);
+  if (['transcode', 'trim', 'scale', 'image-sequence', 'media-probe'].some(x => caps.has(x))) return 'ffmpeg';
   if (layer.kind === '3d' || ['simulation', 'product-visualization', 'lighting'].some(x => caps.has(x))) return 'blender';
   if (['shader', 'webgl', 'procedural-3d', 'interactive-3d'].some(x => caps.has(x))) return 'threejs';
   if (['compositing', 'vfx', 'tracking', 'roto', 'advanced-typography'].some(x => caps.has(x))) return 'after-effects';
-  if (layer.kind === 'video' || layer.kind === 'audio') return 'ffmpeg';
+  // Video and audio assets are timeline clips inside a HyperFrames composition;
+  // FFmpeg is a media preprocessor/delivery engine, not the visual scene compositor.
   return 'hyperframes';
 }
 
