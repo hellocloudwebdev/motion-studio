@@ -45,7 +45,17 @@
         {
           "id": "s1-bg",
           "kind": "shape",
-          "engineHint": "hyperframes"
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#171717",
+            "opacity": 1
+          }
         },
         {
           "id": "s1-title",
@@ -53,8 +63,27 @@
           "engineHint": "hyperframes",
           "typography": {
             "family": "Inter",
-            "sizePx": 108,
+            "sizePx": 104,
+            "weight": 800,
+            "lineHeight": 1.04,
+            "alignment": "left",
             "safeArea": true
+          },
+          "content": {
+            "text": "Planning a house party\\nshouldn't be this hard."
+          },
+          "transform": {
+            "x": 140,
+            "y": 350,
+            "width": 1600,
+            "height": 300
+          },
+          "style": {
+            "color": "#FFF8EE"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 40
           }
         }
       ]
@@ -80,8 +109,26 @@
           "engineHint": "hyperframes",
           "typography": {
             "family": "Inter",
-            "sizePx": 92,
+            "sizePx": 112,
+            "weight": 800,
+            "lineHeight": 1,
+            "alignment": "left",
             "safeArea": true
+          },
+          "content": {
+            "text": "Make room for\\nthe good times."
+          },
+          "transform": {
+            "x": 160,
+            "y": 340,
+            "width": 1500,
+            "height": 280
+          },
+          "style": {
+            "color": "#F5A623"
+          },
+          "motion": {
+            "preset": "fade-up"
           }
         }
       ]
@@ -95,7 +142,21 @@
         {
           "id": "s3-ui",
           "kind": "image",
-          "engineHint": "hyperframes"
+          "engineHint": "hyperframes",
+          "content": {
+            "alt": "Opendoor booking interface preview"
+          },
+          "transform": {
+            "x": 1100,
+            "y": 170,
+            "width": 640,
+            "height": 740
+          },
+          "style": {
+            "backgroundColor": "#F5A623",
+            "borderRadius": 36,
+            "opacity": 1
+          }
         },
         {
           "id": "s3-copy",
@@ -103,8 +164,26 @@
           "engineHint": "hyperframes",
           "typography": {
             "family": "Inter",
-            "sizePx": 64,
+            "sizePx": 68,
+            "weight": 750,
+            "lineHeight": 1.12,
+            "alignment": "left",
             "safeArea": true
+          },
+          "content": {
+            "text": "Find a space.\\nBook by the hour.\\nBring everyone together."
+          },
+          "transform": {
+            "x": 140,
+            "y": 300,
+            "width": 860,
+            "height": 460
+          },
+          "style": {
+            "color": "#171717"
+          },
+          "motion": {
+            "preset": "fade-up"
           }
         }
       ]
@@ -118,19 +197,44 @@
         {
           "id": "s4-footage",
           "kind": "video",
-          "engineHint": "hyperframes"
+          "engineHint": "hyperframes",
+          "assetId": "opendoor-party-footage",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          }
         },
         {
           "id": "s4-overlay",
           "kind": "text",
-          "engineHint": "after-effects",
+          "engineHint": "hyperframes",
           "requiredCapabilities": [
             "advanced-typography"
           ],
           "typography": {
             "family": "Inter",
             "sizePx": 72,
+            "weight": 800,
+            "lineHeight": 1,
+            "alignment": "center",
             "safeArea": true
+          },
+          "content": {
+            "text": "Your people. Your place. Your night."
+          },
+          "transform": {
+            "x": 140,
+            "y": 780,
+            "width": 1640,
+            "height": 150
+          },
+          "style": {
+            "color": "#ffffff"
+          },
+          "motion": {
+            "preset": "fade-up"
           }
         }
       ]
@@ -144,7 +248,17 @@
         {
           "id": "s5-logo",
           "kind": "shape",
-          "engineHint": "hyperframes"
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#F5A623",
+            "opacity": 1
+          }
         },
         {
           "id": "s5-cta",
@@ -152,8 +266,26 @@
           "engineHint": "hyperframes",
           "typography": {
             "family": "Inter",
-            "sizePx": 96,
+            "sizePx": 112,
+            "weight": 800,
+            "lineHeight": 1,
+            "alignment": "center",
             "safeArea": true
+          },
+          "content": {
+            "text": "Your next gathering\\nstarts here."
+          },
+          "transform": {
+            "x": 180,
+            "y": 270,
+            "width": 1560,
+            "height": 360
+          },
+          "style": {
+            "color": "#171717"
+          },
+          "motion": {
+            "preset": "zoom"
           }
         }
       ]
