@@ -48,3 +48,25 @@ export async function connectAdobeMcp({ app, allowEdits = false, entry, clientNa
     async close() { await client.close(); }
   };
 }
+
+export async function verifyAfterEffectsConnection(options = {}) {
+  const connection = await connectAdobeMcp({ ...options, app: 'afterEffects', allowEdits: false });
+  try {
+    const tools = await connection.listTools();
+    const names = (tools.tools || []).map(tool => tool.name);
+    if (!names.includes('ae_context')) throw new Error('After Effects MCP is connected but ae_context is not advertised.');
+    const context = await connection.callTool('ae_context', {});
+    return { serverConnected: true, app: 'afterEffects', toolCount: names.length, contextAvailable: !context.isError, result: context };
+  } finally { await connection.close(); }
+}
+
+export async function verifyPremiereConnection(options = {}) {
+  const connection = await connectAdobeMcp({ ...options, app: 'premiere', allowEdits: false });
+  try {
+    const tools = await connection.listTools();
+    const names = (tools.tools || []).map(tool => tool.name);
+    if (!names.includes('verify_premiere_connection')) throw new Error('Premiere MCP does not expose verify_premiere_connection. Check the installed upstream version.');
+    const result = await connection.callTool('verify_premiere_connection', {});
+    return { serverConnected: true, app: 'premiere', toolCount: names.length, hostVerified: !result.isError, result };
+  } finally { await connection.close(); }
+}
