@@ -1,25 +1,33 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { access, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, readdir, writeFile, chmod } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { detectAdobeApplications } from './software-detect.mjs';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
 const argv = process.argv.slice(2);
 const flags = new Set(argv);
 const yes = flags.has('--yes') || flags.has('-y');
 const minimal = flags.has('--minimal') || flags.has('--skip-software');
 const skipHosts = flags.has('--skip-hosts');
+const installCep = flags.has('--install-premiere-cep');
 const dryRun = flags.has('--dry-run');
 const platform = process.platform;
 const home = os.homedir();
 const configRoot = platform === 'win32' ? (process.env.APPDATA || path.join(home, 'AppData', 'Roaming')) : (process.env.XDG_CONFIG_HOME || path.join(home, '.config'));
 const dataRoot = platform === 'win32' ? (process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local')) : path.join(home, '.local', 'share');
 const appRoot = path.join(dataRoot, 'motion-studio', 'app');
-const userBin = platform === 'win32' ? path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm') : path.join(home, '.local', 'bin');
 const version = (await readFile(path.join(sourceRoot, 'VERSION'), 'utf8')).trim();
-const report = { version, platform, architecture: os.arch(), installed: [], stagedSkills: {}, hostIntegrations: [], warnings: [] };
+const report = {
+  version, platform, architecture: os.arch(), node: process.version,
+  installed: [], detected: {}, stagedSkills: {}, hostIntegrations: [], adobeMcp: {},
+  needsUserAction: [], warnings: []
+};
 
 function commandExists(command) {
   const checker = platform === 'win32' ? 'where.exe' : 'which';
@@ -27,13 +35,20 @@ function commandExists(command) {
 }
 function run(command, args, label, optional = false, cwd = sourceRoot) {
   console.log('[Motion Studio] ' + label);
-  if (dryRun) return true;
+  if (dryRun) return { ok: true, status: 0 };
   const result = spawnSync(command, args, { stdio: 'inherit', shell: false, cwd, env: process.env });
   if (result.error || result.status !== 0) {
-    if (optional) { report.warnings.push(label + ' did not complete: ' + (result.error?.message || result.status)); return false; }
-    throw new Error(label + ' failed: ' + (result.error?.message || result.status));
+    const message = label + ' failed: ' + (result.error?.message || result.status);
+    if (optional) { report.warnings.push(message); return { ok: false, status: result.status }; }
+    throw new Error(message);
   }
-  return true;
+  return { ok: true, status: 0 };
+}
+function openUrl(url) {
+  if (dryRun) return;
+  if (platform === 'win32') spawnSync('cmd.exe', ['/c', 'start', '', url], { stdio: 'ignore', shell: false });
+  else if (platform === 'darwin') spawnSync('open', [url], { stdio: 'ignore', shell: false });
+  else if (commandExists('xdg-open')) spawnSync('xdg-open', [url], { stdio: 'ignore', shell: false });
 }
 function manager() {
   if (platform === 'win32' && commandExists('winget')) return 'winget';
@@ -52,7 +67,8 @@ function installSystem(name) {
   else if (pm === 'pacman') { cmd = 'sudo'; args = ['pacman', '-S', '--needed', '--noconfirm', name]; }
   else if (pm === 'zypper') { cmd = 'sudo'; args = ['zypper', '--non-interactive', 'install', name]; }
   else { report.warnings.push('No supported package manager found for ' + name + '; install it manually.'); return; }
-  if (run(cmd, args, 'Installing ' + name, true)) report.installed.push(name);
+  const result = run(cmd, args, 'Installing ' + name, true);
+  if (result.ok) report.installed.push(name);
 }
 async function copySkills(source, target) {
   const names = [];
@@ -67,6 +83,23 @@ async function copySkills(source, target) {
   }
   return names;
 }
+function packageEntry(name) {
+  try { return require.resolve(name); }
+  catch (error) { throw new Error('Required MCP package not found after npm install: ' + name + '. ' + error.message); }
+}
+function mcpServers() {
+  return {
+    'motion-studio': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'mcp-launcher.mjs')] },
+    'aftereffects': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'adobe-mcp-launcher.mjs'), 'aftereffects'] },
+    'premiere-pro': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'adobe-mcp-launcher.mjs'), 'premiere'] }
+  };
+}
+function uniqueKey(map, base, desired) {
+  if (!map[base] || JSON.stringify(map[base]) === JSON.stringify(desired)) return base;
+  let i = 1;
+  while (map[base + '-managed-' + i] && JSON.stringify(map[base + '-managed-' + i]) !== JSON.stringify(desired)) i += 1;
+  return base + '-managed-' + i;
+}
 async function stageHosts() {
   const skills = path.join(appRoot, 'skills');
   const targets = {
@@ -76,61 +109,125 @@ async function stageHosts() {
     cursor: path.join(home, '.cursor', 'skills')
   };
   for (const [name, target] of Object.entries(targets)) report.stagedSkills[name] = await copySkills(skills, target);
-  const agentsRoot = path.join(appRoot, 'agents');
-  const claudeAgents = path.join(home, '.claude', 'agents');
+
   try {
-    const files = (await readdir(agentsRoot)).filter(file => file.endsWith('.md') && file !== 'README.md');
+    const agentFiles = (await readdir(path.join(appRoot, 'agents'))).filter(file => file.endsWith('.md') && file !== 'README.md');
+    const target = path.join(home, '.claude', 'agents');
     if (!dryRun) {
-      await mkdir(claudeAgents, { recursive: true });
-      for (const file of files) await cp(path.join(agentsRoot, file), path.join(claudeAgents, 'motion-studio-' + file), { force: true });
+      await mkdir(target, { recursive: true });
+      for (const file of agentFiles) await cp(path.join(appRoot, 'agents', file), path.join(target, 'motion-studio-' + file), { force: true });
     }
     report.hostIntegrations.push('claude-agent-files');
-  } catch {}
-  const serverEntry = path.join(appRoot, 'scripts', 'mcp-launcher.mjs');
-  const desired = { command: 'node', args: [serverEntry] };
+  } catch (error) { report.warnings.push('Could not stage Claude specialist agents: ' + error.message); }
+
+  const servers = mcpServers();
   const cursorFile = path.join(home, '.cursor', 'mcp.json');
   try {
     let config = {};
     try { config = JSON.parse(await readFile(cursorFile, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) config.mcpServers = {};
-    let key = 'motion-studio';
-    if (config.mcpServers[key] && JSON.stringify(config.mcpServers[key]) !== JSON.stringify(desired)) key = 'motion-studio-managed';
-    if (!config.mcpServers[key]) config.mcpServers[key] = desired;
+    const registered = [];
+    for (const [name, server] of Object.entries(servers)) {
+      const key = uniqueKey(config.mcpServers, name, server);
+      if (!config.mcpServers[key]) config.mcpServers[key] = server;
+      registered.push(key);
+    }
     if (!dryRun) { await mkdir(path.dirname(cursorFile), { recursive: true }); await writeFile(cursorFile, JSON.stringify(config, null, 2) + '\n'); }
-    report.hostIntegrations.push('cursor-mcp:' + key);
+    report.hostIntegrations.push('cursor-mcp:' + registered.join(','));
   } catch (error) { report.warnings.push('Cursor MCP settings preserved; manual setup needed: ' + error.message); }
-  const generic = { mcpServers: { 'motion-studio': desired } };
-  for (const host of ['zcode', 'deepseek']) {
+
+  for (const host of ['claude', 'codex', 'zcode', 'deepseek']) {
     const file = path.join(configRoot, 'motion-studio', 'adapters', host + '.mcp.json');
-    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(generic, null, 2) + '\n'); }
+    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify({ mcpServers: servers }, null, 2) + '\n'); }
     report.hostIntegrations.push(host + '-mcp-config');
   }
+
   if (commandExists('claude')) {
-    run('claude', ['mcp', 'add', '--transport', 'stdio', '--scope', 'user', 'motion-studio', '--', 'node', serverEntry], 'Registering Claude Code MCP', true);
-    report.hostIntegrations.push('claude-code-mcp');
+    for (const [name, server] of Object.entries(servers)) {
+      run('claude', ['mcp', 'add', '--transport', 'stdio', '--scope', 'user', name, '--', server.command, ...server.args], 'Registering Claude Code ' + name, true);
+    }
   }
   if (commandExists('codex')) {
-    run('codex', ['mcp', 'add', 'motion-studio', '--', 'node', serverEntry], 'Registering Codex MCP', true);
-    report.hostIntegrations.push('codex-mcp');
+    for (const [name, server] of Object.entries(servers)) {
+      run('codex', ['mcp', 'add', name, '--', server.command, ...server.args], 'Registering Codex ' + name, true);
+    }
   }
 }
-if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Node.js 22 or newer is required.');
-if (flags.has('--help') || flags.has('-h')) { console.log('Options: --yes, --minimal, --skip-software, --skip-hosts, --dry-run'); process.exit(0); }
-console.log('Motion Studio ' + version + ' installer — ' + platform + '/' + os.arch());
-if (!dryRun) {
-  await mkdir(path.dirname(appRoot), { recursive: true });
-  if (path.resolve(sourceRoot) !== path.resolve(appRoot)) {
-    await cp(sourceRoot, appRoot, { recursive: true, force: true, filter: src => !src.includes(path.sep + '.git' + path.sep) && !src.includes(path.sep + 'node_modules' + path.sep) });
+async function setupPremiereToken() {
+  const secretsDir = path.join(configRoot, 'motion-studio', 'secrets');
+  const tokenPath = path.join(secretsDir, 'premiere-uxp-token');
+  if (!dryRun) {
+    await mkdir(secretsDir, { recursive: true });
+    let exists = false;
+    try { await access(tokenPath); exists = true; } catch {}
+    if (!exists) {
+      await writeFile(tokenPath, randomBytes(32).toString('hex') + '\n', { mode: 0o600 });
+      if (platform !== 'win32') await chmod(tokenPath, 0o600);
+    }
   }
+  report.adobeMcp.premiereUxpTokenPath = tokenPath;
+  report.needsUserAction.push('For Premiere Pro UXP 25.6+, install the pinned v1.28.0 CCX connector in Creative Cloud Desktop and paste the generated token into the UXP panel settings.');
+  report.adobeMcp.premiereUxpConnector = 'needs-user-install';
+  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.28.0/premiere-pro-mcp-uxp-1.28.0-direct.ccx');
 }
-if (!minimal && yes) { installSystem('ffmpeg'); installSystem('blender'); }
-if (!dryRun) {
-  run('npm', ['install', '--no-audit', '--no-fund'], 'Installing workspace dependencies', false, appRoot);
-  run('npm', ['install', '--global', 'hyperframes', '--no-audit', '--no-fund'], 'Installing HyperFrames CLI', true, appRoot);
-  if (commandExists('hyperframes')) run('hyperframes', ['browser', 'ensure'], 'Preparing HyperFrames browser', true, appRoot);
+async function main() {
+  if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node.js 24 or newer is required for the After Effects MCP integration.');
+  if (flags.has('--help') || flags.has('-h')) {
+    console.log('Motion Studio installer options: --yes, --minimal, --skip-software, --skip-hosts, --dry-run, --install-premiere-cep');
+    return;
+  }
+  console.log('Motion Studio ' + version + ' installer — ' + platform + '/' + os.arch());
+  if (dryRun) console.log('DRY RUN: no changes will be made.');
+  if (!dryRun) {
+    await mkdir(path.dirname(appRoot), { recursive: true });
+    if (path.resolve(sourceRoot) !== path.resolve(appRoot)) {
+      await cp(sourceRoot, appRoot, { recursive: true, force: true, filter: src => !src.includes(path.sep + '.git' + path.sep) && !src.includes(path.sep + 'node_modules' + path.sep) });
+    }
+  }
+  if (!minimal && yes) installSystem('ffmpeg');
+  if (!minimal && yes && flags.has('--install-blender')) installSystem('blender');
+
+  if (!dryRun) {
+    run('npm', ['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', false, appRoot);
+    const hyperframes = path.join(appRoot, 'node_modules', '.bin', platform === 'win32' ? 'hyperframes.cmd' : 'hyperframes');
+    if (platform === 'win32') run('cmd.exe', ['/c', hyperframes, 'browser', 'ensure'], 'Preparing HyperFrames browser', true, appRoot);
+    else run(hyperframes, ['browser', 'ensure'], 'Preparing HyperFrames browser', true, appRoot);
+  }
+
+  report.detected = detectAdobeApplications();
+  if (!report.detected.supported) report.warnings.push(report.detected.note);
+  else {
+    if (!report.detected.creativeCloud.installed) {
+      report.needsUserAction.push('Install Adobe Creative Cloud Desktop and sign in with an account that includes After Effects and Premiere Pro.');
+      openUrl('https://helpx.adobe.com/download-install/apps/download-install-apps/creative-cloud-apps/download-creative-cloud-apps.html');
+    } else {
+      if (!report.detected.afterEffects.installed) report.needsUserAction.push('Install After Effects from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+      if (!report.detected.premierePro.installed) report.needsUserAction.push('Install Premiere Pro from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+    }
+    if (report.detected.afterEffects.installed) {
+      report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, mode: 'read-only-default', arbitraryEval: false };
+    } else report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
+    if (report.detected.premierePro.installed) {
+      const version = Number(report.detected.premierePro.version || 0);
+      if (version >= 2025) await setupPremiereToken();
+      else {
+        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP compatibility', status: 'needs-user-action' };
+        report.needsUserAction.push('Close Premiere Pro, then run install.ps1 --install-premiere-cep to install the upstream signed CEP compatibility connector.');
+      }
+    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', host: 'missing', status: 'needs-user-install' };
+    if (installCep && report.detected.premierePro.installed) {
+      run('npm', ['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', false, appRoot);
+      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP', status: 'install-command-completed' };
+    }
+  }
+  if (!skipHosts) await stageHosts();
+  else report.warnings.push('Host integrations skipped by --skip-hosts.');
+
+  const recordPath = path.join(configRoot, 'motion-studio', 'install.json');
+  if (!dryRun) {
+    await mkdir(path.dirname(recordPath), { recursive: true });
+    await writeFile(recordPath, JSON.stringify({ ...report, installedAt: new Date().toISOString(), installPath: appRoot }, null, 2) + '\n');
+  }
+  console.log(JSON.stringify({ ...report, installPath: appRoot, recordPath }, null, 2));
 }
-if (!skipHosts) await stageHosts();
-else report.warnings.push('Host integrations skipped by --skip-hosts.');
-const recordPath = path.join(configRoot, 'motion-studio', 'install.json');
-if (!dryRun) { await mkdir(path.dirname(recordPath), { recursive: true }); await writeFile(recordPath, JSON.stringify({ ...report, installedAt: new Date().toISOString(), installPath: appRoot }, null, 2) + '\n'); }
-console.log(JSON.stringify({ ...report, installPath: appRoot, recordPath }, null, 2));
+await main();
