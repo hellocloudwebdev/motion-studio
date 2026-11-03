@@ -1,0 +1,6 @@
+{
+  "name": "@motion-studio/local-runtime",
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": { "start": "node src/server.mjs" }
+}
