@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIN_MAJOR=22
-BOOTSTRAP_MAJOR=26 # Current Active LTS line; minimum supported runtime remains Node.js 22+.
+MIN_MAJOR=24
+BOOTSTRAP_MAJOR=26 # Current Active LTS line; minimum supported runtime remains Node.js 24+.
 version_major() { node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0; }
 if ! command -v node >/dev/null 2>&1 || [ "$(version_major)" -lt "$MIN_MAJOR" ]; then
-  echo "Node.js 22+ is required. Bootstrapping the current Node.js 26 LTS release into ~/.local/share/motion-studio."
+  echo "Node.js 24+ is required. Bootstrapping the current Node.js 26 LTS release into ~/.local/share/motion-studio."
   OS="linux"; [ "$(uname -s)" = "Darwin" ] && OS="darwin"
   case "$(uname -m)" in x86_64|amd64) ARCH="x64" ;; aarch64|arm64) ARCH="arm64" ;; *) echo "Unsupported CPU architecture: $(uname -m)" >&2; exit 1 ;; esac
   if [ "$OS" = "linux" ] && ! command -v tar >/dev/null 2>&1; then echo "tar is required to install Node.js." >&2; exit 1; fi
