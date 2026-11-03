@@ -62,9 +62,8 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
     local = '<div' + buildAttrs(localStartFrame) + style + ' aria-hidden="true"></div>';
     global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + style + ' aria-hidden="true"></div>';
   } else if (layer.kind === 'image' && assetUri) {
-    const imgStyle = style + ' object-fit:' + esc(layer.style?.objectFit || 'cover');
-    local = '<img' + buildAttrs(localStartFrame) + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(assetUri) + '"' + imgStyle + ' />';
-    global = '<img' + buildAttrs(globalStartFrame + localStartFrame) + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(assetUri) + '"' + imgStyle + ' />';
+    local = '<img' + buildAttrs(localStartFrame) + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(assetUri) + '"' + style + ' />';
+    global = '<img' + buildAttrs(globalStartFrame + localStartFrame) + ' alt="' + esc(layer.content?.alt || '') + '" src="' + esc(assetUri) + '"' + style + ' />';
   } else if (layer.kind === 'video' && assetUri) {
     local = '<video' + buildAttrs(localStartFrame) + ' src="' + esc(assetUri) + '" muted playsinline preload="auto" data-has-audio="false"' + style + '></video>';
     global = '<video' + buildAttrs(globalStartFrame + localStartFrame) + ' src="' + esc(assetUri) + '" muted playsinline preload="auto" data-has-audio="false"' + style + '></video>';
@@ -173,7 +172,9 @@ export async function compileHyperFramesProject(project, options = {}) {
       const localStartFrame = Number(layer.startFrame ?? 0);
       const globalStartFrame = cumulativeFrame;
       const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
-      const markup = layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, ['image', 'video', 'audio'].includes(layer.kind) && !assetUri, displayFont);
+      const needsAsset = ['image', 'video', 'audio'].includes(layer.kind) && !assetUri;
+      if (needsAsset && options.allowMissingAssetsAsPlaceholders === false) throw new Error('Required media asset is unavailable for layer ' + layer.id + ' in scene ' + scene.id + '.');
+      const markup = layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, needsAsset, displayFont);
       sceneMarkup.push(markup.local);
       rootMarkup.push(markup.global);
     }
