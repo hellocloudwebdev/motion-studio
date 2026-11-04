@@ -3,8 +3,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
+import {
+  previewAfterEffectsScene, applyAfterEffectsScene,
+  previewPremiereAssembly, applyPremiereAssembly
+} from '../../../packages/adobe-orchestrator/src/index.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.2.0' });
+const server = new McpServer({ name: 'motion-studio', version: '0.4.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
@@ -26,4 +30,41 @@ server.tool('video.build_execution_graph', 'Build the scene-render, Premiere ass
   return { content: [{ type: 'text', text: JSON.stringify({ routing, graph, graphValidation: validateExecutionGraph(graph) }, null, 2) }] };
 });
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));
+
+server.tool('video.adobe_preview_ae_scene', 'Preview a read-only After Effects scene plan. Requires a saved, non-dirty AE project and a new backup path. Returns a one-time approval ID; no project changes are made.', {
+  project: projectSchema,
+  sceneId: z.string().min(1),
+  backupPath: z.string().min(1)
+}, async ({ project, sceneId, backupPath }) => {
+  const result = await previewAfterEffectsScene({ project, sceneId, backupPath });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+});
+
+server.tool('video.adobe_apply_ae_scene', 'Apply a previously previewed After Effects scene plan after the user explicitly approves it. Creates a separate backup first; failures are not retried.', {
+  approvalId: z.string().uuid(),
+  approved: z.boolean()
+}, async ({ approvalId, approved }) => {
+  const result = await applyAfterEffectsScene({ approvalId, approved });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+});
+
+server.tool('video.adobe_preview_premiere_assembly', 'Preview importing verified scene renders into a NEW Premiere sequence. Existing timelines are not modified. Requires a saved Premiere project and new backup path.', {
+  renderedScenePaths: z.array(z.string().min(1)).min(1),
+  backupPath: z.string().min(1),
+  sequenceName: z.string().min(1),
+  backend: z.enum(['cep', 'uxp']).default('cep'),
+  exportPath: z.string().min(1).optional()
+}, async ({ renderedScenePaths, backupPath, sequenceName, backend, exportPath }) => {
+  const result = await previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend, exportPath });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+});
+
+server.tool('video.adobe_apply_premiere_assembly', 'Apply a previously previewed Premiere assembly after the user explicitly approves it. Imports scene renders, creates a separate sequence, reads it back and saves; an optional export path triggers an export and file check.', {
+  approvalId: z.string().uuid(),
+  approved: z.boolean()
+}, async ({ approvalId, approved }) => {
+  const result = await applyPremiereAssembly({ approvalId, approved });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+});
+
 await server.connect(new StdioServerTransport());
