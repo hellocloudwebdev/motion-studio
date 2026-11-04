@@ -39,7 +39,8 @@ export function premiereTokenFilePath({ platform = process.platform, home = os.h
   const configRoot = platform === 'win32'
     ? (env.APPDATA || path.join(home, 'AppData', 'Roaming'))
     : (env.XDG_CONFIG_HOME || path.join(home, '.config'));
-  return path.join(configRoot, 'motion-studio', 'secrets', 'premiere-uxp-token');
+  const join = platform === 'win32' ? path.win32.join : path.posix.join;
+  return join(configRoot, 'motion-studio', 'secrets', 'premiere-uxp-token');
 }
 
 export async function connectAdobeMcp({ app, allowEdits = false, entry, clientName = 'motion-studio', version = '0.4.0-alpha.1', env = process.env } = {}) {
