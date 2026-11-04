@@ -288,7 +288,8 @@ export function validatePremiereRenderInputs(paths) {
 
 export async function previewAfterEffectsScene({ project, sceneId, backupPath, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
   const plan = buildAfterEffectsScenePlan(project, sceneId);
-  const connection = await connect({ app: 'afterEffects', allowEdits: false });
+  // Edit-scoped categories expose mutation schemas through ae_catalog, but preview calls only read-only tools.
+  const connection = await connect({ app: 'afterEffects', allowEdits: true });
   try {
     const toolList = await connection.listTools();
     requiredTools(toolList, REQUIRED_AE_TOOLS, 'After Effects');
@@ -327,6 +328,8 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
   const connection = await connect({ app: 'afterEffects', allowEdits: true });
   const steps = [];
   try {
+    const toolList = await connection.listTools();
+    requiredTools(toolList, REQUIRED_AE_TOOLS, 'After Effects');
     const projectInfo = await call(connection, 'ae_project_info');
     const currentPath = findStringProperty(projectInfo, ['file', 'path', 'projectPath', 'project_path']);
     if (path.resolve(currentPath || '') !== preview.projectFile) throw new Error('After Effects project identity changed after preview; no mutation was attempted.');
@@ -390,6 +393,8 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
   const connection = await connect({ app: 'premiere', allowEdits: true });
   const steps = [];
   try {
+    const toolList = await connection.listTools();
+    requiredTools(toolList, REQUIRED_PREMIERE_TOOLS, 'Premiere Pro');
     await call(connection, 'verify_premiere_connection', { backend: preview.backend });
     const projectInfo = await call(connection, 'get_project_info');
     const currentPath = findStringProperty(projectInfo, ['path', 'projectPath', 'project_path', 'projectFile', 'project_file']);
