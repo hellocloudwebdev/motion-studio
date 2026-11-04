@@ -335,7 +335,10 @@ export function createApprovalStore({ ttlMs = APPROVAL_TTL_MS, now = () => Date.
 
 export function validateAePlanAgainstCatalog(plan, catalogs) {
   const operations = new Map();
-  for (const category of catalogs || []) for (const operation of category.operations || []) operations.set(operation.name, operation);
+  for (const category of catalogs || []) {
+    const categoryOperations = Array.isArray(category) ? category : category?.operations;
+    for (const operation of categoryOperations || []) operations.set(operation.name, operation);
+  }
   const validated = [];
   for (const step of plan.operations) {
     if (!ALLOWED_AE_OPERATIONS.has(step.operation)) throw new Error('AE operation is outside Motion Studio allowlist: ' + step.operation);
