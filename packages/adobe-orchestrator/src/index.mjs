@@ -383,7 +383,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     await call(connection, 'save_project', {});
     await copyFile(preview.projectFile, preview.backupPath, 1); // COPYFILE_EXCL
     const imported = await call(connection, 'import_media', { file_paths: preview.renderedScenePaths, suppress_ui: true });
-    if (!Array.isArray(imported.items) || imported.items.length !== preview.renderedScenePaths.length) {
+    if (imported.verified !== true || !Array.isArray(imported.items) || imported.items.length !== preview.renderedScenePaths.length) {
       throw new Error('Premiere media import did not return an exact item list; inspect the project before retrying.');
     }
     const itemIds = imported.items.map(item => item.nodeId);
@@ -398,6 +398,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     if (!structure || typeof structure !== 'object') throw new Error('Premiere sequence structure readback failed.');
     steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
     const saved = await call(connection, 'save_project', {});
+    if (saved.verified !== true) throw new Error('Premiere save was not verified by fresh disk evidence; inspect the project before retrying.');
     steps.push({ tool: 'save_project', ok: true, result: saved });
     let exportReceipt = null;
     if (preview.exportPath) {
