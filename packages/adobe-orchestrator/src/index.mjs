@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, access, stat } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import { connectAdobeMcp } from '../../adobe-mcp-client/src/index.mjs';
 import { validateProject } from '../../core/src/index.mjs';
@@ -104,7 +105,7 @@ async function assertExistingFile(value, label) {
   return file;
 }
 
-async function assertNewBackupPath(value, sourceFile, label) {
+export async function assertNewBackupPath(value, sourceFile, label) {
   const backup = assertAbsoluteFilePath(value, label);
   if (backup === path.resolve(sourceFile)) throw new Error(label + ' must differ from the active project path.');
   if (path.extname(backup).toLowerCase() !== path.extname(sourceFile).toLowerCase()) {
@@ -214,6 +215,19 @@ export function buildAfterEffectsScenePlan(project, sceneId) {
     const position = [x + width / 2, y + height / 2];
     const opacity = Math.max(0, Math.min(100, Number((layer.style?.opacity ?? 1) * 100)));
     operations.push({ operation: 'transform.set', args: { comp: compName, layer: layerName, position, opacity }, purpose: 'Place and set opacity for the layer.' });
+    const motionPreset = layer.motion?.preset;
+    if (['fade', 'fade-up'].includes(motionPreset)) {
+      const localStart = Number(layer.startFrame ?? 0);
+      const fadeFrames = Math.max(1, Math.min(Number(layer.motion?.durationFrames || Math.round(rate.numerator / rate.denominator * 0.6)), Math.max(1, scene.durationFrames - localStart)));
+      const startTime = seconds(localStart, rate);
+      const endTime = seconds(localStart + fadeFrames, rate);
+      operations.push({ operation: 'keyframe.add', args: { comp: compName, layer: layerName, property: ['Transform', 'Opacity'], time: startTime, value: 0 }, purpose: 'Start the layer fade.' });
+      operations.push({ operation: 'keyframe.add', args: { comp: compName, layer: layerName, property: ['Transform', 'Opacity'], time: endTime, value: opacity }, purpose: 'Complete the layer fade.' });
+      if (motionPreset === 'fade-up' && layer.kind === 'text') {
+        operations.push({ operation: 'keyframe.add', args: { comp: compName, layer: layerName, property: ['Transform', 'Position'], time: startTime, value: [position[0], position[1] + 40] }, purpose: 'Begin the text slide-up.' });
+        operations.push({ operation: 'keyframe.add', args: { comp: compName, layer: layerName, property: ['Transform', 'Position'], time: endTime, value: position }, purpose: 'Finish the text slide-up.' });
+      }
+    }
     supportedLayers.push(layer.id);
   }
   return {
@@ -309,14 +323,14 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
     const currentPath = findStringProperty(projectInfo, ['file', 'path', 'projectPath', 'project_path']);
     if (path.resolve(currentPath || '') !== preview.projectFile) throw new Error('After Effects project identity changed after preview; no mutation was attempted.');
     if (findBooleanProperty(projectInfo, ['dirty', 'isDirty']) === true) throw new Error('After Effects project became dirty after preview; no mutation was attempted.');
-    await copyFile(preview.projectFile, preview.backupPath, 1); // COPYFILE_EXCL
+    await copyFile(preview.projectFile, preview.backupPath, fsConstants.COPYFILE_EXCL);
     for (const step of preview.plan.operations) {
       const result = await call(connection, 'ae_do', { operation: step.operation, args: step.args });
       steps.push({ operation: step.operation, ok: true, result });
     }
     const saved = await call(connection, 'ae_save_project', {});
     steps.push({ tool: 'ae_save_project', ok: true, result: saved });
-    const readback = await call(connection, 'ae_comp_info', { comp: preview.plan.composition.name });
+    const readback = await call(connection, 'ae_comp_info', { nameOrId: preview.plan.composition.name });
     if (!readback || typeof readback !== 'object') throw new Error('After Effects composition readback was not available.');
     return { status: 'applied', verified: true, host: 'afterEffects', projectFile: preview.projectFile, backupPath: preview.backupPath, composition: preview.plan.composition, supportedLayerIds: preview.plan.supportedLayerIds, warnings: preview.plan.warnings, steps, readback };
   } catch (error) {
