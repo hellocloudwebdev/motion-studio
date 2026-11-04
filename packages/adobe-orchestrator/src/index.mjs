@@ -451,6 +451,7 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
 
 export async function previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend = 'cep', exportPath, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
   const paths = validatePremiereRenderInputs(renderedScenePaths);
+  if (paths.length > 100) throw new Error('The 0.4 Premiere workflow is limited to 100 scene files so bounded video/audio track readback stays within the upstream 200-clip page contract.');
   if (typeof sequenceName !== 'string' || !sequenceName.trim()) throw new Error('sequenceName must be provided.');
   if (backend !== 'cep') throw new Error('The 0.4 Premiere assembly workflow currently requires the CEP compatibility bridge. UXP uses a different import/sequence-edit API and is not yet implemented in this workflow.');
   const checked = [];
@@ -511,7 +512,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     if (itemIds.some(id => typeof id !== 'string' || !id)) throw new Error('Premiere media import omitted one or more node IDs; inspect the project before retrying.');
     const created = await call(connection, 'create_sequence_from_clips', { name: preview.sequenceName, item_ids: itemIds, ...projectGuard });
     steps.push({ tool: 'create_sequence_from_clips', ok: created.verified === true, result: created });
-    if (created.verified !== true || created.clipCount !== itemIds.length || created.requestedClipCount !== itemIds.length) {
+    if (created.verified !== true || created.requestedClipCount !== itemIds.length) {
       throw new Error('Premiere did not verify the new sequence and all imported clip placements. Inspect the project before retrying.');
     }
     const activeSequence = await call(connection, 'get_active_sequence', { track_type: 'both', ...projectGuard });
@@ -525,6 +526,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     const observedClipIds = collectSequenceClipNodeIds(structure);
     const missingClipIds = itemIds.filter(id => !observedClipIds.includes(id));
     if (missingClipIds.length) throw new Error('Premiere sequence structure is missing imported clip IDs: ' + missingClipIds.join(', '));
+    if (observedClipIds.length < itemIds.length) throw new Error('Premiere sequence structure contains fewer clip placements than imported sources.');
     steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
     const saved = await call(connection, 'save_project', { ...projectGuard });
     if (saved.verified !== true) throw new Error('Premiere save was not verified by fresh disk evidence; inspect the project before retrying.');
