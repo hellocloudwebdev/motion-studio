@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFile, access, stat } from 'node:fs/promises';
+import { copyFile, access, stat, mkdir } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { connectAdobeMcp } from '../../adobe-mcp-client/src/index.mjs';
 import { validateProject } from '../../core/src/index.mjs';
@@ -348,8 +349,28 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
     if (saved.saved !== true) throw new Error('After Effects save did not return saved:true; inspect the project before retrying.');
     steps.push({ tool: 'ae_save_project', ok: true, result: saved });
     const readback = await call(connection, 'ae_comp_info', { nameOrId: preview.plan.composition.name });
-    if (!readback || typeof readback !== 'object') throw new Error('After Effects composition readback was not available.');
-    return { status: 'applied', verified: true, host: 'afterEffects', projectFile: preview.projectFile, backupPath: preview.backupPath, composition: preview.plan.composition, supportedLayerIds: preview.plan.supportedLayerIds, warnings: preview.plan.warnings, steps, readback };
+    if (!readback || typeof readback !== 'object' || readback.ok !== true || readback.found !== true || readback.name !== preview.plan.composition.name) {
+      throw new Error('After Effects composition readback did not verify the created composition.');
+    }
+    const expectedLayerNames = preview.plan.supportedLayerIds.map(id => 'MS_' + safeName(id));
+    const observedLayerNames = Array.isArray(readback.layers) ? readback.layers.map(layer => layer.name) : [];
+    const missingLayerNames = expectedLayerNames.filter(name => !observedLayerNames.includes(name));
+    if (missingLayerNames.length) throw new Error('After Effects composition is missing expected layers: ' + missingLayerNames.join(', '));
+    const evidenceDir = path.join(os.tmpdir(), 'motion-studio', 'adobe-evidence');
+    await mkdir(evidenceDir, { recursive: true });
+    const framePath = path.join(evidenceDir, safeName(preview.plan.composition.name) + '-proof.png');
+    const frame = await call(connection, 'ae_render_frame', {
+      compNameOrId: preview.plan.composition.name,
+      time: Math.min(preview.plan.composition.duration / 2, Math.max(0, preview.plan.composition.duration - 1 / preview.plan.composition.fps)),
+      outPath: framePath,
+      colorManaged: 'off',
+      analyze: true
+    });
+    const frameFile = frame.writtenTo || frame.frames?.[0]?.writtenTo || framePath;
+    const frameInfo = await stat(frameFile);
+    if (!frameInfo.isFile() || frameInfo.size < 1) throw new Error('After Effects frame proof was not written as a non-empty PNG.');
+    steps.push({ tool: 'ae_render_frame', ok: true, path: frameFile, bytes: frameInfo.size, analysis: frame.analysis || frame.frames?.[0]?.analysis || null });
+    return { status: 'applied', verified: true, host: 'afterEffects', projectFile: preview.projectFile, backupPath: preview.backupPath, composition: preview.plan.composition, supportedLayerIds: preview.plan.supportedLayerIds, warnings: preview.plan.warnings, steps, readback, frameProof: { path: frameFile, bytes: frameInfo.size, analysis: frame.analysis || frame.frames?.[0]?.analysis || null } };
   } catch (error) {
     return { status: 'needs-reconciliation', verified: false, host: 'afterEffects', backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
   } finally { await connection.close(); }
