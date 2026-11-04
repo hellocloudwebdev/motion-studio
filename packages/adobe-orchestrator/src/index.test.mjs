@@ -178,7 +178,7 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
       async listTools() { return { tools: prToolNames.map(name => ({ name })) }; },
       async callTool(name, args) {
         calls.push({ name, args });
-        if (name === 'verify_premiere_connection') return asMcp({ success: true, data: { verified: true, backend: 'cep' } });
+        if (name === 'verify_premiere_connection') return asMcp({ success: true, data: { overall: 'ready', backend: 'cep' } });
         if (name === 'get_project_info') return asMcp({ success: true, data: { name: 'Test Project', path: projectFile, activeSequence: null } });
         if (name === 'save_project') return asMcp({ success: true, data: { verified: true, saved: true } });
         if (name === 'import_media') {
