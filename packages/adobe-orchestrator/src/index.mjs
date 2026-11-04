@@ -21,6 +21,34 @@ const REQUIRED_PREMIERE_TOOLS = [
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const safeName = value => String(value ?? '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'scene';
 const seconds = (frames, rate) => frames * rate.denominator / rate.numerator;
+const hostMutationTails = new Map();
+
+/** Serialize all project mutations in one Adobe host process. */
+export async function acquireHostMutationLock(host) {
+  if (!['afterEffects', 'premiere'].includes(host)) throw new Error('Unknown Adobe host lock: ' + host);
+  const previous = hostMutationTails.get(host) || Promise.resolve();
+  let releaseGate;
+  const gate = new Promise(resolve => { releaseGate = resolve; });
+  const tail = previous.then(() => gate);
+  hostMutationTails.set(host, tail);
+  await previous;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    releaseGate();
+    if (hostMutationTails.get(host) === tail) hostMutationTails.delete(host);
+  };
+}
+
+function collectSequenceClipNodeIds(structure) {
+  const ids = [];
+  for (const track of [...(structure.videoTracks || []), ...(structure.audioTracks || [])]) {
+    for (const clip of track.clips || []) if (typeof clip.nodeId === 'string' && clip.nodeId) ids.push(clip.nodeId);
+  }
+  return ids;
+}
+
 
 export function defaultAdobeReceiptDirectory({ platform = process.platform, home = os.homedir(), env = process.env } = {}) {
   const root = platform === 'win32'
@@ -363,6 +391,7 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
   const preview = approvalStore.consume(approvalId);
   if (preview.host !== 'afterEffects') throw new Error('Approval token is not for After Effects.');
   const connection = await connect({ app: 'afterEffects', allowEdits: true });
+  const releaseMutationLock = await acquireHostMutationLock('afterEffects');
   const steps = [];
   const startedAt = new Date().toISOString();
   const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectId: preview.plan.projectId, projectRevision: preview.plan.projectRevision, irHash: preview.plan.irHash, sceneId: preview.plan.sceneId, planHash: sha256(JSON.stringify(preview.plan)), approvalIdHash: sha256(approvalId) };
@@ -415,7 +444,9 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
     const outcome = { status: 'needs-reconciliation', verified: false, host: 'afterEffects', backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
     const persisted = await safePersistReceipt('afterEffects', { ...receiptBase, ...outcome, finishedAt: new Date().toISOString() }, receiptDir);
     return { ...outcome, ...persisted };
-  } finally { await connection.close(); }
+  } finally {
+    try { await connection.close(); } finally { releaseMutationLock(); }
+  }
 }
 
 export async function previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend = 'cep', exportPath, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
@@ -454,6 +485,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
   const preview = approvalStore.consume(approvalId);
   if (preview.host !== 'premiere') throw new Error('Approval token is not for Premiere Pro.');
   const connection = await connect({ app: 'premiere', allowEdits: true });
+  const releaseMutationLock = await acquireHostMutationLock('premiere');
   const steps = [];
   const startedAt = new Date().toISOString();
   const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectInfoHash: preview.projectInfoHash, renderedScenePaths: preview.renderedScenePaths, sequenceName: preview.sequenceName, exportPath: preview.exportPath, backend: preview.backend, approvalIdHash: sha256(approvalId) };
@@ -490,6 +522,9 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     }
     const structure = await call(connection, 'get_sequence_structure', { track_type: 'both', sequence_id: String(created.id), clip_limit: Math.min(200, Math.max(50, itemIds.length)), ...projectGuard });
     if (!structure || typeof structure !== 'object') throw new Error('Premiere sequence structure readback failed.');
+    const observedClipIds = collectSequenceClipNodeIds(structure);
+    const missingClipIds = itemIds.filter(id => !observedClipIds.includes(id));
+    if (missingClipIds.length) throw new Error('Premiere sequence structure is missing imported clip IDs: ' + missingClipIds.join(', '));
     steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
     const saved = await call(connection, 'save_project', { ...projectGuard });
     if (saved.verified !== true) throw new Error('Premiere save was not verified by fresh disk evidence; inspect the project before retrying.');
@@ -508,7 +543,9 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     const outcome = { status: 'needs-reconciliation', verified: false, host: 'premiere', backend: preview.backend, backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
     const persisted = await safePersistReceipt('premiere', { ...receiptBase, ...outcome, finishedAt: new Date().toISOString() }, receiptDir);
     return { ...outcome, ...persisted };
-  } finally { await connection.close(); }
+  } finally {
+    try { await connection.close(); } finally { releaseMutationLock(); }
+  }
 }
 
 const defaultApprovalStore = createApprovalStore();
