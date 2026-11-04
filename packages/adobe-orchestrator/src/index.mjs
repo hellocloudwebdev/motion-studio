@@ -452,7 +452,7 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
   }
 }
 
-export async function previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend = 'cep', exportPath, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
+export async function previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend = 'cep', exportPath, presetPath, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
   const paths = validatePremiereRenderInputs(renderedScenePaths);
   if (paths.length > 100) throw new Error('The 0.4 Premiere workflow is limited to 100 scene files so bounded video/audio track readback stays within the upstream 200-clip page contract.');
   if (typeof sequenceName !== 'string' || !sequenceName.trim()) throw new Error('sequenceName must be provided.');
@@ -471,6 +471,12 @@ export async function previewPremiereAssembly({ renderedScenePaths, backupPath, 
     const sourceFile = await assertExistingFile(projectFile, 'Premiere project');
     const backup = await assertNewBackupPath(backupPath, sourceFile, 'Premiere backupPath');
     let output = null;
+    if (presetPath && !exportPath) throw new Error('An AME preset path is meaningful only when exportPath is also provided.');
+    let preset = null;
+    if (presetPath) {
+      preset = await assertExistingFile(presetPath, 'AME preset');
+      if (path.extname(preset).toLowerCase() !== '.epr') throw new Error('AME preset must be an .epr file.');
+    }
     if (exportPath) {
       output = assertAbsoluteFilePath(exportPath, 'exportPath');
       const exportParent = await stat(path.dirname(output));
@@ -480,10 +486,10 @@ export async function previewPremiereAssembly({ renderedScenePaths, backupPath, 
     }
     const issued = approvalStore.issue({
       host: 'premiere', backend, projectFile: sourceFile, backupPath: backup,
-      renderedScenePaths: checked, sequenceName: sequenceName.trim(), exportPath: output,
+      renderedScenePaths: checked, sequenceName: sequenceName.trim(), exportPath: output, presetPath: preset,
       projectInfoHash: sha256(JSON.stringify(projectInfo))
     });
-    return { ...issued, host: 'premiere', backend, projectFile: sourceFile, backupPath: backup, renderedScenePaths: checked, sequenceName: sequenceName.trim(), exportPath: output, mutationScope: 'new-sequence-only' };
+    return { ...issued, host: 'premiere', backend, projectFile: sourceFile, backupPath: backup, renderedScenePaths: checked, sequenceName: sequenceName.trim(), exportPath: output, presetPath: preset, mutationScope: 'new-sequence-only' };
   } finally { await connection.close(); }
 }
 
@@ -495,7 +501,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
   const releaseMutationLock = await acquireHostMutationLock('premiere');
   const steps = [];
   const startedAt = new Date().toISOString();
-  const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectInfoHash: preview.projectInfoHash, renderedScenePaths: preview.renderedScenePaths, sequenceName: preview.sequenceName, exportPath: preview.exportPath, backend: preview.backend, approvalIdHash: sha256(approvalId) };
+  const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectInfoHash: preview.projectInfoHash, renderedScenePaths: preview.renderedScenePaths, sequenceName: preview.sequenceName, exportPath: preview.exportPath, presetPath: preview.presetPath, backend: preview.backend, approvalIdHash: sha256(approvalId) };
   try {
     const toolList = await connection.listTools();
     const required = [...REQUIRED_PREMIERE_TOOLS, ...(preview.exportPath ? ['export_sequence', 'verify_delivery_file'] : [])];
@@ -554,7 +560,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     steps.push({ tool: 'save_project', ok: true, result: saved });
     let exportReceipt = null;
     if (preview.exportPath) {
-      exportReceipt = await call(connection, 'export_sequence', { output_path: preview.exportPath, ...projectGuard });
+      exportReceipt = await call(connection, 'export_sequence', { output_path: preview.exportPath, ...(preview.presetPath ? { preset_path: preview.presetPath } : {}), ...projectGuard });
       if (exportReceipt.verified !== true) throw new Error('Premiere export did not return verified completion; inspect the output and Media Encoder state before retrying.');
       const delivery = await call(connection, 'verify_delivery_file', { output_path: preview.exportPath, checksum_algorithm: 'sha256' });
       if (delivery.verified !== true) throw new Error('Premiere delivery file did not pass its checksum/size verification.');
