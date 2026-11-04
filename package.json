@@ -4,8 +4,14 @@
   "private": true,
   "description": "Engine-independent AI video production system with HyperFrames rendering and governed Adobe MCP orchestration.",
   "type": "module",
-  "engines": { "node": ">=24.0.0" },
-  "workspaces": ["packages/*", "apps/*", "servers/*"],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "servers/*"
+  ],
   "scripts": {
     "test": "node --test",
     "studio": "node apps/cli/src/index.mjs",
@@ -18,7 +24,9 @@
     "setup": "node scripts/install.mjs"
   },
   "license": "MIT",
-  "bin": { "motion-studio": "./apps/cli/src/index.mjs" },
+  "bin": {
+    "motion-studio": "./apps/cli/src/index.mjs"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
     "@kumoproductions/mcp-aftereffects": "0.3.2",
