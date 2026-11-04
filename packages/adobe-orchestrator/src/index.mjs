@@ -358,7 +358,7 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
 export async function previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend = 'cep', exportPath, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
   const paths = validatePremiereRenderInputs(renderedScenePaths);
   if (typeof sequenceName !== 'string' || !sequenceName.trim()) throw new Error('sequenceName must be provided.');
-  if (!['cep', 'uxp'].includes(backend)) throw new Error('Premiere backend must be cep or uxp.');
+  if (backend !== 'cep') throw new Error('The 0.4 Premiere assembly workflow currently requires the CEP compatibility bridge. UXP uses a different import/sequence-edit API and is not yet implemented in this workflow.');
   const checked = [];
   for (const file of paths) checked.push(await assertExistingFile(file, 'rendered scene'));
   const connection = await connect({ app: 'premiere', allowEdits: false });
@@ -400,31 +400,38 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     const currentPath = findStringProperty(projectInfo, ['path', 'projectPath', 'project_path', 'projectFile', 'project_file']);
     if (path.resolve(currentPath || '') !== preview.projectFile) throw new Error('Premiere project identity changed after preview; no mutation was attempted.');
     if (sha256(JSON.stringify(projectInfo)) !== preview.projectInfoHash) throw new Error('Premiere project/active-sequence state changed after preview; create a fresh preview.');
-    const initialSave = await call(connection, 'save_project', {});
+    const initialSave = await call(connection, 'save_project', { expected_project_path: preview.projectFile });
     if (initialSave.verified !== true) throw new Error('Premiere pre-edit save was not verified; no backup or import was attempted.');
     steps.push({ tool: 'save_project-before-backup', ok: true, result: initialSave });
     await copyFile(preview.projectFile, preview.backupPath, fsConstants.COPYFILE_EXCL);
-    const imported = await call(connection, 'import_media', { file_paths: preview.renderedScenePaths, suppress_ui: true });
+    const imported = await call(connection, 'import_media', { file_paths: preview.renderedScenePaths, suppress_ui: true, ...projectGuard });
     steps.push({ tool: 'import_media', ok: imported.verified === true, result: imported });
     if (imported.verified !== true || !Array.isArray(imported.items) || imported.items.length !== preview.renderedScenePaths.length) {
       throw new Error('Premiere media import did not return a verified exact item list; inspect the project before retrying.');
     }
     const itemIds = imported.items.map(item => item.nodeId);
     if (itemIds.some(id => typeof id !== 'string' || !id)) throw new Error('Premiere media import omitted one or more node IDs; inspect the project before retrying.');
-    const created = await call(connection, 'create_sequence_from_clips', { name: preview.sequenceName, item_ids: itemIds });
+    const projectGuard = preview.backend === 'cep' ? { expected_project_path: preview.projectFile } : {};
+    const created = await call(connection, 'create_sequence_from_clips', { name: preview.sequenceName, item_ids: itemIds, ...projectGuard });
     steps.push({ tool: 'create_sequence_from_clips', ok: created.verified === true, result: created });
     if (created.verified !== true || created.clipCount !== itemIds.length || created.requestedClipCount !== itemIds.length) {
       throw new Error('Premiere did not verify the new sequence and all imported clip placements. Inspect the project before retrying.');
     }
-    const structure = await call(connection, 'get_sequence_structure', { track_type: 'both' });
+    const activeSequence = await call(connection, 'get_active_sequence', { track_type: 'both', ...projectGuard });
+    const activeInfo = activeSequence.sequence || activeSequence.activeSequence || activeSequence;
+    const observedSequenceId = activeInfo.id || activeInfo.sequenceId || activeInfo.sequence_id;
+    if (!observedSequenceId || String(observedSequenceId) !== String(created.id)) {
+      throw new Error('Premiere active sequence does not match the newly created sequence; inspect the project before retrying.');
+    }
+    const structure = await call(connection, 'get_sequence_structure', { track_type: 'both', ...projectGuard });
     if (!structure || typeof structure !== 'object') throw new Error('Premiere sequence structure readback failed.');
     steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
-    const saved = await call(connection, 'save_project', {});
+    const saved = await call(connection, 'save_project', { ...projectGuard });
     if (saved.verified !== true) throw new Error('Premiere save was not verified by fresh disk evidence; inspect the project before retrying.');
     steps.push({ tool: 'save_project', ok: true, result: saved });
     let exportReceipt = null;
     if (preview.exportPath) {
-      exportReceipt = await call(connection, 'export_sequence', { output_path: preview.exportPath });
+      exportReceipt = await call(connection, 'export_sequence', { output_path: preview.exportPath, ...projectGuard });
       if (exportReceipt.verified !== true) throw new Error('Premiere export did not return verified completion; inspect the output and Media Encoder state before retrying.');
       const delivery = await call(connection, 'verify_delivery_file', { output_path: preview.exportPath, checksum_algorithm: 'sha256' });
       steps.push({ tool: 'verify_delivery_file', ok: true, result: delivery });
