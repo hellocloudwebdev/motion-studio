@@ -2,7 +2,10 @@
   "schemaVersion": 1,
   "motionStudioVersion": "0.3.0-alpha.1",
   "runtime": {
-    "node": { "minimum": "24.0.0", "bootstrapMajor": 26 },
+    "node": {
+      "minimum": "24.0.0",
+      "bootstrapMajor": 26
+    },
     "packageManager": "npm"
   },
   "npm": {
@@ -12,19 +15,62 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "zod": "3.25.0",
     "@kumoproductions/mcp-aftereffects": "0.3.2",
-    "premiere-pro-mcp": "1.28.0"
+    "premiere-pro-mcp": "1.29.0"
   },
   "adobe": {
-    "afterEffects": { "supported": ["2024", "2025", "2026"], "platforms": ["win32", "darwin"], "mcpPackage": "@kumoproductions/mcp-aftereffects", "readonlyOnFirstRun": true, "evalEnabled": false },
-    "premierePro": { "supported": ["2020", "2021", "2022", "2023", "2024", "2025", "2026"], "platforms": ["win32", "darwin"], "mcpPackage": "premiere-pro-mcp", "npmVersion": "1.28.0", "uxpMinimum": "25.6", "uxpReleaseTag": "v1.28.0", "cepAllowed": true, "unsafeScript": false }
+    "afterEffects": {
+      "supported": [
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "platforms": [
+        "win32",
+        "darwin"
+      ],
+      "mcpPackage": "@kumoproductions/mcp-aftereffects",
+      "readonlyOnFirstRun": true,
+      "evalEnabled": false
+    },
+    "premierePro": {
+      "supported": [
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "platforms": [
+        "win32",
+        "darwin"
+      ],
+      "mcpPackage": "premiere-pro-mcp",
+      "npmVersion": "1.29.0",
+      "uxpMinimum": "25.6",
+      "uxpReleaseTag": "v1.29.0",
+      "uxpAsset": "premiere-pro-mcp-uxp-1.29.0-direct.ccx",
+      "cepAsset": "MCPBridgeCEP.zxp",
+      "cepAllowed": true,
+      "unsafeScript": false
+    }
   },
   "externalBinaries": {
-    "ffmpeg": { "required": true, "minimumMajor": 6 },
-    "blender": { "required": false },
-    "adobeMediaEncoder": { "required": false }
+    "ffmpeg": {
+      "required": true,
+      "minimumMajor": 6
+    },
+    "blender": {
+      "required": false
+    },
+    "adobeMediaEncoder": {
+      "required": false
+    }
   },
   "notes": [
-    "Premiere Pro MCP v1.29.0 exists as a GitHub release candidate but was not the published npm package at the time of this lock. Keep npm package 1.28.0 paired with the matching v1.28.0 UXP/CEP release assets until npm publication and verification.",
+    "Premiere Pro MCP v1.29.0 is the currently published npm package; use the matching v1.29.0 UXP/CEP release assets.",
+    "Premiere UXP is supported only on Premiere Pro 25.6+; exact app version is read from the installed binary or Info.plist. If the version cannot be confirmed, ask the user instead of guessing.",
     "Adobe applications are licensed products; installers must use the user's Creative Cloud account and UI.",
     "All Adobe MCPs run locally over stdio. No public network listener is enabled."
   ]
