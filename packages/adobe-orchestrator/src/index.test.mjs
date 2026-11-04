@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir, rm, access } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, rm, access, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -145,12 +145,17 @@ test('After Effects workflow previews without mutation, then applies with backup
     const preview = await previewAfterEffectsScene({ project, sceneId: 'scene-1', backupPath, connect, approvalStore });
     assert.equal(preview.host, 'afterEffects');
     assert.equal(calls.some(x => x.name === 'ae_do'), false);
-    const applied = await applyAfterEffectsScene({ approvalId: preview.approvalId, approved: true, connect, approvalStore });
+    const receiptDir = path.join(dir, 'ae-receipts');
+    const applied = await applyAfterEffectsScene({ approvalId: preview.approvalId, approved: true, connect, approvalStore, receiptDir });
     assert.equal(applied.status, 'applied');
     assert.equal(applied.verified, true);
     assert.equal(applied.steps.filter(x => x.operation).length, preview.plan.operations.length);
     assert.equal(applied.frameProof.bytes, 9);
     await access(backupPath);
+    await access(applied.receiptPath);
+    const receipt = JSON.parse(await readFile(applied.receiptPath, 'utf8'));
+    assert.equal(receipt.host, 'afterEffects');
+    assert.equal(receipt.approvalIdHash === preview.approvalId, false);
     assert.equal(calls.some(x => x.name === 'ae_do'), true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -190,11 +195,16 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
       renderedScenePaths: [renderA, renderB], backupPath, sequenceName: 'Test Assembly', backend: 'cep', connect, approvalStore
     });
     assert.equal(preview.mutationScope, 'new-sequence-only');
-    const applied = await applyPremiereAssembly({ approvalId: preview.approvalId, approved: true, connect, approvalStore });
+    const receiptDir = path.join(dir, 'premiere-receipts');
+    const applied = await applyPremiereAssembly({ approvalId: preview.approvalId, approved: true, connect, approvalStore, receiptDir });
     assert.equal(applied.status, 'applied');
     assert.equal(applied.verified, true);
     assert.equal(applied.sequence.id, 'sequence-1');
     await access(backupPath);
+    await access(applied.receiptPath);
+    const receipt = JSON.parse(await readFile(applied.receiptPath, 'utf8'));
+    assert.equal(receipt.host, 'premiere');
+    assert.equal(receipt.sequenceName, 'Test Assembly');
     const importCall = calls.find(x => x.name === 'import_media');
     assert.equal(importCall.args.expected_project_path, projectFile);
     const sequenceCall = calls.find(x => x.name === 'create_sequence_from_clips');
