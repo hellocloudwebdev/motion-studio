@@ -180,7 +180,7 @@ async function setupPremiereToken() {
   report.adobeMcp.premiereUxpTokenPath = tokenPath;
   report.needsUserAction.push('For Premiere Pro UXP 25.6+, install the pinned v1.28.0 CCX connector in Creative Cloud Desktop and paste the generated token into the UXP panel settings.');
   report.adobeMcp.premiereUxpConnector = 'needs-user-install';
-  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.28.0/premiere-pro-mcp-uxp-1.28.0-direct.ccx');
+  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.29.0/premiere-pro-mcp-uxp-1.28.0-direct.ccx');
 }
 async function main() {
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node.js 24 or newer is required for the After Effects MCP integration.');
@@ -196,8 +196,8 @@ async function main() {
       await cp(sourceRoot, appRoot, { recursive: true, force: true, filter: src => !src.includes(path.sep + '.git' + path.sep) && !src.includes(path.sep + 'node_modules' + path.sep) });
     }
   }
-  if (!minimal && yes) { installSystem('ffmpeg'); installSystem('blender'); }
-  if (!minimal && yes && flags.has('--install-blender')) installSystem('blender');
+  if (!minimal && yes) installSystem('ffmpeg');
+  if (!minimal && flags.has('--install-blender')) installSystem('blender');
 
   if (!dryRun) {
     runNpm(['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
@@ -222,16 +222,16 @@ async function main() {
       report.needsUserAction.push('In After Effects, enable Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network, then launch After Effects for MCP control.');
     } else report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
     if (report.detected.premierePro.installed) {
-      const detectedYear = Number(report.detected.premierePro.version || 0);
-      if (detectedYear >= 2026) await setupPremiereToken();
-      else {
-        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'compatibility decision required', status: 'needs-user-action' };
-        report.needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
+      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.29.0', hostVersion: report.detected.premierePro.version, uxpCompatible: report.detected.premierePro.uxpCompatible };
+      if (report.detected.premierePro.uxpCompatible === true) await setupPremiereToken();
+      else if (report.detected.premierePro.uxpCompatible === null) {
+        report.needsUserAction.push('Premiere exact version could not be confirmed. CEP compatibility install is available for the 0.4 assembly workflow.');
       }
-    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', host: 'missing', status: 'needs-user-install' };
+      if (!installCep) report.needsUserAction.push('Motion Studio 0.4 Premiere assembly requires the CEP compatibility connector. Close Premiere Pro and rerun install.ps1 --install-premiere-cep (or ./install.sh --install-premiere-cep).');
+    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.29.0', host: 'missing', status: 'needs-user-install' };
     if (installCep && report.detected.premierePro.installed) {
       runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
-      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP', status: 'install-command-completed' };
+      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.29.0', connector: 'CEP', status: 'install-command-completed' };
     }
   }
   if (!skipHosts) await stageHosts();
