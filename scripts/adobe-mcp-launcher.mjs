@@ -14,12 +14,19 @@ const env = { ...process.env };
 let entry;
 if (app === 'aftereffects') {
   entry = require.resolve('@kumoproductions/mcp-aftereffects');
-  env.AE_MCP_READONLY = env.MOTION_STUDIO_ADOBE_EDIT === '1' ? '0' : '1';
+  const allowEdits = env.MOTION_STUDIO_ADOBE_EDIT === '1';
+  env.AE_MCP_READONLY = allowEdits ? '0' : '1';
+  if (allowEdits) env.AE_MCP_ALLOW_CATEGORIES = 'comp,layer,text,transform,keyframe,render';
+  else delete env.AE_MCP_ALLOW_CATEGORIES;
   delete env.AE_MCP_ENABLE_EVAL;
 } else {
   entry = require.resolve('premiere-pro-mcp');
-  env.PREMIERE_MCP_CAPABILITIES = env.MOTION_STUDIO_ADOBE_EDIT === '1' ? 'inspect,edit,export,filesystem' : 'inspect';
+  const allowEdits = env.MOTION_STUDIO_ADOBE_EDIT === '1';
+  env.PREMIERE_MCP_CAPABILITIES = allowEdits ? 'inspect,edit,export,filesystem' : 'inspect';
   env.PREMIERE_MCP_TOOL_PACKS = 'inspection';
+  env.PREMIERE_MCP_TOOL_LIST = allowEdits
+    ? 'verify_premiere_connection,get_project_info,import_media,create_sequence_from_clips,get_active_sequence,get_sequence_structure,save_project,export_sequence,verify_delivery_file'
+    : 'verify_premiere_connection,get_project_info,get_active_sequence,get_sequence_structure';
   try {
     const token = (await readFile(secretPath, 'utf8')).trim();
     if (token) env.PREMIERE_UXP_TOKEN = token;

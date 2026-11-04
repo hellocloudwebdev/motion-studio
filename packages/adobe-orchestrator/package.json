@@ -1,0 +1,9 @@
+{
+  "name": "@motion-studio/adobe-orchestrator",
+  "version": "0.4.0-alpha.1",
+  "type": "module",
+  "exports": "./src/index.mjs",
+  "dependencies": {
+    "@motion-studio/adobe-mcp-client": "0.4.0-alpha.1"
+  }
+}
