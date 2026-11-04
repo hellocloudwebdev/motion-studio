@@ -292,7 +292,7 @@ export async function previewAfterEffectsScene({ project, sceneId, backupPath, c
     const projectInfo = await call(connection, 'ae_project_info');
     const projectFile = findStringProperty(projectInfo, ['file', 'path', 'projectPath', 'project_path']);
     if (!projectFile || !path.isAbsolute(projectFile)) throw new Error('After Effects project must be saved to an absolute path before a scene can be edited.');
-    if (findBooleanProperty(projectInfo, ['dirty', 'isDirty']) === true) throw new Error('After Effects project has unsaved changes. Save them in After Effects and preview again.');
+    if (findBooleanProperty(projectInfo, ['dirty', 'isDirty']) !== false) throw new Error('After Effects dirty state is not confirmed false. Save the project in After Effects and retry the preview.');
     const sourceFile = await assertExistingFile(projectFile, 'After Effects project');
     const backup = await assertNewBackupPath(backupPath, sourceFile, 'After Effects backupPath');
     const categories = [...new Set(plan.operations.map(item => item.operation.split('.')[0]))];
@@ -329,6 +329,7 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
       steps.push({ operation: step.operation, ok: true, result });
     }
     const saved = await call(connection, 'ae_save_project', {});
+    if (saved.saved !== true) throw new Error('After Effects save did not return saved:true; inspect the project before retrying.');
     steps.push({ tool: 'ae_save_project', ok: true, result: saved });
     const readback = await call(connection, 'ae_comp_info', { nameOrId: preview.plan.composition.name });
     if (!readback || typeof readback !== 'object') throw new Error('After Effects composition readback was not available.');
