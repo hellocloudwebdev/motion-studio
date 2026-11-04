@@ -51,7 +51,7 @@ A host is ready only when all applicable checks pass:
 - Project is open and saved to an absolute path.
 - Capability/authority profile advertises the exact tools needed by the selected route.
 - Project path is unchanged between preview and apply.
-- Backend (CEP or authenticated UXP) is captured with version/capability response. Do not assume operation parity between the two.
+- The first 0.4 assembly implementation is CEP-only because its import and create-sequence-from-clips operations are CEP-backed. UXP may be selected for a separate read-only connection check, but this orchestration path refuses UXP rather than pretending the CEP tools are available there. Do not assume operation parity between backends.
 
 When a host is unavailable, report the exact preflight failure and keep the task blocked. Do not silently replace an Adobe operation with a weaker renderer.
 
