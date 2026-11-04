@@ -170,9 +170,11 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     const backupPath = path.join(dir, 'test-backup.prproj');
     const renderA = path.join(dir, 'scene-a.mp4');
     const renderB = path.join(dir, 'scene-b.mp4');
+    const presetFile = path.join(dir, 'default.epr');
     await writeFile(projectFile, 'saved-premiere-project');
     await writeFile(renderA, 'render-a');
     await writeFile(renderB, 'render-b');
+    await writeFile(presetFile, '<Preset/>');
     const calls = [];
     let structureCalls = 0;
     const makeConnection = () => ({
@@ -202,7 +204,7 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     const connect = async () => makeConnection();
     const approvalStore = createApprovalStore();
     const preview = await previewPremiereAssembly({
-      renderedScenePaths: [renderA, renderB], backupPath, sequenceName: 'Test Assembly', backend: 'cep', exportPath: path.join(dir, 'final.mp4'), connect, approvalStore
+      renderedScenePaths: [renderA, renderB], backupPath, sequenceName: 'Test Assembly', backend: 'cep', exportPath: path.join(dir, 'final.mp4'), presetPath: presetFile, connect, approvalStore
     });
     assert.equal(preview.mutationScope, 'new-sequence-only');
     const receiptDir = path.join(dir, 'premiere-receipts');
@@ -211,6 +213,8 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     assert.equal(applied.verified, true);
     assert.equal(applied.sequence.id, 'sequence-1');
     assert.equal(applied.export.verified, true);
+    assert.equal(applied.export.output_path, path.join(dir, 'final.mp4'));
+    assert.equal(applied.delivery.verified, true);
     assert.equal(applied.delivery.verified, true);
     assert.equal(structureCalls, 2);
     await access(backupPath);
@@ -227,6 +231,7 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     assert.equal(structureCall.args.clip_offset, 0);
     const exportCall = calls.find(x => x.name === 'export_sequence');
     assert.equal(exportCall.args.expected_project_path, projectFile);
+    assert.equal(exportCall.args.preset_path, presetFile);
     const deliveryCall = calls.find(x => x.name === 'verify_delivery_file');
     assert.equal(deliveryCall.args.checksum_algorithm, 'sha256');
   } finally { await rm(dir, { recursive: true, force: true }); }
