@@ -99,7 +99,7 @@ test('backup path must be distinct, same-extension, contained in an existing dir
 
 const asMcp = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
 const aeToolNames = ['ae_context','ae_project_info','ae_catalog','ae_do','ae_save_project','ae_comp_info','ae_render_frame'];
-const prToolNames = ['verify_premiere_connection','get_project_info','import_media','create_sequence_from_clips','get_active_sequence','get_sequence_structure','save_project'];
+const prToolNames = ['verify_premiere_connection','get_project_info','import_media','create_sequence_from_clips','get_active_sequence','get_sequence_structure','save_project','export_sequence','verify_delivery_file'];
 
 function aeCatalogOperations(category) {
   const required = names => names.map(name => ({ name, type: 'string', required: true }));
@@ -174,6 +174,7 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     await writeFile(renderA, 'render-a');
     await writeFile(renderB, 'render-b');
     const calls = [];
+    let structureCalls = 0;
     const makeConnection = () => ({
       async listTools() { return { tools: prToolNames.map(name => ({ name })) }; },
       async callTool(name, args) {
@@ -185,9 +186,15 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
           await access(backupPath);
           return asMcp({ success: true, data: { verified: true, items: [{ nodeId: 'item-1' },{ nodeId: 'item-2' }] } });
         }
-        if (name === 'create_sequence_from_clips') return asMcp({ success: true, data: { verified: true, id: 'sequence-1', name: args.name, clipCount: 2, requestedClipCount: 2 } });
+        if (name === 'create_sequence_from_clips') return asMcp({ success: true, data: { verified: true, id: 'sequence-1', name: args.name, clipCount: 3, requestedClipCount: 2 } });
         if (name === 'get_active_sequence') return asMcp({ success: true, data: { id: 'sequence-1', name: 'Test Assembly' } });
-        if (name === 'get_sequence_structure') return asMcp({ success: true, data: { sequenceId: 'sequence-1', videoTracks: [{ clips: [{ nodeId: 'item-1' },{ nodeId: 'item-2' }] }], audioTracks: [] } });
+        if (name === 'get_sequence_structure') {
+          structureCalls += 1;
+          if (structureCalls === 1) return asMcp({ success: true, data: { pagination: { nextOffset: 1 }, sequenceId: 'sequence-1', videoTracks: [{ clips: [{ nodeId: 'item-1' }] }], audioTracks: [] } });
+          return asMcp({ success: true, data: { pagination: { nextOffset: null }, sequenceId: 'sequence-1', videoTracks: [{ clips: [{ nodeId: 'item-2' }] }], audioTracks: [] } });
+        }
+        if (name === 'export_sequence') return asMcp({ success: true, data: { verified: true, output_path: args.output_path } });
+        if (name === 'verify_delivery_file') return asMcp({ success: true, data: { verified: true, checksum: 'a'.repeat(64), size: 42 } });
         throw new Error('Unexpected Premiere tool: ' + name);
       },
       async close() {}
@@ -195,7 +202,7 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     const connect = async () => makeConnection();
     const approvalStore = createApprovalStore();
     const preview = await previewPremiereAssembly({
-      renderedScenePaths: [renderA, renderB], backupPath, sequenceName: 'Test Assembly', backend: 'cep', connect, approvalStore
+      renderedScenePaths: [renderA, renderB], backupPath, sequenceName: 'Test Assembly', backend: 'cep', exportPath: path.join(dir, 'final.mp4'), connect, approvalStore
     });
     assert.equal(preview.mutationScope, 'new-sequence-only');
     const receiptDir = path.join(dir, 'premiere-receipts');
@@ -203,6 +210,9 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     assert.equal(applied.status, 'applied');
     assert.equal(applied.verified, true);
     assert.equal(applied.sequence.id, 'sequence-1');
+    assert.equal(applied.export.verified, true);
+    assert.equal(applied.delivery.verified, true);
+    assert.equal(structureCalls, 2);
     await access(backupPath);
     await access(applied.receiptPath);
     const receipt = JSON.parse(await readFile(applied.receiptPath, 'utf8'));
@@ -214,6 +224,11 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     assert.equal(sequenceCall.args.expected_project_path, projectFile);
     const structureCall = calls.find(x => x.name === 'get_sequence_structure');
     assert.equal(structureCall.args.sequence_id, 'sequence-1');
+    assert.equal(structureCall.args.clip_offset, 0);
+    const exportCall = calls.find(x => x.name === 'export_sequence');
+    assert.equal(exportCall.args.expected_project_path, projectFile);
+    const deliveryCall = calls.find(x => x.name === 'verify_delivery_file');
+    assert.equal(deliveryCall.args.checksum_algorithm, 'sha256');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
