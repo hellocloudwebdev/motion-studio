@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, rm, access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
   buildAfterEffectsScenePlan,
+  previewAfterEffectsScene,
+  applyAfterEffectsScene,
+  previewPremiereAssembly,
+  applyPremiereAssembly,
   createApprovalStore,
   parseMcpPayload,
   unwrapMcpData,
@@ -88,5 +92,114 @@ test('backup path must be distinct, same-extension, contained in an existing dir
     await assert.rejects(() => assertNewBackupPath(path.join(dir, 'backup.prproj'), source, 'backup'), /same file extension/);
     await writeFile(backup, 'already exists');
     await assert.rejects(() => assertNewBackupPath(backup, source, 'backup'), /already exists/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+const asMcp = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
+const aeToolNames = ['ae_context','ae_project_info','ae_catalog','ae_do','ae_save_project','ae_comp_info','ae_render_frame'];
+const prToolNames = ['verify_premiere_connection','get_project_info','import_media','create_sequence_from_clips','get_active_sequence','get_sequence_structure','save_project'];
+
+function aeCatalogOperations(category) {
+  const required = names => names.map(name => ({ name, type: 'string', required: true }));
+  if (category === 'comp') return [{ name: 'comp.create', params: [
+    ...required(['name']), { name: 'width', type: 'number', required: true }, { name: 'height', type: 'number', required: true },
+    { name: 'fps', type: 'number', required: true }, { name: 'duration', type: 'number', required: true }, { name: 'bgColor', type: 'array', required: false }
+  ] }];
+  if (category === 'layer') return [
+    { name: 'layer.create_text', params: [{ name: 'comp', type: 'string', required: true },{ name: 'text', type: 'string', required: true },{ name: 'name', type: 'string' },{ name: 'boxSize', type: 'array' },{ name: 'boxPosition', type: 'array' },{ name: 'orientation', type: 'string' }] },
+    { name: 'layer.create_solid', params: [{ name: 'comp', type: 'string', required: true },{ name: 'name', type: 'string' },{ name: 'color', type: 'array' },{ name: 'width', type: 'number' },{ name: 'height', type: 'number' }] }
+  ];
+  if (category === 'text') return [{ name: 'text.set_style', params: [{ name: 'comp', type: 'string', required: true },{ name: 'layer', type: 'string', required: true },{ name: 'fontSize', type: 'number' },{ name: 'fillColor', type: 'array' },{ name: 'justification', type: 'string' }] }];
+  if (category === 'transform') return [{ name: 'transform.set', params: [{ name: 'comp', type: 'string', required: true },{ name: 'layer', type: 'string', required: true },{ name: 'position', type: 'array' },{ name: 'opacity', type: 'number' }] }];
+  if (category === 'keyframe') return [{ name: 'keyframe.add', params: [{ name: 'comp', type: 'string', required: true },{ name: 'layer', type: 'string', required: true },{ name: 'property', type: 'array', required: true },{ name: 'time', type: 'number', required: true },{ name: 'value', type: 'any', required: true }] }];
+  return [];
+}
+
+test('After Effects workflow previews without mutation, then applies with backup and frame evidence', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-ae-flow-'));
+  try {
+    const projectFile = path.join(dir, 'test.aep');
+    const backupPath = path.join(dir, 'test-backup.aep');
+    await writeFile(projectFile, 'saved-ae-project');
+    const calls = [];
+    const makeConnection = () => ({
+      async listTools() { return { tools: aeToolNames.map(name => ({ name })) }; },
+      async callTool(name, args) {
+        calls.push({ name, args });
+        if (name === 'ae_context') return asMcp({ instance: 'ae-local' });
+        if (name === 'ae_project_info') return asMcp({ file: projectFile, dirty: false, items: [] });
+        if (name === 'ae_catalog') return asMcp({ category: args.category, operations: aeCatalogOperations(args.category) });
+        if (name === 'ae_do') return asMcp({ result: { ok: true, operation: args.operation }, context: {} });
+        if (name === 'ae_save_project') return asMcp({ saved: true, path: projectFile });
+        if (name === 'ae_comp_info') return asMcp({ ok: true, found: true, name: args.nameOrId, layers: [{ name: 'MS_headline' },{ name: 'MS_backplate' }] });
+        if (name === 'ae_render_frame') {
+          await writeFile(args.outPath, 'png-proof');
+          return asMcp({ ok: true, writtenTo: args.outPath, analysis: { coverage: 0.5 } });
+        }
+        throw new Error('Unexpected AE tool: ' + name);
+      },
+      async close() {}
+    });
+    const connect = async () => makeConnection();
+    const approvalStore = createApprovalStore();
+    const preview = await previewAfterEffectsScene({ project, sceneId: 'scene-1', backupPath, connect, approvalStore });
+    assert.equal(preview.host, 'afterEffects');
+    assert.equal(calls.some(x => x.name === 'ae_do'), false);
+    const applied = await applyAfterEffectsScene({ approvalId: preview.approvalId, approved: true, connect, approvalStore });
+    assert.equal(applied.status, 'applied');
+    assert.equal(applied.verified, true);
+    assert.equal(applied.steps.filter(x => x.operation).length, preview.plan.operations.length);
+    assert.equal(applied.frameProof.bytes, 9);
+    await access(backupPath);
+    assert.equal(calls.some(x => x.name === 'ae_do'), true);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('Premiere workflow imports verified renders into a new guarded sequence and saves it', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-pr-flow-'));
+  try {
+    const projectFile = path.join(dir, 'test.prproj');
+    const backupPath = path.join(dir, 'test-backup.prproj');
+    const renderA = path.join(dir, 'scene-a.mp4');
+    const renderB = path.join(dir, 'scene-b.mp4');
+    await writeFile(projectFile, 'saved-premiere-project');
+    await writeFile(renderA, 'render-a');
+    await writeFile(renderB, 'render-b');
+    const calls = [];
+    const makeConnection = () => ({
+      async listTools() { return { tools: prToolNames.map(name => ({ name })) }; },
+      async callTool(name, args) {
+        calls.push({ name, args });
+        if (name === 'verify_premiere_connection') return asMcp({ success: true, data: { verified: true, backend: 'cep' } });
+        if (name === 'get_project_info') return asMcp({ success: true, data: { name: 'Test Project', path: projectFile, activeSequence: null } });
+        if (name === 'save_project') return asMcp({ success: true, data: { verified: true, saved: true } });
+        if (name === 'import_media') {
+          await access(backupPath);
+          return asMcp({ success: true, data: { verified: true, items: [{ nodeId: 'item-1' },{ nodeId: 'item-2' }] } });
+        }
+        if (name === 'create_sequence_from_clips') return asMcp({ success: true, data: { verified: true, id: 'sequence-1', name: args.name, clipCount: 2, requestedClipCount: 2 } });
+        if (name === 'get_active_sequence') return asMcp({ success: true, data: { id: 'sequence-1', name: 'Test Assembly' } });
+        if (name === 'get_sequence_structure') return asMcp({ success: true, data: { sequenceId: 'sequence-1', videoTracks: [{ clips: [{ nodeId: 'item-1' },{ nodeId: 'item-2' }] }], audioTracks: [] } });
+        throw new Error('Unexpected Premiere tool: ' + name);
+      },
+      async close() {}
+    });
+    const connect = async () => makeConnection();
+    const approvalStore = createApprovalStore();
+    const preview = await previewPremiereAssembly({
+      renderedScenePaths: [renderA, renderB], backupPath, sequenceName: 'Test Assembly', backend: 'cep', connect, approvalStore
+    });
+    assert.equal(preview.mutationScope, 'new-sequence-only');
+    const applied = await applyPremiereAssembly({ approvalId: preview.approvalId, approved: true, connect, approvalStore });
+    assert.equal(applied.status, 'applied');
+    assert.equal(applied.verified, true);
+    assert.equal(applied.sequence.id, 'sequence-1');
+    await access(backupPath);
+    const importCall = calls.find(x => x.name === 'import_media');
+    assert.equal(importCall.args.expected_project_path, projectFile);
+    const sequenceCall = calls.find(x => x.name === 'create_sequence_from_clips');
+    assert.equal(sequenceCall.args.expected_project_path, projectFile);
+    const structureCall = calls.find(x => x.name === 'get_sequence_structure');
+    assert.equal(structureCall.args.sequence_id, 'sequence-1');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
