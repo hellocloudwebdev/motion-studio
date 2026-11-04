@@ -312,6 +312,7 @@ export async function previewAfterEffectsScene({ project, sceneId, backupPath, c
       projectFile: sourceFile,
       backupPath: backup,
       contextHash: sha256(JSON.stringify({ context, projectInfo })),
+      projectInfoHash: sha256(JSON.stringify(projectInfo)),
       tools: toolList.tools.map(tool => tool.name)
     };
     const issued = approvalStore.issue(previewData);
@@ -329,7 +330,12 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
     const projectInfo = await call(connection, 'ae_project_info');
     const currentPath = findStringProperty(projectInfo, ['file', 'path', 'projectPath', 'project_path']);
     if (path.resolve(currentPath || '') !== preview.projectFile) throw new Error('After Effects project identity changed after preview; no mutation was attempted.');
-    if (findBooleanProperty(projectInfo, ['dirty', 'isDirty']) === true) throw new Error('After Effects project became dirty after preview; no mutation was attempted.');
+    if (findBooleanProperty(projectInfo, ['dirty', 'isDirty']) !== false) throw new Error('After Effects dirty state is no longer confirmed false; no mutation was attempted.');
+    if (sha256(JSON.stringify(projectInfo)) !== preview.projectInfoHash) throw new Error('After Effects project state changed after preview; create a fresh preview.');
+    const categories = [...new Set(preview.plan.operations.map(item => item.operation.split('.')[0]))];
+    const catalogs = [];
+    for (const category of categories) catalogs.push(await aeOperationCatalog(connection, category));
+    validateAePlanAgainstCatalog(preview.plan, catalogs);
     await copyFile(preview.projectFile, preview.backupPath, fsConstants.COPYFILE_EXCL);
     for (const step of preview.plan.operations) {
       const result = await call(connection, 'ae_do', { operation: step.operation, args: step.args });
@@ -388,8 +394,11 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     const projectInfo = await call(connection, 'get_project_info');
     const currentPath = findStringProperty(projectInfo, ['path', 'projectPath', 'project_path', 'projectFile', 'project_file']);
     if (path.resolve(currentPath || '') !== preview.projectFile) throw new Error('Premiere project identity changed after preview; no mutation was attempted.');
-    await call(connection, 'save_project', {});
-    await copyFile(preview.projectFile, preview.backupPath, 1); // COPYFILE_EXCL
+    if (sha256(JSON.stringify(projectInfo)) !== preview.projectInfoHash) throw new Error('Premiere project/active-sequence state changed after preview; create a fresh preview.');
+    const initialSave = await call(connection, 'save_project', {});
+    if (initialSave.verified !== true) throw new Error('Premiere pre-edit save was not verified; no backup or import was attempted.');
+    steps.push({ tool: 'save_project-before-backup', ok: true, result: initialSave });
+    await copyFile(preview.projectFile, preview.backupPath, fsConstants.COPYFILE_EXCL);
     const imported = await call(connection, 'import_media', { file_paths: preview.renderedScenePaths, suppress_ui: true });
     steps.push({ tool: 'import_media', ok: imported.verified === true, result: imported });
     if (imported.verified !== true || !Array.isArray(imported.items) || imported.items.length !== preview.renderedScenePaths.length) {
