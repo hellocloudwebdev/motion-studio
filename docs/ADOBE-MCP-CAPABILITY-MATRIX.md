@@ -34,7 +34,7 @@ Do not enable `AE_MCP_ENABLE_EVAL`. Set `AE_MCP_READONLY=1` on onboarding. When 
 
 Package: `premiere-pro-mcp@1.29.0`  
 Repository: https://github.com/leancoderkavy/premiere-pro-mcp  
-Compatibility: Windows/macOS, Premiere 2020–2026; authenticated UXP on supported 25.6+ hosts, CEP compatibility routes for other features/versions.
+Compatibility: Windows/macOS, Premiere 2020–2026. 0.4's complete scene-import/new-sequence workflow is CEP-backed; the UXP connector may be installed and used by upstream UXP-specific tools, but is not silently substituted for the CEP operations in this workflow.
 
 | MCP surface | Motion Studio use | Policy |
 |---|---|---|
@@ -64,4 +64,4 @@ Approved workflow:
 - AE: `AE_MCP_READONLY=0`; allowlisted operation categories only; no eval.
 - Premiere: `PREMIERE_MCP_CAPABILITIES=inspect,edit,export,filesystem`; explicitly selected tool list only; no `unsafe-script`.
 
-Neither tool availability nor connector panel status proves that an application edit succeeded. Readback and host-specific receipt are required.
+The 0.4 Premiere assembly path requires the CEP bridge and sends `expected_project_path` on each supported mutating/readback call as a project-identity guard. UXP has a different snapshot-guard contract and is deferred to a separate adapter. Neither tool availability nor connector panel status proves that an application edit succeeded. Readback and host-specific receipt are required.
