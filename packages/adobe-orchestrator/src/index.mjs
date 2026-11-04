@@ -33,15 +33,19 @@ export function parseMcpPayload(result) {
 }
 
 export function unwrapMcpData(payload) {
-  if (!payload || typeof payload !== 'object') return payload;
-  if (payload.isError || payload.success === false || payload.ok === false) {
-    throw new Error(payload.error || payload.message || 'Adobe MCP operation was not successful.');
+  let value = payload;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!value || typeof value !== 'object') return value;
+    if (value.isError || value.success === false || value.ok === false) {
+      throw new Error(value.error || value.message || 'Adobe MCP operation was not successful.');
+    }
+    if (value.success === true && value.data !== undefined) { value = value.data; continue; }
+    if (value.ok === true && value.result !== undefined) { value = value.result; continue; }
+    if (value.result !== undefined && value.context !== undefined) { value = value.result; continue; }
+    if (value.data !== undefined && Object.keys(value).length <= 4) { value = value.data; continue; }
+    return value;
   }
-  if (payload.success === true && payload.data !== undefined) return payload.data;
-  if (payload.ok === true && payload.result !== undefined) return payload.result;
-  if (payload.result !== undefined && payload.context !== undefined) return payload.result;
-  if (payload.data !== undefined && Object.keys(payload).length <= 4) return payload.data;
-  return payload;
+  throw new Error('Adobe MCP result contained excessive nested envelopes.');
 }
 
 export function validateDeclaredOperationArgs(operation, args) {
@@ -293,6 +297,9 @@ export async function previewAfterEffectsScene({ project, sceneId, backupPath, c
     const projectFile = findStringProperty(projectInfo, ['file', 'path', 'projectPath', 'project_path']);
     if (!projectFile || !path.isAbsolute(projectFile)) throw new Error('After Effects project must be saved to an absolute path before a scene can be edited.');
     if (findBooleanProperty(projectInfo, ['dirty', 'isDirty']) !== false) throw new Error('After Effects dirty state is not confirmed false. Save the project in After Effects and retry the preview.');
+    if (Array.isArray(projectInfo.items) && projectInfo.items.some(item => item?.name === plan.composition.name)) {
+      throw new Error('An After Effects project item already uses the planned composition name. Rename the existing item or revise the scene before previewing again.');
+    }
     const sourceFile = await assertExistingFile(projectFile, 'After Effects project');
     const backup = await assertNewBackupPath(backupPath, sourceFile, 'After Effects backupPath');
     const categories = [...new Set(plan.operations.map(item => item.operation.split('.')[0]))];
@@ -384,17 +391,17 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     await call(connection, 'save_project', {});
     await copyFile(preview.projectFile, preview.backupPath, 1); // COPYFILE_EXCL
     const imported = await call(connection, 'import_media', { file_paths: preview.renderedScenePaths, suppress_ui: true });
+    steps.push({ tool: 'import_media', ok: imported.verified === true, result: imported });
     if (imported.verified !== true || !Array.isArray(imported.items) || imported.items.length !== preview.renderedScenePaths.length) {
-      throw new Error('Premiere media import did not return an exact item list; inspect the project before retrying.');
+      throw new Error('Premiere media import did not return a verified exact item list; inspect the project before retrying.');
     }
     const itemIds = imported.items.map(item => item.nodeId);
     if (itemIds.some(id => typeof id !== 'string' || !id)) throw new Error('Premiere media import omitted one or more node IDs; inspect the project before retrying.');
-    steps.push({ tool: 'import_media', ok: true, importedCount: imported.items.length, itemIds });
     const created = await call(connection, 'create_sequence_from_clips', { name: preview.sequenceName, item_ids: itemIds });
+    steps.push({ tool: 'create_sequence_from_clips', ok: created.verified === true, result: created });
     if (created.verified !== true || created.clipCount !== itemIds.length || created.requestedClipCount !== itemIds.length) {
       throw new Error('Premiere did not verify the new sequence and all imported clip placements. Inspect the project before retrying.');
     }
-    steps.push({ tool: 'create_sequence_from_clips', ok: true, result: created });
     const structure = await call(connection, 'get_sequence_structure', { track_type: 'both' });
     if (!structure || typeof structure !== 'object') throw new Error('Premiere sequence structure readback failed.');
     steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
@@ -404,6 +411,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     let exportReceipt = null;
     if (preview.exportPath) {
       exportReceipt = await call(connection, 'export_sequence', { output_path: preview.exportPath });
+      if (exportReceipt.verified !== true) throw new Error('Premiere export did not return verified completion; inspect the output and Media Encoder state before retrying.');
       const delivery = await call(connection, 'verify_delivery_file', { output_path: preview.exportPath, checksum_algorithm: 'sha256' });
       steps.push({ tool: 'verify_delivery_file', ok: true, result: delivery });
     }
