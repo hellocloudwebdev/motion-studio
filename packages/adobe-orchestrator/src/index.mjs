@@ -444,7 +444,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     if (!observedSequenceId || String(observedSequenceId) !== String(created.id)) {
       throw new Error('Premiere active sequence does not match the newly created sequence; inspect the project before retrying.');
     }
-    const structure = await call(connection, 'get_sequence_structure', { track_type: 'both', ...projectGuard });
+    const structure = await call(connection, 'get_sequence_structure', { track_type: 'both', sequence_id: String(created.id), clip_limit: Math.min(200, Math.max(50, itemIds.length)), ...projectGuard });
     if (!structure || typeof structure !== 'object') throw new Error('Premiere sequence structure readback failed.');
     steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
     const saved = await call(connection, 'save_project', { ...projectGuard });
