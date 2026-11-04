@@ -93,13 +93,14 @@ function documentHtml({ compositionId, title, width, height, duration, elements,
     '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration:0.6,ease:"power3.out"},start);}\n' +
     '   else {tl.fromTo(el,{opacity:0},{opacity:1,duration:0.25,ease:"power1.out"},start);}\n' +
     ' });\n' +
-    ' tl.set({}, {}, duration);\n' +
+    ' const endMarker={value:0};\n' +
+    ' tl.to(endMarker,{value:1,duration:duration,ease:"none"},0);\n' +
     ' window.__timelines=window.__timelines||{};\n' +
     ' window.__timelines[compositionId]=tl;\n' +
     '})();\n</script>';
   return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(title) + '</title>\n' +
     '<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:' + esc(background) + '} [data-composition-id]{position:relative;overflow:hidden;width:100%;height:100%;background:' + esc(background) + '} .ms-layer{will-change:transform,opacity} img,video{display:block}</style>\n</head>\n<body>\n' +
-    '<div data-composition-id="' + esc(compositionId) + '" data-width="' + Number(width) + '" data-height="' + Number(height) + '">\n' +
+    '<div id="' + esc(compositionId) + '" data-composition-id="' + esc(compositionId) + '" data-start="0" data-duration="' + Number(duration) + '" data-width="' + Number(width) + '" data-height="' + Number(height) + '">\n' +
     elements.join('\n') + '\n</div>\n' + script + '\n</body>\n</html>\n';
 }
 
