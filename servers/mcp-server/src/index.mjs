@@ -52,7 +52,7 @@ server.tool('video.adobe_preview_premiere_assembly', 'Preview importing verified
   renderedScenePaths: z.array(z.string().min(1)).min(1),
   backupPath: z.string().min(1),
   sequenceName: z.string().min(1),
-  backend: z.enum(['cep', 'uxp']).default('cep'),
+  backend: z.literal('cep').default('cep'),
   exportPath: z.string().min(1).optional()
 }, async ({ renderedScenePaths, backupPath, sequenceName, backend, exportPath }) => {
   const result = await previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend, exportPath });
