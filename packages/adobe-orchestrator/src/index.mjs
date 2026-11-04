@@ -15,7 +15,7 @@ const ALLOWED_AE_OPERATIONS = new Set([
 const REQUIRED_AE_TOOLS = ['ae_context', 'ae_project_info', 'ae_catalog', 'ae_do', 'ae_save_project'];
 const REQUIRED_PREMIERE_TOOLS = [
   'verify_premiere_connection', 'get_project_info', 'import_media',
-  'create_sequence_from_clips', 'get_sequence_structure', 'save_project'
+  'create_sequence_from_clips', 'get_active_sequence', 'get_sequence_structure', 'save_project'
 ];
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
