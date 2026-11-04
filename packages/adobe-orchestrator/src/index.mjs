@@ -277,6 +277,9 @@ export function buildAfterEffectsScenePlan(project, sceneId) {
       const styleArgs = { comp: compName, layer: layerName, fontSize: Number(typography.sizePx || 48), fillColor: colorToRgb(style.color, [1, 1, 1]), justification: ({ left: 'left', center: 'center', right: 'right' })[typography.alignment || 'left'] || 'left' };
       const postScriptName = typography.postScriptName || typography.fontPostScriptName;
       if (typeof postScriptName === 'string' && postScriptName.trim()) styleArgs.font = postScriptName.trim();
+      else if (typeof typography.family === 'string' && typography.family.trim()) {
+        warnings.push({ code: 'AE_FONT_POSTSCRIPT_UNSPECIFIED', layerId: layer.id, requestedFamily: typography.family, message: 'After Effects requires a PostScript font name for deterministic font selection; the host default font will be used unless postScriptName is supplied.' });
+      }
       operations.push({ operation: 'text.set_style', args: styleArgs, purpose: 'Apply supported text typography.' });
     } else {
       operations.push({ operation: 'layer.create_solid', args: { comp: compName, name: layerName, color: colorToRgb(layer.style?.backgroundColor || layer.style?.color, [1, 1, 1]), width, height }, purpose: 'Create solid rectangle layer.' });
@@ -460,7 +463,8 @@ export async function previewPremiereAssembly({ renderedScenePaths, backupPath, 
   try {
     const toolList = await connection.listTools();
     requiredTools(toolList, ['verify_premiere_connection', 'get_project_info'], 'Premiere Pro');
-    await call(connection, 'verify_premiere_connection', { backend });
+    const connectionReport = await call(connection, 'verify_premiere_connection', { backend });
+    if (connectionReport.overall !== 'ready') throw new Error('Premiere connection is not ready: ' + JSON.stringify(connectionReport));
     const projectInfo = await call(connection, 'get_project_info');
     const projectFile = findStringProperty(projectInfo, ['path', 'projectPath', 'project_path', 'projectFile', 'project_file']);
     if (!projectFile || !path.isAbsolute(projectFile)) throw new Error('Premiere project must be saved to an absolute path before assembly.');
@@ -469,6 +473,8 @@ export async function previewPremiereAssembly({ renderedScenePaths, backupPath, 
     let output = null;
     if (exportPath) {
       output = assertAbsoluteFilePath(exportPath, 'exportPath');
+      const exportParent = await stat(path.dirname(output));
+      if (!exportParent.isDirectory()) throw new Error('exportPath parent must be an existing directory.');
       try { await access(output); throw new Error('exportPath already exists. Choose a new path; existing exports are never overwritten.'); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
@@ -492,8 +498,10 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
   const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectInfoHash: preview.projectInfoHash, renderedScenePaths: preview.renderedScenePaths, sequenceName: preview.sequenceName, exportPath: preview.exportPath, backend: preview.backend, approvalIdHash: sha256(approvalId) };
   try {
     const toolList = await connection.listTools();
-    requiredTools(toolList, REQUIRED_PREMIERE_TOOLS, 'Premiere Pro');
-    await call(connection, 'verify_premiere_connection', { backend: preview.backend });
+    const required = [...REQUIRED_PREMIERE_TOOLS, ...(preview.exportPath ? ['export_sequence', 'verify_delivery_file'] : [])];
+    requiredTools(toolList, required, 'Premiere Pro');
+    const connectionReport = await call(connection, 'verify_premiere_connection', { backend: preview.backend });
+    if (connectionReport.overall !== 'ready') throw new Error('Premiere connection is not ready: ' + JSON.stringify(connectionReport));
     const projectInfo = await call(connection, 'get_project_info');
     const currentPath = findStringProperty(projectInfo, ['path', 'projectPath', 'project_path', 'projectFile', 'project_file']);
     if (path.resolve(currentPath || '') !== preview.projectFile) throw new Error('Premiere project identity changed after preview; no mutation was attempted.');
@@ -521,13 +529,26 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     if (!observedSequenceId || String(observedSequenceId) !== String(created.id)) {
       throw new Error('Premiere active sequence does not match the newly created sequence; inspect the project before retrying.');
     }
-    const structure = await call(connection, 'get_sequence_structure', { track_type: 'both', sequence_id: String(created.id), clip_limit: Math.min(200, Math.max(50, itemIds.length)), ...projectGuard });
-    if (!structure || typeof structure !== 'object') throw new Error('Premiere sequence structure readback failed.');
-    const observedClipIds = collectSequenceClipNodeIds(structure);
+    const structurePages = [];
+    let clipOffset = 0;
+    for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
+      const page = await call(connection, 'get_sequence_structure', {
+        track_type: 'both', sequence_id: String(created.id), clip_offset: clipOffset, clip_limit: 200, ...projectGuard
+      });
+      if (!page || typeof page !== 'object') throw new Error('Premiere sequence structure readback failed.');
+      structurePages.push(page);
+      const nextOffset = page.pagination?.nextOffset;
+      if (nextOffset === null || nextOffset === undefined) break;
+      if (!Number.isSafeInteger(nextOffset) || nextOffset <= clipOffset) throw new Error('Premiere sequence structure returned an invalid pagination offset.');
+      clipOffset = nextOffset;
+      if (pageIndex === 9) throw new Error('Premiere sequence structure exceeded the 10-page verification limit; inspect before retrying.');
+    }
+    const structure = structurePages[0];
+    const observedClipIds = structurePages.flatMap(collectSequenceClipNodeIds);
     const missingClipIds = itemIds.filter(id => !observedClipIds.includes(id));
     if (missingClipIds.length) throw new Error('Premiere sequence structure is missing imported clip IDs: ' + missingClipIds.join(', '));
     if (observedClipIds.length < itemIds.length) throw new Error('Premiere sequence structure contains fewer clip placements than imported sources.');
-    steps.push({ tool: 'get_sequence_structure', ok: true, result: structure });
+    steps.push({ tool: 'get_sequence_structure', ok: true, pageCount: structurePages.length, result: structurePages });
     const saved = await call(connection, 'save_project', { ...projectGuard });
     if (saved.verified !== true) throw new Error('Premiere save was not verified by fresh disk evidence; inspect the project before retrying.');
     steps.push({ tool: 'save_project', ok: true, result: saved });
@@ -536,6 +557,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
       exportReceipt = await call(connection, 'export_sequence', { output_path: preview.exportPath, ...projectGuard });
       if (exportReceipt.verified !== true) throw new Error('Premiere export did not return verified completion; inspect the output and Media Encoder state before retrying.');
       const delivery = await call(connection, 'verify_delivery_file', { output_path: preview.exportPath, checksum_algorithm: 'sha256' });
+      if (delivery.verified !== true) throw new Error('Premiere delivery file did not pass its checksum/size verification.');
       steps.push({ tool: 'verify_delivery_file', ok: true, result: delivery });
     }
     const outcome = { status: 'applied', verified: true, host: 'premiere', backend: preview.backend, projectFile: preview.projectFile, backupPath: preview.backupPath, sequence: created, structure, export: exportReceipt, delivery: exportReceipt ? steps.at(-1).result : null, steps };
