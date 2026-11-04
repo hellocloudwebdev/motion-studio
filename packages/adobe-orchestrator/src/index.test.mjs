@@ -76,15 +76,17 @@ test('Premiere render inputs must be absolute and unique', () => {
   assert.deepEqual(validatePremiereRenderInputs(['/tmp/a.mp4']), ['/tmp/a.mp4']);
 });
 
-test('backup path must be distinct, same-extension and not created over an existing file', async () => {
+test('backup path must be distinct, same-extension, contained in an existing directory and non-colliding', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-adobe-'));
   try {
     const source = path.join(dir, 'project.aep');
+    const backup = path.join(dir, 'project-backup.aep');
     await writeFile(source, 'fixture');
-    assert.equal(path.extname(source), '.aep');
-    await assert.rejects(async () => {
-      const { assertNewBackupPath } = await import('./index.mjs');
-      await assertNewBackupPath(source, source, 'backup');
-    }, /must differ/);
+    const { assertNewBackupPath } = await import('./index.mjs');
+    assert.equal(await assertNewBackupPath(backup, source, 'backup'), backup);
+    await assert.rejects(() => assertNewBackupPath(source, source, 'backup'), /must differ/);
+    await assert.rejects(() => assertNewBackupPath(path.join(dir, 'backup.prproj'), source, 'backup'), /same file extension/);
+    await writeFile(backup, 'already exists');
+    await assert.rejects(() => assertNewBackupPath(backup, source, 'backup'), /already exists/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
