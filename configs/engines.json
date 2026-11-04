@@ -1,13 +1,81 @@
 {
-  "version": 2,
-  "runtime": { "node": ">=24.0.0" },
-  "engines": {
-    "hyperframes": { "role": "primary-2d-renderer", "package": "hyperframes@0.8.86", "capabilities": ["2d-motion", "kinetic-typography", "charts", "shapes", "web-layout", "image-sequence"] },
-    "after-effects": { "role": "specialist-compositing-and-vfx", "mcpPackage": "@kumoproductions/mcp-aftereffects@0.3.2", "capabilities": ["compositing", "vfx", "tracking", "roto", "advanced-typography", "motion-graphics", "keyframing"] },
-    "premiere-pro": { "role": "editorial-assembly", "mcpPackage": "premiere-pro-mcp@1.28.0", "capabilities": ["timeline-editing", "audio-assembly", "captions", "final-cut", "export"] },
-    "blender": { "role": "3d", "capabilities": ["3d", "simulation", "product-visualization", "camera-animation", "lighting"] },
-    "threejs": { "role": "webgl-3d", "capabilities": ["webgl", "shader", "procedural-3d", "interactive-3d"] },
-    "ffmpeg": { "role": "media-pipeline", "capabilities": ["transcode", "trim", "scale", "audio-mix", "image-sequence", "media-probe"] }
+  "version": 3,
+  "runtime": {
+    "node": ">=24.0.0"
   },
-  "executionPolicy": { "maxWorkers": 1, "draftPreview": true, "resumeFromCheckpoint": true, "readOnlyAdobeOnboarding": true, "allowArbitraryScript": false }
+  "engines": {
+    "hyperframes": {
+      "role": "primary-2d-renderer",
+      "package": "hyperframes@0.8.86",
+      "capabilities": [
+        "2d-motion",
+        "kinetic-typography",
+        "charts",
+        "shapes",
+        "web-layout",
+        "image-sequence"
+      ]
+    },
+    "after-effects": {
+      "role": "specialist-compositing-and-vfx",
+      "mcpPackage": "@kumoproductions/mcp-aftereffects@0.3.2",
+      "capabilities": [
+        "compositing",
+        "vfx",
+        "tracking",
+        "roto",
+        "advanced-typography",
+        "motion-graphics",
+        "keyframing"
+      ]
+    },
+    "premiere-pro": {
+      "role": "editorial-assembly",
+      "mcpPackage": "premiere-pro-mcp@1.29.0",
+      "capabilities": [
+        "timeline-editing",
+        "audio-assembly",
+        "captions",
+        "final-cut",
+        "export"
+      ]
+    },
+    "blender": {
+      "role": "3d",
+      "capabilities": [
+        "3d",
+        "simulation",
+        "product-visualization",
+        "camera-animation",
+        "lighting"
+      ]
+    },
+    "threejs": {
+      "role": "webgl-3d",
+      "capabilities": [
+        "webgl",
+        "shader",
+        "procedural-3d",
+        "interactive-3d"
+      ]
+    },
+    "ffmpeg": {
+      "role": "media-pipeline",
+      "capabilities": [
+        "transcode",
+        "trim",
+        "scale",
+        "audio-mix",
+        "image-sequence",
+        "media-probe"
+      ]
+    }
+  },
+  "executionPolicy": {
+    "maxWorkers": 1,
+    "draftPreview": true,
+    "resumeFromCheckpoint": true,
+    "readOnlyAdobeOnboarding": true,
+    "allowArbitraryScript": false
+  }
 }
