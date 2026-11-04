@@ -25,7 +25,7 @@ chmod +x install.sh
 ./install.sh --yes
 ```
 
-The installer stages Motion Studio into a per-user directory and installs pinned npm dependencies: HyperFrames, GSAP, Three.js, the Motion Studio MCP SDK, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.29.0`. With `--yes`, it installs FFmpeg and Blender through a supported package manager and prepares HyperFrames' bundled browser.
+The installer stages Motion Studio into a per-user directory and installs pinned npm dependencies: HyperFrames, GSAP, Three.js, the Motion Studio MCP SDK, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.29.0`. With `--yes`, it installs FFmpeg and prepares HyperFrames' bundled browser. Blender remains optional and can be installed with `--install-blender`.
 
 ## Adobe installation — user account required
 
