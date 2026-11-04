@@ -53,9 +53,10 @@ server.tool('video.adobe_preview_premiere_assembly', 'Preview importing verified
   backupPath: z.string().min(1),
   sequenceName: z.string().min(1),
   backend: z.literal('cep').default('cep'),
-  exportPath: z.string().min(1).optional()
-}, async ({ renderedScenePaths, backupPath, sequenceName, backend, exportPath }) => {
-  const result = await previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend, exportPath });
+  exportPath: z.string().min(1).optional(),
+  presetPath: z.string().min(1).optional()
+}, async ({ renderedScenePaths, backupPath, sequenceName, backend, exportPath, presetPath }) => {
+  const result = await previewPremiereAssembly({ renderedScenePaths, backupPath, sequenceName, backend, exportPath, presetPath });
   return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
 });
 
