@@ -14,7 +14,9 @@ import {
   unwrapMcpData,
   validateDeclaredOperationArgs,
   validatePremiereRenderInputs,
-  validateAePlanAgainstCatalog
+  validateAePlanAgainstCatalog,
+  acquireHostMutationLock,
+  defaultAdobeReceiptDirectory
 } from './index.mjs';
 
 const project = {
@@ -155,7 +157,8 @@ test('After Effects workflow previews without mutation, then applies with backup
     await access(applied.receiptPath);
     const receipt = JSON.parse(await readFile(applied.receiptPath, 'utf8'));
     assert.equal(receipt.host, 'afterEffects');
-    assert.equal(receipt.approvalIdHash === preview.approvalId, false);
+    assert.equal(typeof receipt.approvalIdHash, 'string');
+    assert.equal('approvalId' in receipt, false);
     assert.equal(calls.some(x => x.name === 'ae_do'), true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -212,4 +215,42 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     const structureCall = calls.find(x => x.name === 'get_sequence_structure');
     assert.equal(structureCall.args.sequence_id, 'sequence-1');
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('Adobe host mutations are serialized per host', async () => {
+  const order = [];
+  const releaseFirst = await acquireHostMutationLock('afterEffects');
+  order.push('first-acquired');
+  let secondAcquired = false;
+  const secondPromise = acquireHostMutationLock('afterEffects').then(release => {
+    secondAcquired = true;
+    order.push('second-acquired');
+    return release;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(secondAcquired, false);
+  releaseFirst();
+  const releaseSecond = await secondPromise;
+  assert.equal(secondAcquired, true);
+  releaseSecond();
+  assert.deepEqual(order, ['first-acquired', 'second-acquired']);
+});
+
+test('different Adobe hosts use independent mutation locks', async () => {
+  const releaseAE = await acquireHostMutationLock('afterEffects');
+  const releasePremiere = await acquireHostMutationLock('premiere');
+  releasePremiere();
+  releaseAE();
+});
+
+test('receipt directory uses per-user state storage paths', () => {
+  assert.equal(
+    defaultAdobeReceiptDirectory({ platform: 'win32', home: 'C:\\Users\\Tester', env: { LOCALAPPDATA: 'C:\\Users\\Tester\\AppData\\Local' } }),
+    'C:\\Users\\Tester\\AppData\\Local\\motion-studio\\runs'
+  );
+  assert.equal(
+    defaultAdobeReceiptDirectory({ platform: 'darwin', home: '/Users/test', env: {} }),
+    '/Users/test/.local/state/motion-studio/runs'
+  );
 });
