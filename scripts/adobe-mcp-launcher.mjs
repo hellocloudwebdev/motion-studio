@@ -25,7 +25,7 @@ if (app === 'aftereffects') {
   env.PREMIERE_MCP_CAPABILITIES = allowEdits ? 'inspect,edit,export,filesystem' : 'inspect';
   env.PREMIERE_MCP_TOOL_PACKS = 'inspection';
   env.PREMIERE_MCP_TOOL_LIST = allowEdits
-    ? 'verify_premiere_connection,get_project_info,import_media,create_sequence_from_clips,get_sequence_structure,save_project,export_sequence,verify_delivery_file'
+    ? 'verify_premiere_connection,get_project_info,import_media,create_sequence_from_clips,get_active_sequence,get_sequence_structure,save_project,export_sequence,verify_delivery_file'
     : 'verify_premiere_connection,get_project_info,get_active_sequence,get_sequence_structure';
   try {
     const token = (await readFile(secretPath, 'utf8')).trim();
