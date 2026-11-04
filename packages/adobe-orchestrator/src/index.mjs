@@ -404,6 +404,7 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     if (initialSave.verified !== true) throw new Error('Premiere pre-edit save was not verified; no backup or import was attempted.');
     steps.push({ tool: 'save_project-before-backup', ok: true, result: initialSave });
     await copyFile(preview.projectFile, preview.backupPath, fsConstants.COPYFILE_EXCL);
+    const projectGuard = preview.backend === 'cep' ? { expected_project_path: preview.projectFile } : {};
     const imported = await call(connection, 'import_media', { file_paths: preview.renderedScenePaths, suppress_ui: true, ...projectGuard });
     steps.push({ tool: 'import_media', ok: imported.verified === true, result: imported });
     if (imported.verified !== true || !Array.isArray(imported.items) || imported.items.length !== preview.renderedScenePaths.length) {
@@ -411,7 +412,6 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
     }
     const itemIds = imported.items.map(item => item.nodeId);
     if (itemIds.some(id => typeof id !== 'string' || !id)) throw new Error('Premiere media import omitted one or more node IDs; inspect the project before retrying.');
-    const projectGuard = preview.backend === 'cep' ? { expected_project_path: preview.projectFile } : {};
     const created = await call(connection, 'create_sequence_from_clips', { name: preview.sequenceName, item_ids: itemIds, ...projectGuard });
     steps.push({ tool: 'create_sequence_from_clips', ok: created.verified === true, result: created });
     if (created.verified !== true || created.clipCount !== itemIds.length || created.requestedClipCount !== itemIds.length) {
