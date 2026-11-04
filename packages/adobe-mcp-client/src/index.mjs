@@ -1,4 +1,7 @@
 import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -32,14 +35,28 @@ export function createAdobeMcpEnvironment({ app = 'afterEffects', allowEdits = f
   throw new Error('Unknown Adobe MCP target: ' + app);
 }
 
+export function premiereTokenFilePath({ platform = process.platform, home = os.homedir(), env = process.env } = {}) {
+  const configRoot = platform === 'win32'
+    ? (env.APPDATA || path.join(home, 'AppData', 'Roaming'))
+    : (env.XDG_CONFIG_HOME || path.join(home, '.config'));
+  return path.join(configRoot, 'motion-studio', 'secrets', 'premiere-uxp-token');
+}
+
 export async function connectAdobeMcp({ app, allowEdits = false, entry, clientName = 'motion-studio', version = '0.4.0-alpha.1', env = process.env } = {}) {
   if (!['afterEffects', 'premiere'].includes(app)) throw new Error('app must be afterEffects or premiere.');
   const resolvedEntry = entry || resolveAdobeMcpEntries()[app];
   if (!resolvedEntry) throw new Error('The ' + app + ' MCP package is not installed.');
+  const childEnv = createAdobeMcpEnvironment({ app, allowEdits, baseEnv: env });
+  if (app === 'premiere' && !childEnv.PREMIERE_UXP_TOKEN) {
+    try {
+      const token = (await readFile(premiereTokenFilePath({ env }), 'utf8')).trim();
+      if (token) childEnv.PREMIERE_UXP_TOKEN = token;
+    } catch {}
+  }
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [resolvedEntry],
-    env: createAdobeMcpEnvironment({ app, allowEdits, baseEnv: env }),
+    env: childEnv,
     stderr: 'pipe'
   });
   const client = new Client({ name: clientName + '-' + app, version }, { capabilities: {} });
