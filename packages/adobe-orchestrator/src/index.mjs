@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFile, access, stat, mkdir } from 'node:fs/promises';
+import { copyFile, access, stat, mkdir, writeFile, chmod } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +12,7 @@ const ALLOWED_AE_OPERATIONS = new Set([
   'comp.create', 'layer.create_text', 'layer.create_solid',
   'text.set_style', 'transform.set', 'keyframe.add'
 ]);
-const REQUIRED_AE_TOOLS = ['ae_context', 'ae_project_info', 'ae_catalog', 'ae_do', 'ae_save_project'];
+const REQUIRED_AE_TOOLS = ['ae_context', 'ae_project_info', 'ae_catalog', 'ae_do', 'ae_save_project', 'ae_comp_info', 'ae_render_frame'];
 const REQUIRED_PREMIERE_TOOLS = [
   'verify_premiere_connection', 'get_project_info', 'import_media',
   'create_sequence_from_clips', 'get_active_sequence', 'get_sequence_structure', 'save_project'
@@ -21,6 +21,42 @@ const REQUIRED_PREMIERE_TOOLS = [
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const safeName = value => String(value ?? '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'scene';
 const seconds = (frames, rate) => frames * rate.denominator / rate.numerator;
+
+export function defaultAdobeReceiptDirectory({ platform = process.platform, home = os.homedir(), env = process.env } = {}) {
+  const root = platform === 'win32'
+    ? (env.LOCALAPPDATA || path.win32.join(home, 'AppData', 'Local'))
+    : (env.XDG_STATE_HOME || path.posix.join(home, '.local', 'state'));
+  const join = platform === 'win32' ? path.win32.join : path.posix.join;
+  return join(root, 'motion-studio', 'runs');
+}
+
+async function persistReceipt(host, receipt, receiptDir) {
+  const root = path.resolve(receiptDir || defaultAdobeReceiptDirectory());
+  await mkdir(root, { recursive: true });
+  const file = path.join(root, randomUUID() + '.json');
+  const payload = {
+    schemaVersion: '1.0.0',
+    product: 'Motion Studio',
+    host,
+    ...receipt,
+    steps: (receipt.steps || []).map(step => ({
+      tool: step.tool || null,
+      operation: step.operation || null,
+      ok: step.ok === true,
+      resultHash: sha256(JSON.stringify(step.result ?? null)),
+      path: step.path || null,
+      bytes: step.bytes || null
+    }))
+  };
+  await writeFile(file, JSON.stringify(payload, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  if (process.platform !== 'win32') await chmod(file, 0o600);
+  return file;
+}
+
+async function safePersistReceipt(host, receipt, receiptDir) {
+  try { return { receiptPath: await persistReceipt(host, receipt, receiptDir) }; }
+  catch (error) { return { receiptError: error.message }; }
+}
 
 export function parseMcpPayload(result) {
   if (!result || typeof result !== 'object') return result;
@@ -322,12 +358,14 @@ export async function previewAfterEffectsScene({ project, sceneId, backupPath, c
   } finally { await connection.close(); }
 }
 
-export async function applyAfterEffectsScene({ approvalId, approved = false, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
+export async function applyAfterEffectsScene({ approvalId, approved = false, connect = connectAdobeMcp, approvalStore = defaultApprovalStore, receiptDir } = {}) {
   if (approved !== true) throw new Error('After Effects scene mutation requires explicit user approval.');
   const preview = approvalStore.consume(approvalId);
   if (preview.host !== 'afterEffects') throw new Error('Approval token is not for After Effects.');
   const connection = await connect({ app: 'afterEffects', allowEdits: true });
   const steps = [];
+  const startedAt = new Date().toISOString();
+  const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectId: preview.plan.projectId, projectRevision: preview.plan.projectRevision, irHash: preview.plan.irHash, sceneId: preview.plan.sceneId, planHash: sha256(JSON.stringify(preview.plan)), approvalIdHash: sha256(approvalId) };
   try {
     const toolList = await connection.listTools();
     requiredTools(toolList, REQUIRED_AE_TOOLS, 'After Effects');
@@ -370,9 +408,13 @@ export async function applyAfterEffectsScene({ approvalId, approved = false, con
     const frameInfo = await stat(frameFile);
     if (!frameInfo.isFile() || frameInfo.size < 1) throw new Error('After Effects frame proof was not written as a non-empty PNG.');
     steps.push({ tool: 'ae_render_frame', ok: true, path: frameFile, bytes: frameInfo.size, analysis: frame.analysis || frame.frames?.[0]?.analysis || null });
-    return { status: 'applied', verified: true, host: 'afterEffects', projectFile: preview.projectFile, backupPath: preview.backupPath, composition: preview.plan.composition, supportedLayerIds: preview.plan.supportedLayerIds, warnings: preview.plan.warnings, steps, readback, frameProof: { path: frameFile, bytes: frameInfo.size, analysis: frame.analysis || frame.frames?.[0]?.analysis || null } };
+    const outcome = { status: 'applied', verified: true, host: 'afterEffects', projectFile: preview.projectFile, backupPath: preview.backupPath, composition: preview.plan.composition, supportedLayerIds: preview.plan.supportedLayerIds, warnings: preview.plan.warnings, steps, readback, frameProof: { path: frameFile, bytes: frameInfo.size, analysis: frame.analysis || frame.frames?.[0]?.analysis || null } };
+    const persisted = await safePersistReceipt('afterEffects', { ...receiptBase, ...outcome, finishedAt: new Date().toISOString() }, receiptDir);
+    return { ...outcome, ...persisted };
   } catch (error) {
-    return { status: 'needs-reconciliation', verified: false, host: 'afterEffects', backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
+    const outcome = { status: 'needs-reconciliation', verified: false, host: 'afterEffects', backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
+    const persisted = await safePersistReceipt('afterEffects', { ...receiptBase, ...outcome, finishedAt: new Date().toISOString() }, receiptDir);
+    return { ...outcome, ...persisted };
   } finally { await connection.close(); }
 }
 
@@ -407,12 +449,14 @@ export async function previewPremiereAssembly({ renderedScenePaths, backupPath, 
   } finally { await connection.close(); }
 }
 
-export async function applyPremiereAssembly({ approvalId, approved = false, connect = connectAdobeMcp, approvalStore = defaultApprovalStore } = {}) {
+export async function applyPremiereAssembly({ approvalId, approved = false, connect = connectAdobeMcp, approvalStore = defaultApprovalStore, receiptDir } = {}) {
   if (approved !== true) throw new Error('Premiere assembly requires explicit user approval.');
   const preview = approvalStore.consume(approvalId);
   if (preview.host !== 'premiere') throw new Error('Approval token is not for Premiere Pro.');
   const connection = await connect({ app: 'premiere', allowEdits: true });
   const steps = [];
+  const startedAt = new Date().toISOString();
+  const receiptBase = { runId: randomUUID(), startedAt, projectFile: preview.projectFile, backupPath: preview.backupPath, projectInfoHash: preview.projectInfoHash, renderedScenePaths: preview.renderedScenePaths, sequenceName: preview.sequenceName, exportPath: preview.exportPath, backend: preview.backend, approvalIdHash: sha256(approvalId) };
   try {
     const toolList = await connection.listTools();
     requiredTools(toolList, REQUIRED_PREMIERE_TOOLS, 'Premiere Pro');
@@ -457,9 +501,13 @@ export async function applyPremiereAssembly({ approvalId, approved = false, conn
       const delivery = await call(connection, 'verify_delivery_file', { output_path: preview.exportPath, checksum_algorithm: 'sha256' });
       steps.push({ tool: 'verify_delivery_file', ok: true, result: delivery });
     }
-    return { status: 'applied', verified: true, host: 'premiere', backend: preview.backend, projectFile: preview.projectFile, backupPath: preview.backupPath, sequence: created, structure, export: exportReceipt, delivery: exportReceipt ? steps.at(-1).result : null, steps };
+    const outcome = { status: 'applied', verified: true, host: 'premiere', backend: preview.backend, projectFile: preview.projectFile, backupPath: preview.backupPath, sequence: created, structure, export: exportReceipt, delivery: exportReceipt ? steps.at(-1).result : null, steps };
+    const persisted = await safePersistReceipt('premiere', { ...receiptBase, ...outcome, finishedAt: new Date().toISOString() }, receiptDir);
+    return { ...outcome, ...persisted };
   } catch (error) {
-    return { status: 'needs-reconciliation', verified: false, host: 'premiere', backend: preview.backend, backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
+    const outcome = { status: 'needs-reconciliation', verified: false, host: 'premiere', backend: preview.backend, backupPath: preview.backupPath, steps, error: error.message, retryAllowed: false };
+    const persisted = await safePersistReceipt('premiere', { ...receiptBase, ...outcome, finishedAt: new Date().toISOString() }, receiptDir);
+    return { ...outcome, ...persisted };
   } finally { await connection.close(); }
 }
 
