@@ -15,19 +15,24 @@ export function createAdobeMcpEnvironment({ app = 'afterEffects', allowEdits = f
   const env = { ...baseEnv };
   if (app === 'afterEffects') {
     env.AE_MCP_READONLY = allowEdits ? '0' : '1';
+    if (allowEdits) env.AE_MCP_ALLOW_CATEGORIES = 'comp,layer,text,transform,keyframe,render';
+    else delete env.AE_MCP_ALLOW_CATEGORIES;
     delete env.AE_MCP_ENABLE_EVAL;
     return env;
   }
   if (app === 'premiere') {
     env.PREMIERE_MCP_CAPABILITIES = allowEdits ? 'inspect,edit,export,filesystem' : 'inspect';
     env.PREMIERE_MCP_TOOL_PACKS = 'inspection';
+    env.PREMIERE_MCP_TOOL_LIST = allowEdits
+      ? 'verify_premiere_connection,get_project_info,import_media,create_sequence_from_clips,get_sequence_structure,save_project,export_sequence,verify_delivery_file'
+      : 'verify_premiere_connection,get_project_info,get_active_sequence,get_sequence_structure';
     delete env.PREMIERE_MCP_UNSAFE_SCRIPT;
     return env;
   }
   throw new Error('Unknown Adobe MCP target: ' + app);
 }
 
-export async function connectAdobeMcp({ app, allowEdits = false, entry, clientName = 'motion-studio', version = '0.3.0-alpha.1', env = process.env } = {}) {
+export async function connectAdobeMcp({ app, allowEdits = false, entry, clientName = 'motion-studio', version = '0.4.0-alpha.1', env = process.env } = {}) {
   if (!['afterEffects', 'premiere'].includes(app)) throw new Error('app must be afterEffects or premiere.');
   const resolvedEntry = entry || resolveAdobeMcpEntries()[app];
   if (!resolvedEntry) throw new Error('The ' + app + ' MCP package is not installed.');
