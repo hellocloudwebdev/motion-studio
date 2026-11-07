@@ -6,11 +6,12 @@ import path from 'node:path';
 import { openRunJournal } from './index.mjs';
 
 const event = (revision, overrides = {}) => ({
-  eventId: 'evt-' + revision, projectId: 'project-1', runId: 'run-1', revision, type: 'run.created',
-  at: '2026-11-07T00:00:00.000Z', payload: { status: revision === 1 ? 'draft' : 'planned' }, ...overrides
+  eventId: 'evt-' + revision, projectId: 'project-1', runId: 'run-1', revision,
+  type: 'run.created', at: '2026-11-07T00:00:00.000Z',
+  payload: { status: revision === 1 ? 'draft' : 'planned' }, ...overrides
 });
 
-test('journal appends, replays and enforces contiguous revisions', async () => {
+test('journal appends, replays and enforces contiguous project-scoped revisions', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-studio-journal-'));
   const file = path.join(dir, 'runs', 'events.jsonl');
   try {
@@ -23,6 +24,7 @@ test('journal appends, replays and enforces contiguous revisions', async () => {
     const recovered = await openRunJournal(file);
     assert.equal(recovered.latestRevision('project-1', 'run-1'), 2);
     assert.equal((await recovered.read({ projectId: 'project-1', runId: 'run-1' })).length, 2);
+    assert.equal((await recovered.read({ projectId: 'other-project' })).length, 0);
     await recovered.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
