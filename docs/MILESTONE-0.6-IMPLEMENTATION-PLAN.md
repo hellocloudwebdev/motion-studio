@@ -23,6 +23,7 @@ The host-checks JSON is evidence gathered from local software/host checks. Examp
 ```json
 {
   "hyperframes": { "available": true },
+  "blender": { "available": true },
   "afterEffects": { "serverConnected": true, "contextAvailable": true },
   "premiere": { "serverConnected": true, "hostVerified": true },
   "ffmpeg": { "available": true }
