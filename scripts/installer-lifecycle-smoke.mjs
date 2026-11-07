@@ -12,7 +12,7 @@ const config = path.join(temp, 'config');
 const appRoot = process.platform === 'win32'
   ? path.join(home, 'AppData', 'Local', 'motion-studio', 'app')
   : path.join(home, '.local', 'share', 'motion-studio', 'app');
-const recordPath = path.join(config, 'motion-studio', 'install.json');
+const recordPath = path.join(config, 'motion-studio', 'install.json');\nconst cursorConfig = path.join(home, '.cursor', 'mcp.json');\nconst codexAdapter = path.join(config, 'motion-studio', 'adapters', 'codex.mcp.json');
 const env = {
   ...process.env,
   HOME: home,
