@@ -35,7 +35,7 @@ export function evaluateHostReadiness(routePlan, hostChecks = {}) {
     };
   });
   return {
-    ready: checks.every(check => check.ready),
+    ready: checks.length > 0 && checks.every(check => check.ready),
     checkedAt: new Date().toISOString(),
     checks,
     missing: checks.filter(check => !check.ready).map(check => check.engine)
@@ -43,6 +43,11 @@ export function evaluateHostReadiness(routePlan, hostChecks = {}) {
 }
 
 const APPROVAL_STAGES = new Set(['after-effects-comp', 'premiere-assembly', 'final-export']);
+const STAGE_ENGINES = {
+  'after-effects-comp': ['after-effects'],
+  'premiere-assembly': ['premiere-pro'],
+  'final-export': ['premiere-pro', 'ffmpeg']
+};
 
 export function validateStageApproval({ projectId, runId, stage, approval, now = Date.now() } = {}) {
   if (!APPROVAL_STAGES.has(stage)) return { valid: false, reason: 'This stage does not accept an Adobe production approval.' };
@@ -57,8 +62,14 @@ export function validateStageApproval({ projectId, runId, stage, approval, now =
   return { valid: true, approvedBy: approval.approvedBy, approvedAt: approval.approvedAt, expiresAt: approval.expiresAt };
 }
 
-export function authorizeProductionStage({ projectId, runId, stage, hostReady, approval, now = Date.now() } = {}) {
-  if (hostReady !== true) return { authorized: false, reason: 'The target host has not passed its connection and capability checks.' };
+export function authorizeProductionStage({ projectId, runId, stage, hostReadiness, approval, now = Date.now() } = {}) {
+  if (hostReadiness?.ready !== true || !Array.isArray(hostReadiness.checks)) {
+    return { authorized: false, reason: 'A successful host-readiness report is required.' };
+  }
+  const requiredEngines = STAGE_ENGINES[stage] || [];
+  const readyEngines = new Set(hostReadiness.checks.filter(check => check.ready === true).map(check => check.engine));
+  const missing = requiredEngines.filter(engine => !readyEngines.has(engine));
+  if (missing.length) return { authorized: false, reason: 'Required stage hosts are not verified: ' + missing.join(', ') + '.' };
   const result = validateStageApproval({ projectId, runId, stage, approval, now });
-  return result.valid ? { authorized: true, approval: { approvedBy: result.approvedBy, approvedAt: result.approvedAt, expiresAt: result.expiresAt } } : { authorized: false, reason: result.reason };
+  return result.valid ? { authorized: true, approval: { approvedBy: result.approvedBy, approvedAt: result.approvedAt, expiresAt: result.expiresAt }, hostEvidence: requiredEngines } : { authorized: false, reason: result.reason };
 }
