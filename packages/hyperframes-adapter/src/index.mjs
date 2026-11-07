@@ -116,6 +116,7 @@ export async function compileHyperFramesProject(project, options = {}) {
   const copiedAssets = new Map();
   const warnings = [];
   await mkdir(path.join(outputDir, 'assets'), { recursive: true });
+  await mkdir(path.join(outputDir, 'compositions'), { recursive: true });
   await mkdir(path.join(outputDir, 'snapshots'), { recursive: true });
   await mkdir(path.join(outputDir, 'renders'), { recursive: true });
 
@@ -186,8 +187,8 @@ export async function compileHyperFramesProject(project, options = {}) {
       compositionId, title: scene.name, width: project.project.canvas.width, height: project.project.canvas.height,
       duration: sceneDuration, elements: sceneMarkup, background: project.brand?.colors?.background || '#101010'
     });
-    await writeFile(path.join(outputDir, sceneId + '.html'), sceneDoc, 'utf8');
-    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: sceneId + '.html' });
+    await writeFile(path.join(outputDir, 'compositions', sceneId + '.html'), sceneDoc, 'utf8');
+    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: 'compositions/' + sceneId + '.html' });
     cumulativeFrame += scene.durationFrames;
   }
 
