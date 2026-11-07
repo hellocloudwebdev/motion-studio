@@ -150,7 +150,7 @@ async function stageHosts() {
 
   for (const host of ['claude', 'codex', 'zcode', 'deepseek']) {
     const file = path.join(configRoot, 'motion-studio', 'adapters', host + '.mcp.json');
-    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify({ mcpServers: servers }, null, 2) + '\n'); }
+    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify({ motionStudioManaged: true, mcpServers: servers }, null, 2) + '\n'); }
     report.hostIntegrations.push(host + '-mcp-config');
   }
 
