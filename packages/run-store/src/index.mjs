@@ -9,7 +9,11 @@ const stable = value => {
   return JSON.stringify(value);
 };
 const fingerprint = value => createHash('sha256').update(stable(value)).digest('hex');
-const eventFingerprint = event => fingerprint({ eventId: event.eventId, projectId: event.projectId, runId: event.runId, revision: event.revision, type: event.type, payload: event.payload });\nconst runKey = event => event.projectId + ':' + event.runId;
+const eventFingerprint = event => fingerprint({
+  eventId: event.eventId, projectId: event.projectId, runId: event.runId,
+  revision: event.revision, type: event.type, payload: event.payload
+});
+const runKey = event => event.projectId + ':' + event.runId;
 
 function validateEvent(event) {
   if (!event || typeof event !== 'object') throw new Error('Run event must be an object.');
@@ -20,6 +24,7 @@ function validateEvent(event) {
   if (event.payload !== undefined && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) throw new Error('Run event payload must be an object.');
   return {
     eventId: event.eventId,
+    projectId: event.projectId,
     runId: event.runId,
     revision: event.revision,
     type: event.type,
@@ -56,7 +61,8 @@ export async function openRunJournal(filePath) {
     try { parsed = validateEvent(JSON.parse(line)); }
     catch (error) { throw new Error('Run journal corruption at line ' + (index + 1) + ': ' + error.message); }
     if (byId.has(parsed.eventId)) throw new Error('Run journal contains duplicate event id: ' + parsed.eventId);
-    const key = runKey(parsed);\n    const previous = revisions.get(key) || 0;
+    const key = runKey(parsed);
+    const previous = revisions.get(key) || 0;
     if (parsed.revision !== previous + 1) throw new Error('Run journal revision gap for ' + parsed.runId + ': expected ' + (previous + 1) + ', received ' + parsed.revision + '.');
     byId.set(parsed.eventId, { event: parsed, fingerprint: eventFingerprint(parsed) });
     revisions.set(key, parsed.revision);
@@ -78,7 +84,8 @@ export async function openRunJournal(filePath) {
           if (previousId.fingerprint !== signature) throw new Error('Event id reused with different event content: ' + event.eventId);
           return { appended: false, duplicate: true, event: clone(previousId.event) };
         }
-        const key = runKey(event);\n        const expected = (revisions.get(key) || 0) + 1;
+        const key = runKey(event);
+        const expected = (revisions.get(key) || 0) + 1;
         if (event.revision !== expected) throw new Error('Revision conflict for ' + event.runId + ': expected ' + expected + ', received ' + event.revision + '.');
         const handle = await open(resolvedPath, 'a');
         try { await handle.writeFile(JSON.stringify(event) + '\n', 'utf8'); await handle.sync(); }
@@ -92,11 +99,11 @@ export async function openRunJournal(filePath) {
       queue = result.catch(() => {});
       return result;
     },
-    async read({ runId } = {}) {
+    async read({ projectId, runId } = {}) {
       await queue;
-      return clone(runId ? events.filter(event => event.runId === runId) : events);
+      return clone(events.filter(event => (!projectId || event.projectId === projectId) && (!runId || event.runId === runId)));
     },
-    latestRevision(runId) { return revisions.get(runId) || 0; },
+    latestRevision(projectId, runId) { return revisions.get(projectId + ':' + runId) || 0; },
     async close() { await queue; closed = true; },
     async stats() {
       await queue;
