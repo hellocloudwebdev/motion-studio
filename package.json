@@ -21,7 +21,8 @@
     "route:example": "node apps/cli/src/index.mjs route templates/startup-ad/project.json",
     "compile:example": "node apps/cli/src/index.mjs compile templates/startup-ad/project.json",
     "doctor": "node scripts/doctor.mjs",
-    "setup": "node scripts/install.mjs"
+    "setup": "node scripts/install.mjs",
+    "render:smoke": "node scripts/ci-render-smoke.mjs"
   },
   "license": "MIT",
   "bin": {
