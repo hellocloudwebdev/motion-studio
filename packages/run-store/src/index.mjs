@@ -9,6 +9,7 @@ const stable = value => {
   return JSON.stringify(value);
 };
 const fingerprint = value => createHash('sha256').update(stable(value)).digest('hex');
+const eventFingerprint = event => fingerprint({ eventId: event.eventId, runId: event.runId, revision: event.revision, type: event.type, payload: event.payload });
 
 function validateEvent(event) {
   if (!event || typeof event !== 'object') throw new Error('Run event must be an object.');
@@ -57,7 +58,7 @@ export async function openRunJournal(filePath) {
     if (byId.has(parsed.eventId)) throw new Error('Run journal contains duplicate event id: ' + parsed.eventId);
     const previous = revisions.get(parsed.runId) || 0;
     if (parsed.revision !== previous + 1) throw new Error('Run journal revision gap for ' + parsed.runId + ': expected ' + (previous + 1) + ', received ' + parsed.revision + '.');
-    byId.set(parsed.eventId, { event: parsed, fingerprint: fingerprint(parsed) });
+    byId.set(parsed.eventId, { event: parsed, fingerprint: eventFingerprint(parsed) });
     revisions.set(parsed.runId, parsed.revision);
     events.push(parsed);
   }
@@ -71,7 +72,7 @@ export async function openRunJournal(filePath) {
       const operation = async () => {
         if (closed) throw new Error('Run journal is closed.');
         const event = validateEvent(input);
-        const signature = fingerprint(event);
+        const signature = eventFingerprint(event);
         const previousId = byId.get(event.eventId);
         if (previousId) {
           if (previousId.fingerprint !== signature) throw new Error('Event id reused with different event content: ' + event.eventId);
