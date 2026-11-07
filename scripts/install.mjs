@@ -57,7 +57,7 @@ function runHostCli(command, args, label) {
   return run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], label, true, appRoot);
 }
 function openUrl(url) {
-  if (dryRun) return;
+  if (dryRun || process.env.MOTION_STUDIO_NO_OPEN_URL === '1') return;
   if (platform === 'win32') spawnSync('cmd.exe', ['/c', 'start', '', url], { stdio: 'ignore', shell: false });
   else if (platform === 'darwin') spawnSync('open', [url], { stdio: 'ignore', shell: false });
   else if (commandExists('xdg-open')) spawnSync('xdg-open', [url], { stdio: 'ignore', shell: false });
