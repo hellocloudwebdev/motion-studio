@@ -20,7 +20,7 @@ export function transitionRun(run, nextStatus, metadata = {}) {
   if (approvalStage) {
     const authorization = authorizeProductionStage({
       projectId: run.projectId, runId: run.id, stage: approvalStage,
-      hostReady: metadata.hostReady === true, approval: metadata.approval
+      hostReadiness: metadata.hostReadiness, approval: metadata.approval
     });
     if (!authorization.authorized) throw new Error(`Cannot enter ${nextStatus}: ${authorization.reason}`);
   }
