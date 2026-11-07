@@ -215,7 +215,6 @@ test('Premiere workflow imports verified renders into a new guarded sequence and
     assert.equal(applied.export.verified, true);
     assert.equal(applied.export.output_path, path.join(dir, 'final.mp4'));
     assert.equal(applied.delivery.verified, true);
-    assert.equal(applied.delivery.verified, true);
     assert.equal(structureCalls, 2);
     await access(backupPath);
     await access(applied.receiptPath);
