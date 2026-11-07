@@ -62,6 +62,7 @@ Example:
 ```json
 {
   "hyperframes": { "available": true },
+  "blender": { "available": true },
   "afterEffects": { "serverConnected": true, "contextAvailable": true },
   "premiere": { "serverConnected": true, "hostVerified": true },
   "ffmpeg": { "available": true }
