@@ -32,9 +32,9 @@ server.tool('video.evaluate_host_readiness', 'Fail-closed preflight: require ver
 server.tool('video.authorize_production_stage', 'Validate a time-bounded, project/run/stage-scoped approval after host readiness has passed. This records governance intent; it is not a cryptographic identity system.', {
   projectId: z.string().min(1), runId: z.string().min(1),
   stage: z.enum(['after-effects-comp', 'premiere-assembly', 'final-export']),
-  hostReady: z.boolean(), approval: z.record(z.string(), z.unknown()), now: z.number().optional()
-}, async ({ projectId, runId, stage, hostReady, approval, now }) => ({
-  content: [{ type: 'text', text: JSON.stringify(authorizeProductionStage({ projectId, runId, stage, hostReady, approval, now }), null, 2) }]
+  hostReadiness: projectSchema, approval: z.record(z.string(), z.unknown()), now: z.number().optional()
+}, async ({ projectId, runId, stage, hostReadiness, approval, now }) => ({
+  content: [{ type: 'text', text: JSON.stringify(authorizeProductionStage({ projectId, runId, stage, hostReadiness, approval, now }), null, 2) }]
 }));
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));
 await server.connect(new StdioServerTransport());
