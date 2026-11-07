@@ -200,7 +200,7 @@ async function main() {
   if (!minimal && flags.has('--install-blender')) installSystem('blender');
 
   if (!dryRun) {
-    runNpm(['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
+    runNpm(['install', '--no-audit', '--no-fund', '--workspaces=false'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
     const appRequire = createRequire(path.join(appRoot, 'package.json'));
     const hyperframesEntry = appRequire.resolve('hyperframes');
     run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
