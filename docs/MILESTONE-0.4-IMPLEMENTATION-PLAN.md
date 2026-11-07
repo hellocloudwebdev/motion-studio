@@ -35,7 +35,7 @@ Base: Motion Studio 0.3 merged to `main`.
 ## Phase E — Validation
 - [x] Unit and mocked MCP integration tests.
 - [x] Windows/macOS/Linux CI for planning and policy modules; skip licensed Adobe actions on Linux.
-- [x] Fresh-machine install/upgrade/repeat-install/uninstall smoke tests are being exercised in isolated Windows/macOS/Linux CI homes; actual host MCP startup remains pending.
+- [x] Fresh-machine install/upgrade/repeat-install/uninstall smoke tests in isolated Windows/macOS/Linux CI homes.\n- [ ] Real user-profile host MCP startup on Windows.
 - [ ] Licensed AE test and Premiere test receipt (requires a licensed desktop host).
 - [x] Update validation status and exact CI matrix evidence.
 
