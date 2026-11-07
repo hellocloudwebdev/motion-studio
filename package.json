@@ -22,7 +22,8 @@
     "compile:example": "node apps/cli/src/index.mjs compile templates/startup-ad/project.json",
     "doctor": "node scripts/doctor.mjs",
     "setup": "node scripts/install.mjs",
-    "render:smoke": "node scripts/ci-render-smoke.mjs"
+    "render:smoke": "node scripts/ci-render-smoke.mjs",
+    "test:installer-lifecycle": "node scripts/installer-lifecycle-smoke.mjs"
   },
   "license": "MIT",
   "bin": {
