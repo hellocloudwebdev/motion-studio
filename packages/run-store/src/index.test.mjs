@@ -6,7 +6,7 @@ import path from 'node:path';
 import { openRunJournal } from './index.mjs';
 
 const event = (revision, overrides = {}) => ({
-  eventId: 'evt-' + revision, runId: 'run-1', revision, type: 'run.created',
+  eventId: 'evt-' + revision, projectId: 'project-1', runId: 'run-1', revision, type: 'run.created',
   at: '2026-11-07T00:00:00.000Z', payload: { status: revision === 1 ? 'draft' : 'planned' }, ...overrides
 });
 
@@ -21,8 +21,8 @@ test('journal appends, replays and enforces contiguous revisions', async () => {
     assert.equal((await journal.append(event(2, { eventId: 'evt-2', type: 'run.planned' }))).appended, true);
     await journal.close();
     const recovered = await openRunJournal(file);
-    assert.equal(recovered.latestRevision('run-1'), 2);
-    assert.equal((await recovered.read({ runId: 'run-1' })).length, 2);
+    assert.equal(recovered.latestRevision('project-1', 'run-1'), 2);
+    assert.equal((await recovered.read({ projectId: 'project-1', runId: 'run-1' })).length, 2);
     await recovered.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -60,7 +60,7 @@ test('journal serializes concurrent appends and prevents revision races', async 
       journal.append(event(3, { eventId: 'evt-3' }))
     ]);
     assert.equal(results.filter(x => x.appended).length, 3);
-    assert.equal(journal.latestRevision('run-1'), 3);
+    assert.equal(journal.latestRevision('project-1', 'run-1'), 3);
     await journal.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
