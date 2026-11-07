@@ -11,11 +11,11 @@ export function persistQaRecord(project, { run, qaResult, repairPlan, approval =
   };
   const runs = [...(Array.isArray(previous.runs) ? previous.runs : [])];
   const existingIndex = runs.findIndex(item => item.id === run.id);
-  if (existingIndex >= 0) runs[existingIndex] = { ...runs[existingIndex], ...runRecord };
+  if (existingIndex >= 0) runs[existingIndex] = { ...runs[existingIndex], ...runRecord, createdAt: run.createdAt || runs[existingIndex].createdAt };
   else runs.push(runRecord);
   next.qa = {
     ...previous, runs, defects: qaResult?.defects || [],
-    repairHistory: [...(Array.isArray(previous.repairHistory) ? previous.repairHistory : []), {
+    repairHistory: approval ? (Array.isArray(previous.repairHistory) ? previous.repairHistory : []) : [...(Array.isArray(previous.repairHistory) ? previous.repairHistory : []), {
       runId: run.id, attempt: repairPlan?.attempt ?? 0, status: repairPlan?.status || "no-action",
       actions: repairPlan?.actions || [], escalation: repairPlan?.escalation || null
     }],

@@ -113,7 +113,7 @@ export async function analyzeRenderedMedia({ input, media, frameEvidence = [], o
     const edge = event.start <= 0.1 || (event.end != null && media?.durationSeconds && media.durationSeconds - event.end <= 0.1);
     findings.push({ code: "BLACK_FRAME_SEGMENT", severity: edge ? "low" : "high", event, message: edge ? "Black frames occur at a clip boundary; review whether this is an intentional fade." : "Unexpected black frames occur inside the rendered clip." });
   }
-  for (const event of freezeEvents) findings.push({ code: "FROZEN_FRAME_SEGMENT", severity: "high", event, message: "FFmpeg detected a frozen-frame segment." });
+  for (const event of freezeEvents) findings.push({ code: "FROZEN_FRAME_SEGMENT", severity: options.strictFreeze || (event.duration ?? 0) >= thresholds.freezeDurationSeconds * 2 ? "high" : "medium", event, message: "FFmpeg detected a frozen-frame segment; verify whether a static hold is intentional." });
   for (const event of silenceEvents) findings.push({ code: "AUDIO_SILENCE_SEGMENT", severity: options.requireContinuousAudio ? "high" : "medium", event, message: "An audio-silence segment exceeded the configured threshold." });
   if (options.requireContinuousAudio && !media?.hasAudio) findings.push({ code: "AUDIO_STREAM_MISSING", severity: "high", message: "Continuous audio was required but the rendered file has no audio stream." });
   if (perceptual.nearDuplicateRunDetected) findings.push({ code: "PERCEPTUAL_DUPLICATE_FRAMES", severity: "medium", event: { maxNearDuplicateRunFrames: perceptual.maxNearDuplicateRunFrames }, message: "Downsampled consecutive frames are perceptually near-identical for longer than the configured static-frame threshold." });

@@ -17,5 +17,5 @@ test("persists QA run, repair history and approvals without changing creative in
   assert.equal(approved.creative.message, "Keep this");
   assert.equal(approved.qa.runs.length, 1);
   assert.equal(approved.qa.approvals[0].approved, true);
-  assert.equal(approved.qa.repairHistory.length, 2);
+  assert.equal(approved.qa.repairHistory.length, 1);
 });

@@ -27,6 +27,7 @@ Make the HyperFrames render pipeline evidence-driven: inspect the actual MP4, pe
 ## CLI options
 - --black-duration <seconds> default 0.25
 - --freeze-duration <seconds> default 2
+- --strict-freeze treat all detected freeze segments as blocking
 - --silence-duration <seconds> default 2.5
 - --require-ocr fail if Tesseract is unavailable
 - --no-ocr skip OCR
