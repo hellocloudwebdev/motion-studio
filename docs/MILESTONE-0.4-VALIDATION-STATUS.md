@@ -2,9 +2,9 @@
 
 **Branch:** `milestone/0.4-adobe-production-orchestration`  
 **Pull request:** [#2](https://github.com/hellocloudwebdev/motion-studio/pull/2)  
-**Code-validation commit:** `14e081482a2cfc07bb5fa1b0f2fc203892ab7e73`  
-**CI:** [run 42384015420](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42384015420) — all 6 matrix jobs passed (Windows, macOS and Ubuntu on Node 24 and 26).  
-**Status:** code-level validation is green; milestone acceptance is not complete.
+**Current implementation:** includes the 0.4 Adobe orchestration work plus a dedicated real-render CI smoke path.  
+**Cross-platform CI:** the six-job Windows/macOS/Linux × Node 24/26 matrix passed on the prior code head. The updated workflow is running against the current head; see [latest workflow runs](https://github.com/hellocloudwebdev/motion-studio/actions).  
+**Status:** code-level validation is green on the prior head; the new render smoke and remaining host/installer acceptance are not yet signed off.
 
 ## Implemented in the branch
 
@@ -12,16 +12,17 @@
 - Approval-bound Premiere scene import/new-sequence workflow, backup, source identity checks, paginated sequence readback, save and optional Media Encoder export using an explicit `.epr` preset.
 - High-level Motion Studio MCP tools; upstream Adobe tools remain scoped and unsafe scripting remains disabled.
 - Per-host in-process mutation serialization, one-time approval lifecycle, reconciliation-required failure state and sanitized local run receipts.
-- Mocked MCP integration tests and policy/unit tests have been authored.
+- Mocked MCP integration tests and policy/unit tests.
+- A small deterministic Canonical Video IR fixture and Linux CI job that installs FFmpeg, prepares the HyperFrames browser, renders an actual MP4, probes the output with FFprobe, extracts QA frames, and uploads the render/receipt as a CI artifact.
 
-## Validation gates still open
+## Validation gates
 
-1. **Current-head CI:** the code commit `14e0814` passed all six Windows/macOS/Linux × Node 24/26 jobs. Re-run the matrix if any source code changes after this commit.
-2. **Test execution:** unit tests and example validation/routing/compile scripts passed in the six-job matrix.
-3. **Licensed Adobe host tests:** run the AE and Premiere workflows on a machine with licensed apps and the corresponding bridges installed; attach real project-save, readback, PNG proof and export/checksum receipts. Mocked MCP tests do not substitute for this.
-4. **Installer acceptance:** test clean install, upgrade, repeat install and uninstall on a fresh supported Windows machine, and smoke-test macOS/Linux setup.
-5. **End-to-end media acceptance:** render a real HyperFrames MP4, inspect it with FFprobe, and attach the renderer/QA receipt before claiming a complete production handoff.
+1. **Cross-platform code CI:** prior current-head matrix passed all six Windows/macOS/Linux × Node 24/26 jobs. Reconfirm on the newest head.
+2. **Real HyperFrames render:** automated render/FFprobe/QA smoke is now wired into CI. Treat this gate as pending until the new `render-smoke` job passes and its artifact is available.
+3. **Licensed Adobe host tests:** still require a machine with licensed After Effects and Premiere Pro plus the corresponding bridges installed. Attach real project-save, readback, PNG proof and export/checksum receipts. Mocked MCP tests do not substitute for this.
+4. **Installer acceptance:** still requires fresh-machine clean install, upgrade, repeat-install and uninstall on Windows, plus macOS/Linux setup smoke tests. The CI unit matrix is not a substitute for lifecycle acceptance.
+5. **Final delivery decision:** do not merge 0.4 as a verified production milestone, start 0.5, or declare final architecture lock until the applicable acceptance evidence is recorded.
 
-## Exit decision
+## Environment constraints
 
-Do not merge 0.4 as a verified milestone, start 0.5, or mark the final architecture locked until the required CI and host/installer acceptance gates are satisfied. The absence of Adobe applications on the development machine is a validation constraint, not a reason to fabricate successful host receipts.
+The development environment used for this milestone does not have licensed Adobe desktop applications available. That is a validation constraint, not a reason to fabricate host receipts. Adobe licensing, sign-in, installation and trust prompts remain user-controlled.
