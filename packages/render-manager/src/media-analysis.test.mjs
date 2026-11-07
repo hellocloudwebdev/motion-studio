@@ -10,7 +10,7 @@ test("parses FFmpeg black, freeze and silence events", () => {
   const result = parseMediaAnalysisLogs({
     black: "[blackdetect] black_start:2.0 black_end:3.0 black_duration:1.0",
     freeze: "[freezedetect] freeze_start:4.0 freeze_end:7.0 freeze_duration:3.0",
-    silence: "[silencedetect] silence_start:1.5 silence_end:4.5 silence_duration:3.0"
+    silence: "[silencedetect] silence_start: 1.5 silence_end: 4.5 silence_duration: 3.0"
   });
   assert.equal(result.black[0].duration, 1);
   assert.equal(result.freeze[0].start, 4);

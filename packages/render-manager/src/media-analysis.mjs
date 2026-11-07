@@ -14,9 +14,9 @@ function run(command, args, options = {}) {
 }
 
 function eventsFromLog(text, startKey, endKey, durationKey) {
-  const starts = [...text.matchAll(new RegExp(startKey + ":([0-9.]+)", "g"))].map(x => Number(x[1]));
-  const ends = [...text.matchAll(new RegExp(endKey + ":([0-9.]+)", "g"))].map(x => Number(x[1]));
-  const durations = [...text.matchAll(new RegExp(durationKey + ":([0-9.]+)", "g"))].map(x => Number(x[1]));
+  const starts = [...text.matchAll(new RegExp(startKey + ":\\s*([0-9.]+)", "g"))].map(x => Number(x[1]));
+  const ends = [...text.matchAll(new RegExp(endKey + ":\\s*([0-9.]+)", "g"))].map(x => Number(x[1]));
+  const durations = [...text.matchAll(new RegExp(durationKey + ":\\s*([0-9.]+)", "g"))].map(x => Number(x[1]));
   return starts.map((start, i) => ({ start, end: ends[i] ?? null, duration: durations[i] ?? (ends[i] == null ? null : ends[i] - start) }));
 }
 
