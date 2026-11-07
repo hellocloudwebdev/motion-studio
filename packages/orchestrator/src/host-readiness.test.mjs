@@ -25,14 +25,15 @@ test('unknown engines fail closed instead of being treated as available', () => 
   assert.ok(result.missing.includes('unknown-engine'));
 });
 
-test('Adobe stage authorization requires host verification and matching live approval', () => {
+test('Adobe stage authorization requires stage-specific host evidence and matching live approval', () => {
   const now = Date.parse('2026-11-07T12:00:00.000Z');
   const approval = {
     approved: true, projectId: 'p1', runId: 'r1', stage: 'premiere-assembly',
     approvedBy: 'producer', approvedAt: '2026-11-07T11:59:00.000Z', expiresAt: '2026-11-07T12:10:00.000Z'
   };
-  assert.equal(authorizeProductionStage({ projectId: 'p1', runId: 'r1', stage: 'premiere-assembly', hostReady: true, approval, now }).authorized, true);
-  assert.equal(authorizeProductionStage({ projectId: 'p2', runId: 'r1', stage: 'premiere-assembly', hostReady: true, approval, now }).authorized, false);
-  assert.equal(authorizeProductionStage({ projectId: 'p1', runId: 'r1', stage: 'premiere-assembly', hostReady: false, approval, now }).authorized, false);
+  const hostReadiness = evaluateHostReadiness(route, checks);
+  assert.equal(authorizeProductionStage({ projectId: 'p1', runId: 'r1', stage: 'premiere-assembly', hostReadiness, approval, now }).authorized, true);
+  assert.equal(authorizeProductionStage({ projectId: 'p2', runId: 'r1', stage: 'premiere-assembly', hostReadiness, approval, now }).authorized, false);
+  assert.equal(authorizeProductionStage({ projectId: 'p1', runId: 'r1', stage: 'premiere-assembly', hostReadiness: { ready: true, checks: [] }, approval, now }).authorized, false);
   assert.equal(validateStageApproval({ projectId: 'p1', runId: 'r1', stage: 'premiere-assembly', approval, now: Date.parse('2026-11-07T12:11:00.000Z') }).valid, false);
 });
