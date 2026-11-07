@@ -57,7 +57,7 @@ function runHostCli(command, args, label) {
   return run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], label, true, appRoot);
 }
 function openUrl(url) {
-  if (dryRun) return;
+  if (dryRun || process.env.MOTION_STUDIO_NO_OPEN_URL === '1') return;
   if (platform === 'win32') spawnSync('cmd.exe', ['/c', 'start', '', url], { stdio: 'ignore', shell: false });
   else if (platform === 'darwin') spawnSync('open', [url], { stdio: 'ignore', shell: false });
   else if (commandExists('xdg-open')) spawnSync('xdg-open', [url], { stdio: 'ignore', shell: false });
@@ -200,9 +200,14 @@ async function main() {
   if (!minimal && flags.has('--install-blender')) installSystem('blender');
 
   if (!dryRun) {
-    runNpm(['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
-    const appRequire = createRequire(path.join(appRoot, 'package.json'));
-    const hyperframesEntry = appRequire.resolve('hyperframes');
+    runNpm(['install', '--no-audit', '--no-fund', '--workspaces=false'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
+    const hyperframesRoot = path.join(appRoot, 'node_modules', 'hyperframes');
+    const hyperframesPackage = JSON.parse(await readFile(path.join(hyperframesRoot, 'package.json'), 'utf8'));
+    const hyperframesBin = typeof hyperframesPackage.bin === 'string'
+      ? hyperframesPackage.bin
+      : (hyperframesPackage.bin?.hyperframes || Object.values(hyperframesPackage.bin || {})[0]);
+    if (!hyperframesBin) throw new Error('Installed HyperFrames package does not declare a CLI binary.');
+    const hyperframesEntry = path.resolve(hyperframesRoot, hyperframesBin);
     run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
   }
 
