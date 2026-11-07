@@ -2,7 +2,7 @@
 
 **Branch:** `milestone/0.4-adobe-production-orchestration`  
 **Pull request:** [#2](https://github.com/hellocloudwebdev/motion-studio/pull/2)  
-**Current branch head:** `8c9ea569cbf1995e536eecdc9622fecf7a187820`  
+**Validated code head:** `8c9ea569cbf1995e536eecdc9622fecf7a187820` (subsequent branch changes were documentation-only).  
 **Latest PR validation run:** [42387710837](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42387710837) — Ubuntu and Windows checks are passing; macOS jobs are queued/running.  
 **Prior full code/render matrix:** [run 42385125847](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42385125847) — six Windows/macOS/Ubuntu × Node 24/26 jobs and the real HyperFrames render passed.  
 **Render evidence:** [MP4, QA frames and receipt artifact](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42385125847/artifacts/13578804696).  
