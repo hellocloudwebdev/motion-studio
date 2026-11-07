@@ -63,7 +63,7 @@ export function validateStageApproval({ projectId, runId, stage, approval, now =
 }
 
 export function authorizeProductionStage({ projectId, runId, stage, hostReadiness, approval, now = Date.now() } = {}) {
-  if (hostReadiness?.ready !== true || !Array.isArray(hostReadiness.checks)) {
+  if (hostReadiness?.ready !== true || !Array.isArray(hostReadiness.checks) || hostReadiness.checks.length === 0 || hostReadiness.checks.some(check => check.ready !== true) || (Array.isArray(hostReadiness.missing) && hostReadiness.missing.length > 0)) {
     return { authorized: false, reason: 'A successful host-readiness report is required.' };
   }
   const requiredEngines = STAGE_ENGINES[stage] || [];
