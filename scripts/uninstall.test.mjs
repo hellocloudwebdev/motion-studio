@@ -25,7 +25,7 @@ async function fixture() {
   await writeFile(path.join(home, '.claude', 'skills', 'motion-studio-core', 'SKILL.md'), '# Skill\n');
   await writeFile(path.join(home, '.claude', 'agents', 'motion-studio-producer.md'), '# Agent\n');
   await writeFile(path.join(config, 'motion-studio', 'adapters', 'claude.mcp.json'), JSON.stringify({ motionStudioManaged: true, mcpServers: {} }));
-  await writeFile(path.join(config, 'motion-studio', 'adapters', 'codex.mcp.json'), JSON.stringify({ mcpServers: { user: { command: 'keep' } } }));
+  await writeFile(path.join(config, 'motion-studio', 'adapters', 'codex.mcp.json'), JSON.stringify({ mcpServers: { user: { command: 'keep' }, 'motion-studio-managed': { command: node, args: [path.join(app, 'scripts', 'mcp-launcher.mjs')] } } }));
   const cursor = { mcpServers: {
     'motion-studio': { command: node, args: [path.join(app, 'scripts', 'mcp-launcher.mjs')] },
     'my-server': { command: 'my-server', args: ['--safe'] }
@@ -67,7 +67,7 @@ test('uninstaller removes only Motion Studio-owned files and preserves user conf
     await assert.rejects(access(path.join(f.home, '.claude', 'skills', 'motion-studio-core')));
     await assert.rejects(access(path.join(f.home, '.claude', 'agents', 'motion-studio-producer.md')));
     await assert.rejects(access(path.join(f.config, 'motion-studio', 'adapters', 'claude.mcp.json')));
-    await access(path.join(f.config, 'motion-studio', 'adapters', 'codex.mcp.json'));
+    const codex = JSON.parse(await readFile(path.join(f.config, 'motion-studio', 'adapters', 'codex.mcp.json'), 'utf8'));\n    assert.deepEqual(Object.keys(codex.mcpServers), ['user']);
     await access(path.join(f.home, 'keep.txt'));
     const cursor = JSON.parse(await readFile(path.join(f.home, '.cursor', 'mcp.json'), 'utf8'));
     assert.deepEqual(Object.keys(cursor.mcpServers), ['my-server']);
