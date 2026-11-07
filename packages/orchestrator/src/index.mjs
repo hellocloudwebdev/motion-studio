@@ -1,3 +1,5 @@
+import { authorizeProductionStage } from './host-readiness.mjs';
+
 const TRANSITIONS = {
   draft: new Set(['planned', 'cancelled']), planned: new Set(['rendering', 'cancelled', 'failed']),
   rendering: new Set(['qa', 'failed']), qa: new Set(['repair', 'assembling', 'failed']),
@@ -8,15 +10,24 @@ const TRANSITIONS = {
 export function createProductionRun({ id, projectId, maxRepairCycles = 2 } = {}) {
   if (!id || !projectId) throw new Error('Run id and projectId are required.');
   if (!Number.isInteger(maxRepairCycles) || maxRepairCycles < 0) throw new Error('maxRepairCycles must be a non-negative integer.');
-  return { id, projectId, status: 'draft', revision: 0, repairCycles: 0, maxRepairCycles, artifacts: [], events: [{ revision: 0, from: null, to: 'draft', at: new Date().toISOString(), metadata: {} }] };
+  return { id, projectId, status: 'draft', revision: 0, repairCycles: 0, maxRepairCycles, artifacts: [], approvals: [], events: [{ revision: 0, from: null, to: 'draft', at: new Date().toISOString(), metadata: {} }] };
 }
 export function transitionRun(run, nextStatus, metadata = {}) {
   if (!run || !TRANSITIONS[run.status]) throw new Error('Invalid production run state.');
   if (!TRANSITIONS[run.status].has(nextStatus)) throw new Error(`Illegal run transition: ${run.status} -> ${nextStatus}.`);
   if (nextStatus === 'repair' && run.repairCycles >= run.maxRepairCycles) throw new Error(`Repair limit reached (${run.maxRepairCycles}). Fail the run or request human intervention.`);
+  const approvalStage = nextStatus === 'assembling' ? 'premiere-assembly' : nextStatus === 'exporting' ? 'final-export' : null;
+  if (approvalStage) {
+    const authorization = authorizeProductionStage({
+      projectId: run.projectId, runId: run.id, stage: approvalStage,
+      hostReady: metadata.hostReady === true, approval: metadata.approval
+    });
+    if (!authorization.authorized) throw new Error(`Cannot enter ${nextStatus}: ${authorization.reason}`);
+  }
   if (nextStatus === 'delivered' && !run.artifacts.some(x => x.kind === 'final-export' && x.verified === true)) throw new Error('Cannot mark delivered without a verified final-export artifact.');
   const next = structuredClone(run);
   if (nextStatus === 'repair') next.repairCycles += 1;
+  if (approvalStage) next.approvals.push({ stage: approvalStage, ...structuredClone(metadata.approval) });
   next.revision += 1; next.status = nextStatus;
   next.events.push({ revision: next.revision, from: run.status, to: nextStatus, at: new Date().toISOString(), metadata: structuredClone(metadata) });
   return next;
@@ -39,10 +50,10 @@ export function buildExecutionGraph(routePlan) {
     for (const renderId of renderIds) edges.push({ from: renderId, to: composeId });
     sceneComposeIds.push(composeId);
   }
-  const assemblyId = 'timeline:premiere-assembly'; nodes.push({ id: assemblyId, kind: 'editorial-assembly', engine: 'premiere-pro' });
+  const assemblyId = 'timeline:premiere-assembly'; nodes.push({ id: assemblyId, kind: 'editorial-assembly', engine: 'premiere-pro', requiresApproval: true });
   for (const id of sceneComposeIds) edges.push({ from: id, to: assemblyId });
-  const deliveryId = 'delivery:ffmpeg'; nodes.push({ id: deliveryId, kind: 'delivery', engine: 'ffmpeg' }); edges.push({ from: assemblyId, to: deliveryId });
-  return { nodes, edges, executionPolicy: routePlan.executionPolicy || { maxWorkers: 1 } };
+  const deliveryId = 'delivery:ffmpeg'; nodes.push({ id: deliveryId, kind: 'delivery', engine: 'ffmpeg', requiresApproval: true }); edges.push({ from: assemblyId, to: deliveryId });
+  return { nodes, edges, executionPolicy: { ...(routePlan.executionPolicy || {}), maxWorkers: 1, requireVerifiedHosts: true, requireStageApprovals: true } };
 }
 export function validateExecutionGraph(graph) {
   const ids = new Set((graph.nodes || []).map(x => x.id)), indegree = new Map([...ids].map(id => [id, 0])), adjacency = new Map([...ids].map(id => [id, []])), errors = [];
