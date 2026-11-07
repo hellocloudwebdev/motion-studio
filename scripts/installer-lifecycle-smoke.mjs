@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, access, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, access, rm, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -12,7 +12,9 @@ const config = path.join(temp, 'config');
 const appRoot = process.platform === 'win32'
   ? path.join(home, 'AppData', 'Local', 'motion-studio', 'app')
   : path.join(home, '.local', 'share', 'motion-studio', 'app');
-const recordPath = path.join(config, 'motion-studio', 'install.json');\nconst cursorConfig = path.join(home, '.cursor', 'mcp.json');\nconst codexAdapter = path.join(config, 'motion-studio', 'adapters', 'codex.mcp.json');
+const recordPath = path.join(config, 'motion-studio', 'install.json');
+const cursorConfig = path.join(home, '.cursor', 'mcp.json');
+const codexAdapter = path.join(config, 'motion-studio', 'adapters', 'codex.mcp.json');
 const env = {
   ...process.env,
   HOME: home,
@@ -33,13 +35,19 @@ const run = (args, label) => {
 };
 
 try {
-  await mkdir(home, { recursive: true });
+  await mkdir(path.join(home, '.cursor'), { recursive: true });
+  await mkdir(path.dirname(codexAdapter), { recursive: true });
   await writeFile(path.join(home, 'user-data.txt'), 'preserve this file\n');
-  run([path.join(root, 'scripts/install.mjs'), '--minimal', '--skip-hosts'], 'clean install');
+  await writeFile(cursorConfig, JSON.stringify({ mcpServers: { 'user-server': { command: 'keep-user-server', args: [] } } }));
+  await writeFile(codexAdapter, JSON.stringify({ mcpServers: { 'user-adapter': { command: 'keep-user-adapter', args: [] } } }));
+  run([path.join(root, 'scripts/install.mjs'), '--minimal'], 'clean install');
   await access(path.join(appRoot, 'package.json'));
   await access(recordPath);
-  run([path.join(root, 'scripts/install.mjs'), '--minimal', '--skip-hosts'], 'repeat install / in-place upgrade');
-  const record = JSON.parse(await (await import('node:fs/promises')).readFile(recordPath, 'utf8'));
+  const cursorAfterInstall = JSON.parse(await readFile(cursorConfig, 'utf8'));
+  assert.ok(cursorAfterInstall.mcpServers['motion-studio']);
+  assert.ok(cursorAfterInstall.mcpServers['user-server']);
+  run([path.join(root, 'scripts/install.mjs'), '--minimal'], 'repeat install / in-place upgrade');
+  const record = JSON.parse(await readFile(recordPath, 'utf8'));
   assert.equal(path.resolve(record.installPath), path.resolve(appRoot));
   run([path.join(root, 'scripts/uninstall.mjs')], 'uninstall dry run');
   await access(appRoot);
@@ -47,7 +55,11 @@ try {
   await assert.rejects(access(appRoot));
   await assert.rejects(access(recordPath));
   await access(path.join(home, 'user-data.txt'));
-  console.log('[installer-smoke] PASS: clean install, repeat install, dry-run and uninstall; user data preserved.');
+  const cursorAfterUninstall = JSON.parse(await readFile(cursorConfig, 'utf8'));
+  assert.deepEqual(Object.keys(cursorAfterUninstall.mcpServers), ['user-server']);
+  const codexAfterUninstall = JSON.parse(await readFile(codexAdapter, 'utf8'));
+  assert.deepEqual(Object.keys(codexAfterUninstall.mcpServers), ['user-adapter']);
+  console.log('[installer-smoke] PASS: clean install, repeat install, host config merge, dry-run and uninstall; user config preserved.');
 } finally {
   await rm(temp, { recursive: true, force: true });
 }
