@@ -78,8 +78,9 @@ test('rejects operations not in the local AE allowlist even if the host catalog 
 
 test('Premiere render inputs must be absolute and unique', () => {
   assert.throws(() => validatePremiereRenderInputs(['relative.mp4']), /absolute/);
-  assert.throws(() => validatePremiereRenderInputs(['/tmp/a.mp4', '/tmp/a.mp4']), /Duplicate/);
-  assert.deepEqual(validatePremiereRenderInputs(['/tmp/a.mp4']), ['/tmp/a.mp4']);
+  const renderPath = path.join(os.tmpdir(), 'a.mp4');
+  assert.throws(() => validatePremiereRenderInputs([renderPath, renderPath]), /Duplicate/);
+  assert.deepEqual(validatePremiereRenderInputs([renderPath]), [path.resolve(renderPath)]);
 });
 
 test('backup path must be distinct, same-extension, contained in an existing directory and non-colliding', async () => {
