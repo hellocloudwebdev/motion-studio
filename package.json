@@ -1,6 +1,6 @@
 {
   "name": "motion-studio",
-  "version": "0.4.0-alpha.1",
+  "version": "0.5.0-alpha.1",
   "private": true,
   "description": "Engine-independent AI video production system with HyperFrames rendering and governed Adobe MCP orchestration.",
   "type": "module",
