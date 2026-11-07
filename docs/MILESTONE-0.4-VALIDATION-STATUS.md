@@ -2,8 +2,9 @@
 
 **Branch:** `milestone/0.4-adobe-production-orchestration`  
 **Pull request:** [#2](https://github.com/hellocloudwebdev/motion-studio/pull/2)  
-**Latest audited commit before this status note:** `193d658cb934829c564332be24b1d49eb612aa55`  
-**Status:** implementation code is present; milestone validation is not complete.
+**Code-validation commit:** `14e081482a2cfc07bb5fa1b0f2fc203892ab7e73`  
+**CI:** [run 42384015420](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42384015420) — all 6 matrix jobs passed (Windows, macOS and Ubuntu on Node 24 and 26).  
+**Status:** code-level validation is green; milestone acceptance is not complete.
 
 ## Implemented in the branch
 
@@ -15,9 +16,9 @@
 
 ## Validation gates still open
 
-1. **Current-head CI:** the GitHub Actions run for the audited commit is `action_required` with zero jobs created. This is not a passing or failing test result; the workflow needs repository-owner approval before it can execute. Older successful checks are not evidence for the current head.
-2. **Test execution:** run `npm install --no-audit --no-fund` and `npm test` plus the example validation/routing/compile scripts on the current PR head after CI approval.
-3. **Licensed Adobe host tests:** run the AE and Premiere workflows on a machine with licensed apps and the corresponding bridges installed; attach real project-save, readback, PNG proof and export/checksum receipts.
+1. **Current-head CI:** the code commit `14e0814` passed all six Windows/macOS/Linux × Node 24/26 jobs. Re-run the matrix if any source code changes after this commit.
+2. **Test execution:** unit tests and example validation/routing/compile scripts passed in the six-job matrix.
+3. **Licensed Adobe host tests:** run the AE and Premiere workflows on a machine with licensed apps and the corresponding bridges installed; attach real project-save, readback, PNG proof and export/checksum receipts. Mocked MCP tests do not substitute for this.
 4. **Installer acceptance:** test clean install, upgrade, repeat install and uninstall on a fresh supported Windows machine, and smoke-test macOS/Linux setup.
 5. **End-to-end media acceptance:** render a real HyperFrames MP4, inspect it with FFprobe, and attach the renderer/QA receipt before claiming a complete production handoff.
 
