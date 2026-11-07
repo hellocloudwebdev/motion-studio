@@ -77,3 +77,19 @@ For licensed-host validation, launch each Adobe app, open a copy of a saved test
 - `--skip-hosts`: skip agent skill and MCP host configuration.
 - `--dry-run`: display planned actions without modifying the machine.
 - `--install-premiere-cep`: install the upstream CEP compatibility connector (Premiere must be closed).
+
+## Uninstall Motion Studio
+
+Preview the files Motion Studio will remove:
+```bash
+node scripts/uninstall.mjs
+```
+
+Confirm removal:
+```bash
+node scripts/uninstall.mjs --yes
+```
+
+Or, from the repository, use `npm run uninstall:studio -- --yes`. The uninstaller removes the managed application directory, install record, installer-owned skill/agent files and adapter configs explicitly marked as Motion Studio-managed. It removes only Cursor MCP entries whose launch paths point into the Motion Studio install directory.
+
+It preserves unrelated user configuration, unmarked adapter files and secret/token files. Adobe desktop applications and Creative Cloud are never uninstalled. Claude Code/Codex CLI MCP registrations are left untouched; remove those explicitly with the relevant host CLI if you previously registered them.
