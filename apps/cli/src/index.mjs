@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale, persistQaRecord } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
+import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
 
@@ -35,8 +36,8 @@ if (command === 'qa-approve') {
   const output = path.resolve(option('--output', 'project-approved.json'));
   await writeFile(output, JSON.stringify(approved, null, 2) + '\n');
   print({ approved: true, runId: latest.id, actor, output });
-} else if (['validate', 'route', 'qa', 'graph', 'compile', 'render'].includes(command)) {
-  if (!file) throw new Error('Usage: motion-studio ' + command + ' <project.json> [--output <path>] [--quality draft|standard|high]');
+} else if (['validate', 'route', 'qa', 'graph', 'preflight', 'compile', 'render'].includes(command)) {
+  if (!file) throw new Error('Usage: motion-studio ' + command + ' <project.json> [--host-checks <host-checks.json>] [--output <path>]');
   const project = await load(file);
   const validation = validateProject(project);
   if (command === 'validate') { print(validation); if (!validation.valid) process.exitCode = 1; }
@@ -51,6 +52,16 @@ if (command === 'qa-approve') {
     const routing = routeScenes(project);
     const graph = buildExecutionGraph(routing);
     print({ routing, graph, graphValidation: validateExecutionGraph(graph) });
+  } else if (command === 'preflight') {
+    if (!validation.valid) { print({ validation, ready: false }); process.exitCode = 1; }
+    else {
+      const hostChecksFile = option('--host-checks', '');
+      if (!hostChecksFile) throw new Error('preflight requires --host-checks <host-checks.json> with verified host evidence.');
+      const routing = routeScenes(project);
+      const readiness = evaluateHostReadiness(routing, await load(hostChecksFile));
+      print({ validation, routing, readiness });
+      if (!readiness.ready) process.exitCode = 3;
+    }
   } else if (command === 'compile' || command === 'render') {
     if (!validation.valid) { print(validation); process.exitCode = 1; }
     else {
@@ -94,5 +105,5 @@ if (command === 'qa-approve') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.5.0-alpha.2\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, compile <project.json>, render <project.json> [--quality draft|standard|high] [--require-ocr] [--strict-freeze] [--require-continuous-audio], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 0.6.0-alpha.1\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
