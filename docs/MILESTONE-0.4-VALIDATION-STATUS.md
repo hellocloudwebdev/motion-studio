@@ -2,9 +2,10 @@
 
 **Branch:** `milestone/0.4-adobe-production-orchestration`  
 **Pull request:** [#2](https://github.com/hellocloudwebdev/motion-studio/pull/2)  
-**Current implementation:** includes the 0.4 Adobe orchestration work plus a dedicated real-render CI smoke path.  
-**Cross-platform CI:** the six-job Windows/macOS/Linux × Node 24/26 matrix passed on the prior code head. The updated workflow is running against the current head; see [latest workflow runs](https://github.com/hellocloudwebdev/motion-studio/actions).  
-**Status:** code-level validation is green on the prior head; the new render smoke and remaining host/installer acceptance are not yet signed off.
+**Validated head:** `d28d7a3b18628e934c63b0a3a9f76ebdad0b173d`  
+**CI:** [run 42385125847](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42385125847) — all 7 jobs passed (six Windows/macOS/Linux × Node 24/26 matrix jobs plus real render smoke).  
+**Render evidence:** [MP4, QA frames and receipt artifact](https://github.com/hellocloudwebdev/motion-studio/actions/runs/42385125847/artifacts/13578804696)  
+**Status:** code validation and automated HyperFrames render acceptance passed; licensed Adobe and installer lifecycle acceptance remain open.
 
 ## Implemented in the branch
 
@@ -13,16 +14,18 @@
 - High-level Motion Studio MCP tools; upstream Adobe tools remain scoped and unsafe scripting remains disabled.
 - Per-host in-process mutation serialization, one-time approval lifecycle, reconciliation-required failure state and sanitized local run receipts.
 - Mocked MCP integration tests and policy/unit tests.
-- A small deterministic Canonical Video IR fixture and Linux CI job that installs FFmpeg, prepares the HyperFrames browser, renders an actual MP4, probes the output with FFprobe, extracts QA frames, and uploads the render/receipt as a CI artifact.
+- HyperFrames compiler writes child scene compositions under `compositions/`, preserving one root `index.html` for the HyperFrames project.
+- A deterministic 2-second, 640×360, 24 fps Canonical Video IR fixture and a Linux CI job that installs FFmpeg, prepares the pinned HyperFrames browser, renders an actual H.264 MP4, verifies it with FFprobe, extracts QA frames and uploads a receipt.
 
-## Validation gates
+## Validation results
 
-1. **Cross-platform code CI:** prior current-head matrix passed all six Windows/macOS/Linux × Node 24/26 jobs. Reconfirm on the newest head.
-2. **Real HyperFrames render:** automated render/FFprobe/QA smoke is now wired into CI. Treat this gate as pending until the new `render-smoke` job passes and its artifact is available.
+1. **Cross-platform code CI:** passed all six Windows/macOS/Linux × Node 24/26 jobs.
+2. **Real HyperFrames render:** passed. Output: H.264 MP4, 640×360, 24 fps, 2.0 seconds, 33,758 bytes. FFprobe verified dimensions, frame rate, duration and video stream. HyperFrames check passed; QA frame extraction completed. The receipt reports `verified: true` and `productionReady: true`.
 3. **Licensed Adobe host tests:** still require a machine with licensed After Effects and Premiere Pro plus the corresponding bridges installed. Attach real project-save, readback, PNG proof and export/checksum receipts. Mocked MCP tests do not substitute for this.
-4. **Installer acceptance:** still requires fresh-machine clean install, upgrade, repeat-install and uninstall on Windows, plus macOS/Linux setup smoke tests. The CI unit matrix is not a substitute for lifecycle acceptance.
-5. **Final delivery decision:** do not merge 0.4 as a verified production milestone, start 0.5, or declare final architecture lock until the applicable acceptance evidence is recorded.
+4. **Installer acceptance:** still requires fresh-machine clean install, upgrade, repeat-install and uninstall on Windows, plus macOS/Linux setup lifecycle smoke tests. The CI unit matrix is not a substitute for lifecycle acceptance.
 
-## Environment constraints
+## Environment constraints and exit decision
 
-The development environment used for this milestone does not have licensed Adobe desktop applications available. That is a validation constraint, not a reason to fabricate host receipts. Adobe licensing, sign-in, installation and trust prompts remain user-controlled.
+The development environment used for this milestone does not have licensed Adobe desktop applications available. Adobe licensing, sign-in, installation and trust prompts remain user-controlled.
+
+Do not merge 0.4 as a fully verified production milestone, start 0.5, or declare final architecture lock until the licensed Adobe and installer lifecycle evidence is recorded. The automated render gate is now closed with CI evidence; the remaining gates are not waived.
