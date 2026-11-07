@@ -202,7 +202,13 @@ async function main() {
   if (!dryRun) {
     runNpm(['install', '--no-audit', '--no-fund', '--workspaces=false'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
     const appRequire = createRequire(path.join(appRoot, 'package.json'));
-    const hyperframesEntry = appRequire.resolve('hyperframes');
+    let hyperframesEntry;
+    try { hyperframesEntry = appRequire.resolve('hyperframes'); }
+    catch (error) {
+      const installedEntries = await readdir(path.join(appRoot, 'node_modules')).catch(() => []);
+      const dependencyCheck = spawnSync('npm', ['ls', 'hyperframes', '--depth=0'], { cwd: appRoot, encoding: 'utf8', shell: false });
+      throw new Error('HyperFrames dependency missing after npm install. appRoot=' + appRoot + '; node_modules entries=' + installedEntries.slice(0, 80).join(',') + '; npm ls stdout=' + (dependencyCheck.stdout || '') + '; npm ls stderr=' + (dependencyCheck.stderr || '') + '; original=' + error.message);
+    }
     run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
   }
 
