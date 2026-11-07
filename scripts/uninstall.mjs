@@ -85,7 +85,26 @@ for (const file of adapterConfigs) {
   if (!(await exists(file))) continue;
   try {
     const config = JSON.parse(await readFile(file, 'utf8'));
-    if (config.motionStudioManaged === true) { await rm(file); removed.push(file); }
+    if (config.motionStudioManaged === true) {
+      await rm(file);
+      removed.push(file);
+      continue;
+    }
+    const servers = config?.mcpServers;
+    if (servers && typeof servers === 'object' && !Array.isArray(servers)) {
+      let changed = false;
+      for (const [name, server] of Object.entries(servers)) {
+        const args = Array.isArray(server?.args) ? server.args : [];
+        if (args.some(arg => typeof arg === 'string' && within(appRoot, arg))) {
+          delete servers[name];
+          changed = true;
+        }
+      }
+      if (changed) {
+        await writeFile(file, JSON.stringify(config, null, 2) + '\n');
+        removed.push(file + ' (Motion Studio entries only)');
+      }
+    }
   } catch {
     console.warn('Preserved unrecognized adapter config: ' + file);
   }
