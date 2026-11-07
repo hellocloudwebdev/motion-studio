@@ -22,7 +22,7 @@ export function evaluateRenderEvidence(manifest) {
   frames.forEach((frame, index) => {
     if (frame?.decoded !== true || !(Number(frame.bytes) > 0)) defects.push(defect("FRAME_DECODE_FAILED_" + (index + 1), "high", "Sampled frame " + (index + 1) + " could not be decoded."));
   });
-  for (const warning of manifest.blockingWarnings || []) {
+  for (const warning of Array.isArray(manifest.blockingWarnings) ? manifest.blockingWarnings : []) {
     defects.push(defect("BLOCKING_" + String(warning.code || "WARNING"), "high", warning.message || "A blocking compiler warning remains.", "engine-router", warning.sceneId || null));
   }
   const summary = Object.fromEntries(["critical", "high", "medium", "low"].map(level => [level, defects.filter(item => item.severity === level).length]));

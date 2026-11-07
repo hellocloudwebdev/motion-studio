@@ -2,7 +2,7 @@
 
 **Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, QA and bounded repair.
 
-> **Current branch: 0.3.0-alpha.1.** This milestone adds the first executable IR-to-HyperFrames compiler and MP4 render/inspection pipeline, plus local MCP clients and installer configuration for the upstream After Effects and Premiere Pro MCP servers. Live Adobe-host verification still requires the user's licensed desktop applications.
+> **Current milestone: 0.5.0-alpha.1.** The 0.3 renderer and Adobe MCP foundation are in place. Milestone 0.5 adds evidence-driven render QA and bounded repair planning; media-analysis and render-manager integration remain in progress.
 
 ## Install on a new PC
 
