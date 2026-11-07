@@ -99,7 +99,7 @@ export async function renderHyperFramesProject(project, options = {}) {
 
   const outputFile = path.join(outputRoot, (project.project.id || 'motion-studio') + '-' + quality + '.mp4');
   await rm(outputFile, { force: true });
-  await execute('render', ['render', '--output', outputFile, '--fps', fps.argument, '--quality', quality, '--workers', String(workerCount), '--no-confirm']);
+  await execute('render', ['render', '--output', outputFile, '--fps', fps.argument, '--quality', quality, '--workers', String(workerCount)]);
   const outputStat = await stat(outputFile);
   if (!outputStat.isFile() || outputStat.size === 0) throw new Error('HyperFrames did not produce a non-empty MP4 at ' + outputFile);
 
