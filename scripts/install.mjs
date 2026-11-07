@@ -150,8 +150,20 @@ async function stageHosts() {
 
   for (const host of ['claude', 'codex', 'zcode', 'deepseek']) {
     const file = path.join(configRoot, 'motion-studio', 'adapters', host + '.mcp.json');
-    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify({ motionStudioManaged: true, mcpServers: servers }, null, 2) + '\n'); }
-    report.hostIntegrations.push(host + '-mcp-config');
+    let config = {}, existed = false;
+    try { config = JSON.parse(await readFile(file, 'utf8')); existed = true; }
+    catch (error) { if (error.code !== 'ENOENT') { report.warnings.push('Preserved unreadable ' + host + ' MCP config: ' + error.message); continue; } }
+    if (!config || typeof config !== 'object' || Array.isArray(config)) { report.warnings.push('Preserved invalid ' + host + ' MCP config.'); continue; }
+    if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) config.mcpServers = {};
+    const registered = [];
+    for (const [name, server] of Object.entries(servers)) {
+      const key = uniqueKey(config.mcpServers, name, server);
+      if (!config.mcpServers[key]) config.mcpServers[key] = server;
+      registered.push(key);
+    }
+    if (!existed) config.motionStudioManaged = true;
+    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(config, null, 2) + '\n'); }
+    report.hostIntegrations.push(host + '-mcp-config:' + registered.join(','));
   }
 
   if (commandExists('claude')) {
