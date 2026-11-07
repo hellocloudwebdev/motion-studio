@@ -23,8 +23,9 @@ test('compiles IR scene into HyperFrames HTML with exact composition and timelin
   try {
     const result = await compileHyperFramesProject(project, { outputDir: dir, sourceRoot: process.cwd() });
     assert.equal(result.manifest.scenes.length, 1);
+    assert.equal(result.manifest.scenes[0].html, 'compositions/scene-1.html');
     assert.equal(result.manifest.totalDurationFrames, 90);
-    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    const html = await readFile(path.join(dir, 'compositions', 'scene-1.html'), 'utf8');
     assert.match(html, /data-composition-id="scene-scene-1"/);
     assert.match(html, /window\.__timelines\[compositionId\]=tl/);
     assert.match(html, /&lt;Hello &amp; world&gt;/);
