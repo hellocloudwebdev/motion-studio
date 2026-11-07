@@ -51,7 +51,9 @@ const plan = [
   ...skillTargets.flatMap((target, index) => (staged[['claude','codex','codexLegacy','cursor'][index]] || []).map(name => path.join(target, name))),
   ...agentFiles.map(name => path.join(home, '.claude', 'agents', 'motion-studio-' + name))
 ];
-for (const target of plan) {
+if (!within(dataRoot, appRoot)) throw new Error('Refusing to remove an install path outside the application data directory.');
+if (!within(configRoot, recordPath) || adapterConfigs.some(file => !within(configRoot, file))) throw new Error('Refusing to remove configuration outside the Motion Studio config directory.');
+for (const target of [...skillTargets, ...agentFiles.map(name => path.join(home, '.claude', 'agents', 'motion-studio-' + name)), cursorConfig]) {
   if (!within(home, target)) throw new Error('Refusing to operate outside the user home directory: ' + target);
 }
 if (!confirm) {
