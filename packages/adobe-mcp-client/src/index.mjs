@@ -36,10 +36,10 @@ export function createAdobeMcpEnvironment({ app = 'afterEffects', allowEdits = f
 }
 
 export function premiereTokenFilePath({ platform = process.platform, home = os.homedir(), env = process.env } = {}) {
-  const configRoot = platform === 'win32'
-    ? (env.APPDATA || path.join(home, 'AppData', 'Roaming'))
-    : (env.XDG_CONFIG_HOME || path.join(home, '.config'));
   const join = platform === 'win32' ? path.win32.join : path.posix.join;
+  const configRoot = platform === 'win32'
+    ? (env.APPDATA || join(home, 'AppData', 'Roaming'))
+    : (env.XDG_CONFIG_HOME || join(home, '.config'));
   return join(configRoot, 'motion-studio', 'secrets', 'premiere-uxp-token');
 }
 
