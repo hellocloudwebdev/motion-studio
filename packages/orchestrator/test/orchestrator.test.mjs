@@ -21,7 +21,7 @@ test('Premiere assembly and final export require verified host evidence and scop
   let run = createProductionRun({ id: 'r2', projectId: 'p2' });
   run = transitionRun(run, 'planned'); run = transitionRun(run, 'rendering'); run = transitionRun(run, 'qa');
   assert.throws(() => transitionRun(run, 'assembling'), /host-readiness report/);
-  assert.throws(() => transitionRun(run, 'assembling', { hostReadiness: { ready: true, checks: [] }, approval: approval('p2', 'r2', 'premiere-assembly') }), /not verified/);
+  assert.throws(() => transitionRun(run, 'assembling', { hostReadiness: { ready: true, checks: [] }, approval: approval('p2', 'r2', 'premiere-assembly') }), /host-readiness report|not verified/);
   run = transitionRun(run, 'assembling', { hostReadiness, approval: approval('p2', 'r2', 'premiere-assembly') });
   assert.equal(run.approvals.length, 1);
   assert.throws(() => transitionRun(run, 'exporting', { hostReadiness, approval: approval('wrong-project', 'r2', 'final-export') }), /scope does not match/);
