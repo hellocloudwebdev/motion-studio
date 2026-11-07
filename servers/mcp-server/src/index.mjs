@@ -3,8 +3,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
+import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.2.0' });
+const server = new McpServer({ name: 'motion-studio', version: '0.6.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
@@ -25,5 +26,15 @@ server.tool('video.build_execution_graph', 'Build the scene-render, Premiere ass
   const routing = routeScenes(project, { availableEngines }), graph = buildExecutionGraph(routing);
   return { content: [{ type: 'text', text: JSON.stringify({ routing, graph, graphValidation: validateExecutionGraph(graph) }, null, 2) }] };
 });
+server.tool('video.evaluate_host_readiness', 'Fail-closed preflight: require verified host evidence for every routed engine plus Premiere and FFmpeg delivery.', {
+  routePlan: projectSchema, hostChecks: z.record(z.string(), z.unknown())
+}, async ({ routePlan, hostChecks }) => ({ content: [{ type: 'text', text: JSON.stringify(evaluateHostReadiness(routePlan, hostChecks), null, 2) }] }));
+server.tool('video.authorize_production_stage', 'Validate a time-bounded, project/run/stage-scoped approval after host readiness has passed. This records governance intent; it is not a cryptographic identity system.', {
+  projectId: z.string().min(1), runId: z.string().min(1),
+  stage: z.enum(['after-effects-comp', 'premiere-assembly', 'final-export']),
+  hostReadiness: projectSchema, approval: z.record(z.string(), z.unknown()), now: z.number().optional()
+}, async ({ projectId, runId, stage, hostReadiness, approval, now }) => ({
+  content: [{ type: 'text', text: JSON.stringify(authorizeProductionStage({ projectId, runId, stage, hostReadiness, approval, now }), null, 2) }]
+}));
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));
 await server.connect(new StdioServerTransport());

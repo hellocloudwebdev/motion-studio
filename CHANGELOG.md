@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0-alpha.1 — Verified production orchestration
+- Added fail-closed host readiness evaluation for routed engines, Premiere assembly and FFmpeg delivery.
+- Added project/run/stage-scoped, time-bounded approval gates before Premiere assembly and final export.
+- Added per-operation Adobe MCP approvals bound to exact tool names and argument digests.
+- Added CLI preflight and MCP tools for host readiness and production-stage authorization.
+- Added orchestration and Adobe approval tests, plus milestone 0.6 documentation.
+
 ## 0.5.0-alpha.2 — Integrated evidence-driven visual QA
 - Connected render receipts to a fail-closed QA evaluator and CLI delivery gate.
 - Added FFmpeg black-frame, frozen-frame and audio-silence analysis, plus grayscale perceptual near-duplicate detection.
