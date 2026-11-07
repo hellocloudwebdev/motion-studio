@@ -9,11 +9,11 @@ const stable = value => {
   return JSON.stringify(value);
 };
 const fingerprint = value => createHash('sha256').update(stable(value)).digest('hex');
-const eventFingerprint = event => fingerprint({ eventId: event.eventId, runId: event.runId, revision: event.revision, type: event.type, payload: event.payload });
+const eventFingerprint = event => fingerprint({ eventId: event.eventId, projectId: event.projectId, runId: event.runId, revision: event.revision, type: event.type, payload: event.payload });\nconst runKey = event => event.projectId + ':' + event.runId;
 
 function validateEvent(event) {
   if (!event || typeof event !== 'object') throw new Error('Run event must be an object.');
-  for (const field of ['eventId', 'runId', 'type']) {
+  for (const field of ['eventId', 'projectId', 'runId', 'type']) {
     if (typeof event[field] !== 'string' || !event[field]) throw new Error('Run event requires ' + field + '.');
   }
   if (!Number.isSafeInteger(event.revision) || event.revision < 1) throw new Error('Run event revision must be a positive safe integer.');
@@ -56,10 +56,10 @@ export async function openRunJournal(filePath) {
     try { parsed = validateEvent(JSON.parse(line)); }
     catch (error) { throw new Error('Run journal corruption at line ' + (index + 1) + ': ' + error.message); }
     if (byId.has(parsed.eventId)) throw new Error('Run journal contains duplicate event id: ' + parsed.eventId);
-    const previous = revisions.get(parsed.runId) || 0;
+    const key = runKey(parsed);\n    const previous = revisions.get(key) || 0;
     if (parsed.revision !== previous + 1) throw new Error('Run journal revision gap for ' + parsed.runId + ': expected ' + (previous + 1) + ', received ' + parsed.revision + '.');
     byId.set(parsed.eventId, { event: parsed, fingerprint: eventFingerprint(parsed) });
-    revisions.set(parsed.runId, parsed.revision);
+    revisions.set(key, parsed.revision);
     events.push(parsed);
   }
 
@@ -78,13 +78,13 @@ export async function openRunJournal(filePath) {
           if (previousId.fingerprint !== signature) throw new Error('Event id reused with different event content: ' + event.eventId);
           return { appended: false, duplicate: true, event: clone(previousId.event) };
         }
-        const expected = (revisions.get(event.runId) || 0) + 1;
+        const key = runKey(event);\n        const expected = (revisions.get(key) || 0) + 1;
         if (event.revision !== expected) throw new Error('Revision conflict for ' + event.runId + ': expected ' + expected + ', received ' + event.revision + '.');
         const handle = await open(resolvedPath, 'a');
         try { await handle.writeFile(JSON.stringify(event) + '\n', 'utf8'); await handle.sync(); }
         finally { await handle.close(); }
         byId.set(event.eventId, { event, fingerprint: signature });
-        revisions.set(event.runId, event.revision);
+        revisions.set(key, event.revision);
         events.push(event);
         return { appended: true, duplicate: false, event: clone(event) };
       };
