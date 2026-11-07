@@ -29,7 +29,7 @@ function run(command, args, { cwd, env = process.env, onLine = () => {}, signal,
     child.once('error', reject);
     child.once('close', code => {
       if (code === 0 || allowFailure) resolve({ code, stdout, stderr });
-      else reject(new Error(command + ' ' + args.join(' ') + ' failed with exit code ' + code + '\n' + stderr));
+      else reject(new Error(command + ' ' + args.join(' ') + ' failed with exit code ' + code + '\nstdout:\n' + stdout.slice(-8000) + '\nstderr:\n' + stderr.slice(-8000)));
     });
   });
 }
