@@ -24,3 +24,27 @@ jobs:
       - run: npm run validate:example
       - run: npm run route:example
       - run: npm run compile:example
+
+  render-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+      - name: Install Motion Studio dependencies
+        run: npm install --no-audit --no-fund
+      - name: Render real HyperFrames MP4 and verify with FFprobe
+        run: npm run render:smoke
+      - name: Upload render and QA receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-studio-0.4-render-smoke
+          path: artifacts/render-smoke/
+          if-no-files-found: warn
+          retention-days: 14
