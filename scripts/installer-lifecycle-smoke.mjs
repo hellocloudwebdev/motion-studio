@@ -9,7 +9,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'motion-studio-installer-smoke-'));
 const home = path.join(temp, 'home');
 const config = path.join(temp, 'config');
-const appRoot = path.join(home, '.local', 'share', 'motion-studio', 'app');
+const appRoot = process.platform === 'win32'
+  ? path.join(home, 'AppData', 'Local', 'motion-studio', 'app')
+  : path.join(home, '.local', 'share', 'motion-studio', 'app');
 const recordPath = path.join(config, 'motion-studio', 'install.json');
 const env = {
   ...process.env,
