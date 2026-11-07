@@ -57,7 +57,7 @@ function runHostCli(command, args, label) {
   return run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], label, true, appRoot);
 }
 function openUrl(url) {
-  if (dryRun) return;
+  if (dryRun || process.env.MOTION_STUDIO_NO_OPEN_URL === '1') return;
   if (platform === 'win32') spawnSync('cmd.exe', ['/c', 'start', '', url], { stdio: 'ignore', shell: false });
   else if (platform === 'darwin') spawnSync('open', [url], { stdio: 'ignore', shell: false });
   else if (commandExists('xdg-open')) spawnSync('xdg-open', [url], { stdio: 'ignore', shell: false });
@@ -150,8 +150,20 @@ async function stageHosts() {
 
   for (const host of ['claude', 'codex', 'zcode', 'deepseek']) {
     const file = path.join(configRoot, 'motion-studio', 'adapters', host + '.mcp.json');
-    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify({ mcpServers: servers }, null, 2) + '\n'); }
-    report.hostIntegrations.push(host + '-mcp-config');
+    let config = {}, existed = false;
+    try { config = JSON.parse(await readFile(file, 'utf8')); existed = true; }
+    catch (error) { if (error.code !== 'ENOENT') { report.warnings.push('Preserved unreadable ' + host + ' MCP config: ' + error.message); continue; } }
+    if (!config || typeof config !== 'object' || Array.isArray(config)) { report.warnings.push('Preserved invalid ' + host + ' MCP config.'); continue; }
+    if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) config.mcpServers = {};
+    const registered = [];
+    for (const [name, server] of Object.entries(servers)) {
+      const key = uniqueKey(config.mcpServers, name, server);
+      if (!config.mcpServers[key]) config.mcpServers[key] = server;
+      registered.push(key);
+    }
+    if (!existed) config.motionStudioManaged = true;
+    if (!dryRun) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(config, null, 2) + '\n'); }
+    report.hostIntegrations.push(host + '-mcp-config:' + registered.join(','));
   }
 
   if (commandExists('claude')) {
@@ -180,7 +192,7 @@ async function setupPremiereToken() {
   report.adobeMcp.premiereUxpTokenPath = tokenPath;
   report.needsUserAction.push('For Premiere Pro UXP 25.6+, install the pinned v1.28.0 CCX connector in Creative Cloud Desktop and paste the generated token into the UXP panel settings.');
   report.adobeMcp.premiereUxpConnector = 'needs-user-install';
-  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.28.0/premiere-pro-mcp-uxp-1.28.0-direct.ccx');
+  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.29.0/premiere-pro-mcp-uxp-1.28.0-direct.ccx');
 }
 async function main() {
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node.js 24 or newer is required for the After Effects MCP integration.');
@@ -196,13 +208,18 @@ async function main() {
       await cp(sourceRoot, appRoot, { recursive: true, force: true, filter: src => !src.includes(path.sep + '.git' + path.sep) && !src.includes(path.sep + 'node_modules' + path.sep) });
     }
   }
-  if (!minimal && yes) { installSystem('ffmpeg'); installSystem('blender'); }
-  if (!minimal && yes && flags.has('--install-blender')) installSystem('blender');
+  if (!minimal && yes) installSystem('ffmpeg');
+  if (!minimal && flags.has('--install-blender')) installSystem('blender');
 
   if (!dryRun) {
-    runNpm(['install', '--no-audit', '--no-fund'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
-    const appRequire = createRequire(path.join(appRoot, 'package.json'));
-    const hyperframesEntry = appRequire.resolve('hyperframes');
+    runNpm(['install', '--no-audit', '--no-fund', '--workspaces=false'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
+    const hyperframesRoot = path.join(appRoot, 'node_modules', 'hyperframes');
+    const hyperframesPackage = JSON.parse(await readFile(path.join(hyperframesRoot, 'package.json'), 'utf8'));
+    const hyperframesBin = typeof hyperframesPackage.bin === 'string'
+      ? hyperframesPackage.bin
+      : (hyperframesPackage.bin?.hyperframes || Object.values(hyperframesPackage.bin || {})[0]);
+    if (!hyperframesBin) throw new Error('Installed HyperFrames package does not declare a CLI binary.');
+    const hyperframesEntry = path.resolve(hyperframesRoot, hyperframesBin);
     run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
   }
 
@@ -222,16 +239,16 @@ async function main() {
       report.needsUserAction.push('In After Effects, enable Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network, then launch After Effects for MCP control.');
     } else report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
     if (report.detected.premierePro.installed) {
-      const detectedYear = Number(report.detected.premierePro.version || 0);
-      if (detectedYear >= 2026) await setupPremiereToken();
-      else {
-        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'compatibility decision required', status: 'needs-user-action' };
-        report.needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
+      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.29.0', hostVersion: report.detected.premierePro.version, uxpCompatible: report.detected.premierePro.uxpCompatible };
+      if (report.detected.premierePro.uxpCompatible === true) await setupPremiereToken();
+      else if (report.detected.premierePro.uxpCompatible === null) {
+        report.needsUserAction.push('Premiere exact version could not be confirmed. CEP compatibility install is available for the 0.4 assembly workflow.');
       }
-    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', host: 'missing', status: 'needs-user-install' };
+      if (!installCep) report.needsUserAction.push('Motion Studio 0.4 Premiere assembly requires the CEP compatibility connector. Close Premiere Pro and rerun install.ps1 --install-premiere-cep (or ./install.sh --install-premiere-cep).');
+    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.29.0', host: 'missing', status: 'needs-user-install' };
     if (installCep && report.detected.premierePro.installed) {
       runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
-      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP', status: 'install-command-completed' };
+      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.29.0', connector: 'CEP', status: 'install-command-completed' };
     }
   }
   if (!skipHosts) await stageHosts();

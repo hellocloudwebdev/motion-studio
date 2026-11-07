@@ -1,8 +1,8 @@
 {
   "name": "motion-studio",
-  "version": "0.3.0-alpha.1",
+  "version": "0.4.0-alpha.1",
   "private": true,
-  "description": "Engine-independent AI video production system with HyperFrames rendering and local Adobe MCP bridges.",
+  "description": "Engine-independent AI video production system with HyperFrames rendering and governed Adobe MCP orchestration.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -21,7 +21,10 @@
     "route:example": "node apps/cli/src/index.mjs route templates/startup-ad/project.json",
     "compile:example": "node apps/cli/src/index.mjs compile templates/startup-ad/project.json",
     "doctor": "node scripts/doctor.mjs",
-    "setup": "node scripts/install.mjs"
+    "setup": "node scripts/install.mjs",
+    "render:smoke": "node scripts/ci-render-smoke.mjs",
+    "test:installer-lifecycle": "node scripts/installer-lifecycle-smoke.mjs",
+    "uninstall:studio": "node scripts/uninstall.mjs"
   },
   "license": "MIT",
   "bin": {

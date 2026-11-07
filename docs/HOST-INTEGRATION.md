@@ -1,42 +1,50 @@
-# Host integration
+# Host integration — Motion Studio 0.4
 
-Motion Studio exposes one provider-neutral core through host-specific configuration. The installer registers three local stdio services:
+Motion Studio exposes a provider-neutral core through host-specific configuration. The installer registers three local stdio MCP services:
 
-- `motion-studio`: Canonical IR, planning, routing, HyperFrames compilation, rendering and QA.
+- `motion-studio`: Canonical IR, planning, routing, HyperFrames compilation/rendering, QA and Adobe orchestration.
 - `aftereffects`: `@kumoproductions/mcp-aftereffects` through `scripts/adobe-mcp-launcher.mjs aftereffects`.
 - `premiere-pro`: `premiere-pro-mcp` through `scripts/adobe-mcp-launcher.mjs premiere`.
 
-The Adobe servers remain upstream dependencies; Motion Studio does not fork or reimplement their editor control surfaces.
+The Adobe servers remain upstream dependencies. Motion Studio does not fork their Adobe-control implementations.
 
-## Safe defaults
+## Safe defaults and workflow scopes
 
 - After Effects starts with `AE_MCP_READONLY=1`.
-- `AE_MCP_ENABLE_EVAL` is always removed by the launcher.
-- Premiere starts with `PREMIERE_MCP_CAPABILITIES=inspect` and the inspection tool pack.
-- Premiere `unsafe-script` authority is never added by Motion Studio.
-- Premiere UXP token is read from a user-only secret file at runtime and is not placed in the checked-in project or host MCP JSON.
-- All three services use local stdio; no public TCP server is opened.
+- `AE_MCP_ENABLE_EVAL` is always removed.
+- During an approved AE workflow, Motion Studio starts the server with `AE_MCP_READONLY=0` and `AE_MCP_ALLOW_CATEGORIES=comp,layer,text,transform,keyframe,render`; preview only calls `ae_context`, `ae_project_info` and `ae_catalog`. It does not call `ae_do`.
+- Premiere starts with `PREMIERE_MCP_CAPABILITIES=inspect`.
+- Approved Premiere workflow uses the limited tool list for import, new-sequence creation, readback, save and export. `unsafe-script` is never included.
+- Premiere UXP token is loaded from a user-only secret file and never placed in checked-in projects or MCP JSON.
+- All servers use local stdio; no public TCP service is opened.
 
-## Claude Code
+## High-level Motion Studio MCP tools
 
-The installer copies skills to `~/.claude/skills`, copies agent role files to `~/.claude/agents`, and calls the Claude CLI to register the three stdio MCP services where supported. Generated JSON fallback is under the Motion Studio user config `adapters/claude.mcp.json`.
+1. `video.adobe_preview_ae_scene`: read current AE project, inspect live operation schemas and prepare the scene operation plan. The user must provide a new backup path.
+2. `video.adobe_apply_ae_scene`: requires the preview ID and explicit user approval. Copies the saved non-dirty project, applies allowlisted operations, saves, reads back composition/layers and captures a PNG proof frame.
+3. `video.adobe_preview_premiere_assembly`: validates scene render files, saved project identity, backup path and a new sequence name without mutation.
+4. `video.adobe_apply_premiere_assembly`: after separate approval, backs up the project, imports scene files, creates a new sequence from clips, checks active sequence identity and structure, saves and optionally exports/verifies.
 
-## Codex
+Approval IDs are single-use, expire after 30 minutes and are bound to the previewed project identity. After an uncertain mutation, Motion Studio returns `needs-reconciliation`; it does not blindly retry.
 
-The installer copies skills to `~/.agents/skills` and legacy `~/.codex/skills`, then calls the Codex CLI to register the three services. Generated JSON fallback is under `adapters/codex.mcp.json`.
+## Host-specific setup
 
-## Cursor
+### Claude Code
+The installer stages skills under `~/.claude/skills`, agent role files under `~/.claude/agents`, and registers local MCP servers when the CLI is present.
 
-The installer copies skills to `~/.cursor/skills` and merges the three MCP entries into `~/.cursor/mcp.json`. Conflicting user entries are preserved under their original names; Motion Studio selects a managed alternate key.
+### Codex
+The installer stages skills under `~/.agents/skills` (plus the legacy `~/.codex/skills` path) and registers MCP servers through the CLI.
 
-## Z Code and DeepSeek-compatible harnesses
+### Cursor
+The installer stages skills under `~/.cursor/skills` and merges MCP entries into `~/.cursor/mcp.json`, preserving existing user entries.
 
-Generic stdio MCP JSON is written under the Motion Studio user config directory at `adapters/zcode.mcp.json` and `adapters/deepseek.mcp.json`. Import that configuration into the host's MCP settings and restart the host.
+### Z Code / DeepSeek-compatible clients
+Generic stdio MCP JSON is written under the Motion Studio user config directory at `adapters/zcode.mcp.json` and `adapters/deepseek.mcp.json`. Import this configuration into the host's MCP settings and restart the host.
 
-## Adobe host checks
+## Adobe prerequisites
 
-After Effects: launch AE, open a copied test project and confirm its scripting preference **Allow Scripts to Write Files and Access Network**. The MCP can list and inspect context in read-only mode.
+After Effects: install via Creative Cloud, launch the app, enable **Allow Scripts to Write Files and Access Network**, open a saved project and close modal dialogs.
 
-Premiere: open Premiere with a test project and active sequence. On 25.6+ install the pinned v1.28.0 UXP CCX in Creative Cloud Desktop and set the generated token in the panel. Use the upstream read-only `verify_premiere_connection` check. Older Premiere versions can use the signed CEP connector installed through the upstream npm command.
+Premiere: the full Motion Studio 0.4 assembly path currently requires the upstream CEP connector. Close Premiere, then run `install.ps1 --install-premiere-cep` or `install.sh --install-premiere-cep`. UXP workflows remain available directly through the upstream server where its live capability probe supports them, but Motion Studio does not route the initial assembly flow to UXP.
 
-A successful MCP handshake does not prove an edit/export completed. Mutations require user approval, project checkpoints and post-operation readback.
+A successful MCP handshake does not prove an edit/export completed. Host readback and output evidence are required.

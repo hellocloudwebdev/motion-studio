@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "ci-render-smoke",
+    "name": "Motion Studio CI Render Smoke",
+    "objective": "Verify a real HyperFrames MP4 render and FFprobe inspection in CI.",
+    "frameRate": { "numerator": 24, "denominator": 1 },
+    "canvas": { "width": 640, "height": 360, "pixelAspectRatio": 1, "safeAreaPercent": 5 },
+    "totalDurationFrames": 48,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "A minimal animated title card.",
+    "audience": "Motion Studio CI.",
+    "message": "Real render, real media probe."
+  },
+  "brand": {
+    "colors": { "background": "#101820", "primary": "#f5a623" },
+    "fonts": []
+  },
+  "assets": [],
+  "scenes": [{
+    "id": "smoke-scene",
+    "name": "Render smoke scene",
+    "durationFrames": 48,
+    "intent": "Render one animated title card to MP4.",
+    "layers": [
+      {
+        "id": "background",
+        "kind": "shape",
+        "engineHint": "hyperframes",
+        "transform": { "x": 0, "y": 0, "width": 640, "height": 360 },
+        "style": { "backgroundColor": "#101820", "opacity": 1 }
+      },
+      {
+        "id": "headline",
+        "kind": "text",
+        "engineHint": "hyperframes",
+        "content": { "text": "MOTION STUDIO" },
+        "typography": { "family": "Arial", "sizePx": 48, "weight": 800, "alignment": "center" },
+        "transform": { "x": 40, "y": 125, "width": 560, "height": 90 },
+        "style": { "color": "#f5a623", "opacity": 1 },
+        "motion": { "preset": "fade-up", "durationFrames": 12 }
+      }
+    ]
+  }],
+  "delivery": {
+    "targets": [{
+      "id": "ci-smoke-mp4",
+      "format": "mp4",
+      "width": 640,
+      "height": 360,
+      "frameRate": { "numerator": 24, "denominator": 1 },
+      "videoCodec": "libx264",
+      "colorSpace": "Rec.709",
+      "alpha": false
+    }]
+  }
+}
