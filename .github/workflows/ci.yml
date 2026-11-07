@@ -48,3 +48,15 @@ jobs:
           path: artifacts/render-smoke/
           if-no-files-found: warn
           retention-days: 14
+
+  installer-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Exercise clean install, repeat install and uninstall in an isolated home
+        run: npm run test:installer-lifecycle
+
