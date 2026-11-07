@@ -201,14 +201,13 @@ async function main() {
 
   if (!dryRun) {
     runNpm(['install', '--no-audit', '--no-fund', '--workspaces=false'], 'Installing pinned Motion Studio, HyperFrames and Adobe MCP packages', appRoot);
-    const appRequire = createRequire(path.join(appRoot, 'package.json'));
-    let hyperframesEntry;
-    try { hyperframesEntry = appRequire.resolve('hyperframes'); }
-    catch (error) {
-      const installedEntries = await readdir(path.join(appRoot, 'node_modules')).catch(() => []);
-      const dependencyCheck = spawnSync('npm', ['ls', 'hyperframes', '--depth=0'], { cwd: appRoot, encoding: 'utf8', shell: false });
-      throw new Error('HyperFrames dependency missing after npm install. appRoot=' + appRoot + '; node_modules entries=' + installedEntries.slice(0, 80).join(',') + '; npm ls stdout=' + (dependencyCheck.stdout || '') + '; npm ls stderr=' + (dependencyCheck.stderr || '') + '; original=' + error.message);
-    }
+    const hyperframesRoot = path.join(appRoot, 'node_modules', 'hyperframes');
+    const hyperframesPackage = JSON.parse(await readFile(path.join(hyperframesRoot, 'package.json'), 'utf8'));
+    const hyperframesBin = typeof hyperframesPackage.bin === 'string'
+      ? hyperframesPackage.bin
+      : (hyperframesPackage.bin?.hyperframes || Object.values(hyperframesPackage.bin || {})[0]);
+    if (!hyperframesBin) throw new Error('Installed HyperFrames package does not declare a CLI binary.');
+    const hyperframesEntry = path.resolve(hyperframesRoot, hyperframesBin);
     run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
   }
 
