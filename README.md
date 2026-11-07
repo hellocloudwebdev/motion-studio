@@ -64,3 +64,14 @@ The renderer creates `projects/opendoor-startup-ad/engines/hyperframes/index.htm
 ## Important capability boundary
 
 This is a 0.3 alpha, not yet a production-ready one-click film studio. The HyperFrames compiler and MP4 pipeline are implemented, and Adobe MCP packages/configuration are installed by the installer. Actual After Effects/Premiere connection and editing require licensed app installation, user trust prompts and live host validation. Blender and Three.js render adapters, deep visual-critic repair, final Premiere sequence automation and persistent learning service remain follow-on work.
+
+
+## Render QA (0.5)
+
+After rendering, Motion Studio writes a render manifest, QA report, repair plan, sampled QA frames, and project-with-qa.json alongside the MP4. FFmpeg checks black/frozen frames, silence and perceptual near-duplicate holds. Tesseract OCR is used when installed; require it with --require-ocr.
+
+Commands:
+- npm run studio -- render templates/startup-ad/project.json --quality delivery
+- npm run studio -- qa-approve project-with-qa.json --actor "Producer"
+
+A clean render is not automatically approved. QA approval is an explicit recorded action. See docs/MILESTONE-0.5-IMPLEMENTATION-PLAN.md for thresholds and limitations.

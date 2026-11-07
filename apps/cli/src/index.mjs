@@ -64,5 +64,5 @@ if (['validate', 'route', 'qa', 'graph', 'compile', 'render'].includes(command))
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.5.0-alpha.1\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 0.5.0-alpha.2\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], type-scale --width 1920 --height 1080');
 }

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileHyperFramesProject } from '../../hyperframes-adapter/src/index.mjs';
 import { parseProbeOutput } from '../../ffmpeg/src/index.mjs';
+import { evaluateRenderEvidence, createRepairPlan, persistQaRecord, runVisualCritic } from '../../core/src/index.mjs';
+import { analyzeRenderedMedia } from './media-analysis.mjs';
 
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -127,8 +129,16 @@ export async function renderHyperFramesProject(project, options = {}) {
     const frameStat = await stat(framePath);
     frameEvidence.push({ atSeconds: at, path: framePath, bytes: frameStat.size, decoded: frameStat.size > 0, ffmpegExitCode: ffmpeg.code });
   }
+  const mediaAnalysis = await analyzeRenderedMedia({
+    input: outputFile, media, frameEvidence,
+    options: { safeAreaPercent: project.project.canvas.safeAreaPercent ?? 5, ...(options.mediaAnalysis || {}) },
+    signal
+  });
+  checks.mediaAnalysisPassed = mediaAnalysis.passed;
   const verified = Object.values(checks).every(Boolean) && frameEvidence.every(x => x.decoded);
-  const blockingWarnings = compile.warnings.filter(x => ['ASSET_REFERENCE_MISSING', 'ASSET_FILE_MISSING', 'EXTERNAL_ASSET', 'NON_HYPERFRAMES_LAYER', 'UNSUPPORTED_LAYER_KIND'].includes(x.code));
+  const compilerBlockers = compile.warnings.filter(x => ['ASSET_REFERENCE_MISSING', 'ASSET_FILE_MISSING', 'EXTERNAL_ASSET', 'NON_HYPERFRAMES_LAYER', 'UNSUPPORTED_LAYER_KIND'].includes(x.code));
+  const mediaBlockers = mediaAnalysis.findings.filter(x => x.severity === 'critical' || x.severity === 'high').map(x => ({ code: x.code, message: x.message }));
+  const blockingWarnings = [...compilerBlockers, ...mediaBlockers];
   const manifest = {
     projectId: project.project.id,
     projectRevision: project.project.revision || 1,
@@ -145,14 +155,40 @@ export async function renderHyperFramesProject(project, options = {}) {
     hyperFramesCheck: { path: checkReportPath, issues: checkReport },
     hyperFramesLint: { output: lint.stdout, exitCode: 0 },
     frameEvidence,
+    mediaAnalysis,
     compileWarnings: compile.warnings,
     blockingWarnings,
     steps,
     completedAt: new Date().toISOString(),
     verified,
-    productionReady: verified && blockingWarnings.length === 0
+    productionReady: false
   };
-  await writeFile(path.join(outputRoot, path.basename(outputFile) + '.render.json'), JSON.stringify(manifest, null, 2) + '\n');
-  if (!verified) throw new Error('Rendered media failed output contract inspection. See render manifest: ' + path.join(outputRoot, path.basename(outputFile) + '.render.json'));
+  const qaResult = evaluateRenderEvidence({ ...manifest, productionReady: verified && blockingWarnings.length === 0 });
+  const repairPlan = createRepairPlan(qaResult, {
+    attempt: Number.isInteger(options.repairAttempt) ? options.repairAttempt : 0,
+    maxAttempts: Number.isInteger(options.maxRepairAttempts) ? options.maxRepairAttempts : 2
+  });
+  manifest.qa = qaResult;
+  manifest.repairPlan = repairPlan;
+  manifest.productionReady = qaResult.passed && verified && blockingWarnings.length === 0;
+  if (typeof options.visualCriticProvider === 'function') {
+    manifest.visualCritic = await runVisualCritic({
+      provider: options.visualCriticProvider,
+      frames: frameEvidence.filter(frame => frame.decoded),
+      projectBrief: project.creative?.visualDirection || project.creative?.concept || '',
+      signal
+    });
+  }
+  const renderManifestPath = path.join(outputRoot, path.basename(outputFile) + '.render.json');
+  await writeFile(renderManifestPath, JSON.stringify(manifest, null, 2) + '\n');
+  await writeFile(path.join(outputRoot, 'qa-report.json'), JSON.stringify(qaResult, null, 2) + '\n');
+  await writeFile(path.join(outputRoot, 'repair-plan.json'), JSON.stringify(repairPlan, null, 2) + '\n');
+  const qaProject = persistQaRecord(project, {
+    run: { id: project.project.id + '-' + Date.now(), renderManifest: path.basename(renderManifestPath) },
+    qaResult: { ...qaResult, productionReady: manifest.productionReady },
+    repairPlan
+  });
+  await writeFile(path.join(outputRoot, 'project-with-qa.json'), JSON.stringify(qaProject, null, 2) + '\n');
+  if (!manifest.productionReady) throw new Error('Rendered media failed deterministic QA. See QA report: ' + path.join(outputRoot, 'qa-report.json'));
   return manifest;
 }

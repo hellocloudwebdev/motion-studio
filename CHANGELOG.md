@@ -1,11 +1,12 @@
 # Changelog
 
-## 0.5.0-alpha.1 — Evidence-driven QA foundation
-- Added fail-closed render evidence evaluation for output contracts, sampled frames and blocking warnings.
-- Added structured render defects and deterministic scene-scoped repair plans.
-- Added a hard retry ceiling with human escalation.
-- Added focused unit tests for success, failure and retry exhaustion.
-- Added the 0.5 implementation plan; render-manager and media-analysis integration remain in progress.
+## 0.5.0-alpha.2 — Integrated evidence-driven visual QA
+- Connected render receipts to a fail-closed QA evaluator and CLI delivery gate.
+- Added FFmpeg black-frame, frozen-frame and audio-silence analysis, plus grayscale perceptual near-duplicate detection.
+- Added optional Tesseract OCR, text safe-area checks and subtitle-region review notes.
+- Persisted QA runs, repair history and explicit producer approvals in an enriched Canonical Video IR copy.
+- Added opt-in advisory visual-critic provider contract and bounded repair plans with human escalation.
+- Added synthetic MP4 integration coverage and cross-platform FFmpeg setup in CI.
 
 ## 0.3.0-alpha.1 — HyperFrames render pipeline
 - Added Canonical Video IR to HyperFrames compiler and MP4 render/inspection pipeline.

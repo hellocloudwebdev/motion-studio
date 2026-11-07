@@ -4,34 +4,665 @@
   "title": "Motion Studio Canonical Video Project",
   "type": "object",
   "additionalProperties": true,
-  "required": ["schemaVersion", "project", "creative", "scenes", "delivery"],
+  "required": [
+    "schemaVersion",
+    "project",
+    "creative",
+    "scenes",
+    "delivery"
+  ],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
-    "project": { "type": "object", "required": ["id", "name", "objective", "frameRate", "canvas", "totalDurationFrames"], "properties": {
-      "id": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 }, "objective": { "type": "string", "minLength": 1 },
-      "frameRate": { "$ref": "#/$defs/frameRate" }, "canvas": { "$ref": "#/$defs/canvas" }, "totalDurationFrames": { "type": "integer", "minimum": 1 },
-      "colorSpace": { "type": "string", "default": "Rec.709" }, "createdAt": { "type": "string", "format": "date-time" }, "revision": { "type": "integer", "minimum": 1, "default": 1 }
-    }, "additionalProperties": true },
-    "creative": { "type": "object", "required": ["concept", "audience", "message"], "properties": {
-      "concept": { "type": "string" }, "audience": { "type": "string" }, "message": { "type": "string" }, "mood": { "type": "array", "items": { "type": "string" } }, "visualDirection": { "type": "string" }, "references": { "type": "array", "items": { "type": "string" } }
-    }, "additionalProperties": true },
-    "brand": { "type": "object", "properties": { "colors": { "type": "object" }, "fonts": { "type": "array", "items": { "$ref": "#/$defs/font" } }, "logoAssetId": { "type": "string" }, "rules": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": true },
-    "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" }, "default": [] },
-    "scenes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scene" } },
-    "timeline": { "type": "object", "properties": { "tracks": { "type": "array" }, "markers": { "type": "array" } }, "additionalProperties": true },
-    "delivery": { "type": "object", "required": ["targets"], "properties": { "targets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/deliveryTarget" } }, "primaryTargetId": { "type": "string" } }, "additionalProperties": true },
-    "qa": { "type": "object", "properties": { "gates": { "type": "array" }, "defects": { "type": "array" }, "repairHistory": { "type": "array" } }, "additionalProperties": true },
-    "provenance": { "type": "object", "properties": { "sources": { "type": "array" }, "software": { "type": "array" }, "decisions": { "type": "array" } }, "additionalProperties": true }
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "objective",
+        "frameRate",
+        "canvas",
+        "totalDurationFrames"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frameRate": {
+          "$ref": "#/$defs/frameRate"
+        },
+        "canvas": {
+          "$ref": "#/$defs/canvas"
+        },
+        "totalDurationFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "colorSpace": {
+          "type": "string",
+          "default": "Rec.709"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "creative": {
+      "type": "object",
+      "required": [
+        "concept",
+        "audience",
+        "message"
+      ],
+      "properties": {
+        "concept": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mood": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "visualDirection": {
+          "type": "string"
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "brand": {
+      "type": "object",
+      "properties": {
+        "colors": {
+          "type": "object"
+        },
+        "fonts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/font"
+          }
+        },
+        "logoAssetId": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset"
+      },
+      "default": []
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/scene"
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "properties": {
+        "tracks": {
+          "type": "array"
+        },
+        "markers": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "targets"
+      ],
+      "properties": {
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/deliveryTarget"
+          }
+        },
+        "primaryTargetId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "qa": {
+      "type": "object",
+      "properties": {
+        "gates": {
+          "type": "array"
+        },
+        "defects": {
+          "type": "array"
+        },
+        "repairHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "createdAt",
+              "passed",
+              "productionReady"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "passed": {
+                "type": "boolean"
+              },
+              "productionReady": {
+                "type": "boolean"
+              },
+              "summary": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "defects": {
+                "type": "array"
+              },
+              "renderManifest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "runId",
+              "approved",
+              "actor",
+              "approvedAt"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "approved": {
+                "type": "boolean"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "approvedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array"
+        },
+        "software": {
+          "type": "array"
+        },
+        "decisions": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    }
   },
   "$defs": {
-    "frameRate": { "type": "object", "required": ["numerator", "denominator"], "properties": { "numerator": { "type": "integer", "minimum": 1 }, "denominator": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
-    "canvas": { "type": "object", "required": ["width", "height"], "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 }, "pixelAspectRatio": { "type": "number", "exclusiveMinimum": 0, "default": 1 }, "safeAreaPercent": { "type": "number", "minimum": 0, "maximum": 25, "default": 5 } }, "additionalProperties": true },
-    "font": { "type": "object", "required": ["family"], "properties": { "family": { "type": "string" }, "weight": { "type": ["string", "integer"] }, "source": { "enum": ["adobe-fonts", "google-fonts", "local", "bundled", "unknown"] }, "license": { "type": "string" }, "licenseUrl": { "type": "string" }, "fallbacks": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": true },
-    "asset": { "type": "object", "required": ["id", "kind", "uri"], "properties": { "id": { "type": "string" }, "kind": { "enum": ["image", "video", "audio", "font", "vector", "model-3d", "generated", "other"] }, "uri": { "type": "string" }, "sha256": { "type": "string" }, "license": { "type": "string" }, "source": { "type": "string" }, "rightsStatus": { "enum": ["cleared", "restricted", "unknown", "user-owned"] }, "metadata": { "type": "object" } }, "additionalProperties": true },
-    "typography": { "type": "object", "required": ["family", "sizePx"], "properties": { "family": { "type": "string" }, "weight": { "type": ["string", "integer"] }, "sizePx": { "type": "number", "exclusiveMinimum": 0 }, "lineHeight": { "type": "number", "exclusiveMinimum": 0 }, "tracking": { "type": "number" }, "alignment": { "enum": ["left", "center", "right", "justify"] }, "maxLines": { "type": "integer", "minimum": 1 }, "safeArea": { "type": "boolean", "default": true } }, "additionalProperties": true },
-    "motion": { "type": "object", "properties": { "preset": { "type": "string" }, "durationFrames": { "type": "integer", "minimum": 0 }, "delayFrames": { "type": "integer", "minimum": 0 }, "easing": { "type": "string" }, "staggerFrames": { "type": "integer", "minimum": 0 }, "intensity": { "type": "number", "minimum": 0 }, "motionBlur": { "type": "boolean" } }, "additionalProperties": true },
-    "layer": { "type": "object", "required": ["id", "kind"], "properties": { "id": { "type": "string" }, "kind": { "enum": ["text", "shape", "image", "video", "3d", "camera", "effect", "audio", "chart", "particle", "composite", "other"] }, "engineHint": { "enum": ["after-effects", "hyperframes", "blender", "threejs", "ffmpeg", "auto"] }, "requiredCapabilities": { "type": "array", "items": { "type": "string" } }, "assetId": { "type": "string" }, "content": {}, "typography": { "$ref": "#/$defs/typography" }, "motion": { "$ref": "#/$defs/motion" }, "startFrame": { "type": "integer", "minimum": 0 }, "durationFrames": { "type": "integer", "minimum": 1 }, "dependsOn": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": true },
-    "scene": { "type": "object", "required": ["id", "name", "durationFrames", "intent", "layers"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "startFrame": { "type": "integer", "minimum": 0 }, "durationFrames": { "type": "integer", "minimum": 1 }, "intent": { "type": "string" }, "transitionIn": { "type": "object" }, "transitionOut": { "type": "object" }, "camera": { "type": "object" }, "layers": { "type": "array", "items": { "$ref": "#/$defs/layer" } }, "audioCues": { "type": "array" }, "outputContract": { "type": "object" } }, "additionalProperties": true },
-    "deliveryTarget": { "type": "object", "required": ["id", "format", "width", "height", "frameRate"], "properties": { "id": { "type": "string" }, "format": { "enum": ["mp4", "mov", "webm", "image-sequence", "prores"] }, "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 }, "frameRate": { "$ref": "#/$defs/frameRate" }, "videoCodec": { "type": "string" }, "audioCodec": { "type": "string" }, "colorSpace": { "type": "string" }, "alpha": { "type": "boolean" }, "platform": { "type": "string" } }, "additionalProperties": true }
+    "frameRate": {
+      "type": "object",
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "canvas": {
+      "type": "object",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pixelAspectRatio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1
+        },
+        "safeAreaPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 25,
+          "default": 5
+        }
+      },
+      "additionalProperties": true
+    },
+    "font": {
+      "type": "object",
+      "required": [
+        "family"
+      ],
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "weight": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        },
+        "source": {
+          "enum": [
+            "adobe-fonts",
+            "google-fonts",
+            "local",
+            "bundled",
+            "unknown"
+          ]
+        },
+        "license": {
+          "type": "string"
+        },
+        "licenseUrl": {
+          "type": "string"
+        },
+        "fallbacks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "asset": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "uri"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "image",
+            "video",
+            "audio",
+            "font",
+            "vector",
+            "model-3d",
+            "generated",
+            "other"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "rightsStatus": {
+          "enum": [
+            "cleared",
+            "restricted",
+            "unknown",
+            "user-owned"
+          ]
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "typography": {
+      "type": "object",
+      "required": [
+        "family",
+        "sizePx"
+      ],
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "weight": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        },
+        "sizePx": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "lineHeight": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "tracking": {
+          "type": "number"
+        },
+        "alignment": {
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "justify"
+          ]
+        },
+        "maxLines": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "safeArea": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "motion": {
+      "type": "object",
+      "properties": {
+        "preset": {
+          "type": "string"
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delayFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "easing": {
+          "type": "string"
+        },
+        "staggerFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "intensity": {
+          "type": "number",
+          "minimum": 0
+        },
+        "motionBlur": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "layer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "text",
+            "shape",
+            "image",
+            "video",
+            "3d",
+            "camera",
+            "effect",
+            "audio",
+            "chart",
+            "particle",
+            "composite",
+            "other"
+          ]
+        },
+        "engineHint": {
+          "enum": [
+            "after-effects",
+            "hyperframes",
+            "blender",
+            "threejs",
+            "ffmpeg",
+            "auto"
+          ]
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assetId": {
+          "type": "string"
+        },
+        "content": {},
+        "typography": {
+          "$ref": "#/$defs/typography"
+        },
+        "motion": {
+          "$ref": "#/$defs/motion"
+        },
+        "startFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "durationFrames",
+        "intent",
+        "layers"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "startFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "intent": {
+          "type": "string"
+        },
+        "transitionIn": {
+          "type": "object"
+        },
+        "transitionOut": {
+          "type": "object"
+        },
+        "camera": {
+          "type": "object"
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/layer"
+          }
+        },
+        "audioCues": {
+          "type": "array"
+        },
+        "outputContract": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "deliveryTarget": {
+      "type": "object",
+      "required": [
+        "id",
+        "format",
+        "width",
+        "height",
+        "frameRate"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "mp4",
+            "mov",
+            "webm",
+            "image-sequence",
+            "prores"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameRate": {
+          "$ref": "#/$defs/frameRate"
+        },
+        "videoCodec": {
+          "type": "string"
+        },
+        "audioCodec": {
+          "type": "string"
+        },
+        "colorSpace": {
+          "type": "string"
+        },
+        "alpha": {
+          "type": "boolean"
+        },
+        "platform": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
   }
 }

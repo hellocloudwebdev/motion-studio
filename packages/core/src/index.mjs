@@ -3,3 +3,5 @@ export { routeScenes, engineCapabilities } from './route-scenes.mjs';
 export { calculateTypeScale, estimateTextFit } from './typography.mjs';
 export { runProjectQA } from './qa.mjs';
 export { evaluateRenderEvidence, createRepairPlan } from './render-qa.mjs';
+export { persistQaRecord } from './qa-record.mjs';
+export { runVisualCritic } from './visual-critic.mjs';
