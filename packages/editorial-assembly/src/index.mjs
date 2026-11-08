@@ -139,12 +139,24 @@ export function validateEditorialAssembly(assembly) {
     return { valid: false, issues: [issue('INVALID_ASSEMBLY', '$', 'Expected assemblyVersion 1.0.0 with scenes and clips arrays.')] };
   }
   const ids = new Set();
+  const byTrack = new Map();
   for (const [index, clip] of assembly.clips.entries()) {
     if (!clip || typeof clip.clipId !== 'string' || !clip.clipId.trim()) issues.push(issue('CLIP_ID_REQUIRED', '$.clips[' + index + '].clipId', 'Every clip needs an id.'));
     else if (ids.has(clip.clipId)) issues.push(issue('DUPLICATE_CLIP_ID', '$.clips[' + index + '].clipId', 'Clip ids must be unique.'));
     else ids.add(clip.clipId);
     if (!Number.isInteger(clip.startFrame) || !Number.isInteger(clip.endFrame) || clip.startFrame < 0 || clip.endFrame <= clip.startFrame) issues.push(issue('INVALID_CLIP_RANGE', '$.clips[' + index + ']', 'Clip range must be a positive integer frame interval.'));
     if (!/^[VAG][1-9][0-9]*$/.test(clip.track || '')) issues.push(issue('INVALID_TRACK_ID', '$.clips[' + index + '].track', 'Track id must be Vn, An or Gn.'));
+    if (clip && typeof clip.track === 'string' && Number.isInteger(clip.startFrame) && Number.isInteger(clip.endFrame)) {
+      byTrack.set(clip.track, [...(byTrack.get(clip.track) || []), { ...clip, index }]);
+    }
+  }
+  for (const [track, clips] of byTrack) {
+    clips.sort((a, b) => a.startFrame - b.startFrame || a.endFrame - b.endFrame);
+    for (let i = 1; i < clips.length; i += 1) {
+      if (clips[i].startFrame < clips[i - 1].endFrame) {
+        issues.push(issue('TRACK_OVERLAP', '$.clips[' + clips[i].index + ']', 'Clips ' + clips[i - 1].clipId + ' and ' + clips[i].clipId + ' overlap on track ' + track + '.'));
+      }
+    }
   }
   return { valid: issues.length === 0, issues, summary: { errors: issues.length } };
 }
