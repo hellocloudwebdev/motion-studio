@@ -149,7 +149,7 @@ export async function generateMediaDerivatives(sourcePath, outputDirectory, opti
       '-vf', 'scale=w=640:h=-2:force_original_aspect_ratio=decrease', '-q:v', '3'
     ], 'image/jpeg');
   }
-  if (hasAudio && settings.profile !== 'proxy') {
+  if (hasAudio && !hasVideo && settings.profile !== 'proxy') {
     await makeOutput('waveform', '.png', [
       '-i', source, '-filter_complex', 'showwavespic=s=1600x240:colors=white',
       '-frames:v', '1'
