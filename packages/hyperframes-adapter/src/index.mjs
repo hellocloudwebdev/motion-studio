@@ -24,11 +24,23 @@ function cssFor(layer, fontFamily) {
     'opacity:' + Number(style.opacity ?? 1),
     'color:' + (style.color || '#ffffff'),
     'background:' + (style.backgroundColor || 'transparent'),
-    'border-radius:' + (style.borderRadius ?? 0) + 'px',
-    'padding:' + (style.padding ?? 0) + 'px',
+    'border-radius:' + Math.max(0, Number(style.borderRadius ?? 0)) + 'px',
+    'padding:' + Math.max(0, Number(style.padding ?? 0)) + 'px',
     'display:flex', 'align-items:' + (style.verticalAlign === 'middle' ? 'center' : 'flex-start'),
     'justify-content:' + (style.textAlign === 'center' ? 'center' : style.textAlign === 'right' ? 'flex-end' : 'flex-start')
   ];
+  const rotation = Number(layer.transform?.rotation ?? 0);
+  const scale = Number(layer.transform?.scale ?? 1);
+  if (Number.isFinite(rotation) && rotation !== 0) styles.push('transform:rotate(' + rotation + 'deg) scale(' + (Number.isFinite(scale) ? scale : 1) + ')');
+  else if (Number.isFinite(scale) && scale !== 1) styles.push('transform:scale(' + scale + ')');
+  if (style.border) styles.push('border:' + cssString(style.border));
+  if (style.boxShadow) styles.push('box-shadow:' + cssString(style.boxShadow));
+  if (style.background) styles.push('background:' + cssString(style.background));
+  if (style.gradient && Array.isArray(style.gradient.colors) && style.gradient.colors.length >= 2) {
+    const colors = style.gradient.colors.slice(0, 4).map(color => cssString(color));
+    const angle = Number.isFinite(Number(style.gradient.angle)) ? Number(style.gradient.angle) : 135;
+    styles.push('background:linear-gradient(' + angle + 'deg,' + colors.join(',') + ')');
+  }
   if (layer.kind === 'text') {
     const typo = layer.typography || {};
     styles.push('font-family:"' + cssString(typo.family || fontFamily || 'Arial') + '"');
@@ -51,7 +63,10 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
     ' data-start="' + seconds(startFrame, frameRate) + '"' +
     ' data-duration="' + seconds(durationFrames, frameRate) + '"' +
     ' data-track-index="' + Number(layer.trackIndex ?? index) + '"' +
-    ' data-motion="' + esc(motion) + '"';
+    ' data-motion="' + esc(motion) + '"' +
+    ' data-motion-duration="' + seconds(Number(layer.motion?.durationFrames ?? 20), frameRate) + '"' +
+    ' data-motion-delay="' + seconds(Number(layer.motion?.delayFrames ?? 0), frameRate) + '"' +
+    ' data-motion-ease="' + esc(layer.motion?.easing || 'power3.out') + '"';
   const style = ' style="' + esc(cssFor(layer, fontFamily)) + '"';
   const content = layer.content?.text ?? layer.content ?? layer.text ?? '';
   let local = '', global = '';
