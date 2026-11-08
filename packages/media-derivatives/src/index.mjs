@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, mkdir, stat } from 'node:fs/promises';
+import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -67,7 +67,7 @@ async function sha256(filePath) {
 
 async function assertRegularSource(source) {
   const info = await lstat(source);
-  if (info.isSymbolicLink() || !info.isFile()) throw new Error('Media source must be a regular, non-symlink file.');
+  if (info.isSymbolicLink() || !info.isFile() || await realpath(source) !== source) throw new Error('Media source must be a regular file reached without symlinked path components.');
   return info;
 }
 
@@ -96,9 +96,8 @@ export async function generateMediaDerivatives(sourcePath, outputDirectory, opti
   const sourceInfo = await assertRegularSource(source);
   await mkdir(outputRoot, { recursive: true });
   const outputInfo = await lstat(outputRoot);
-  if (outputInfo.isSymbolicLink() || !outputInfo.isDirectory()) throw new Error('Output directory must be a real directory, not a symlink.');
+  if (outputInfo.isSymbolicLink() || !outputInfo.isDirectory() || await realpath(outputRoot) !== outputRoot) throw new Error('Output directory must be reached without symlinked path components.');
   const realOutputRoot = path.resolve(outputRoot);
-  if (!within(realOutputRoot, realOutputRoot)) throw new Error('Invalid output directory.');
   const ext = path.extname(source).toLowerCase();
   const mimeType = MIME[ext];
   if (!mimeType) throw new Error('Unsupported media type for derivatives: ' + (ext || '(no extension)'));
@@ -111,9 +110,9 @@ export async function generateMediaDerivatives(sourcePath, outputDirectory, opti
   let probe;
   try { probe = JSON.parse(probeResult.stdout); } catch { throw new Error('FFprobe returned invalid JSON.'); }
   const streams = Array.isArray(probe.streams) ? probe.streams : [];
-  const hasVideo = streams.some(stream => stream.codec_type === 'video');
-  const hasAudio = streams.some(stream => stream.codec_type === 'audio');
   const isImage = mimeType.startsWith('image/');
+  const hasVideo = !isImage && streams.some(stream => stream.codec_type === 'video');
+  const hasAudio = streams.some(stream => stream.codec_type === 'audio');
   if (!hasVideo && !hasAudio && !isImage) throw new Error('No supported video, audio or raster-image stream was found.');
   const duration = Number(probe.format?.duration);
   const seek = Number.isFinite(duration) && duration > 0
