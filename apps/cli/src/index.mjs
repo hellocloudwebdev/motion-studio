@@ -6,7 +6,7 @@ import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/o
 import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
-import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry } from '../../../packages/asset-registry/src/index.mjs';
+import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -47,6 +47,11 @@ if (command === 'assets') {
     const output = path.resolve(option('--output', registryFile));
     await writeFile(output, JSON.stringify(updated, null, 2) + '\n');
     print({ updated: true, assetId: option('--asset-id', ''), output, needsRightsReview: updated.summary.needsRightsReview });
+  } else if (subcommand === 'probe') {
+    const assetFile = args.find(x => !x.startsWith('--'));
+    if (!assetFile) throw new Error('Usage: motion-studio assets probe <media-file> [--ffprobe <path>]');
+    const report = await probeAsset(assetFile, { ffprobePath: option('--ffprobe', undefined), timeoutMs: Number(option('--timeout-ms', '15000')) });
+    print(report);
   } else if (subcommand === 'attach') {
     const projectFile = args.find(x => !x.startsWith('--'));
     const registryFile = option('--registry', '');
@@ -56,7 +61,7 @@ if (command === 'assets') {
     const output = path.resolve(option('--output', 'project-with-assets.json'));
     await writeFile(output, JSON.stringify(result.project, null, 2) + '\n');
     print({ output, report: result.report });
-  } else throw new Error('Unknown assets command. Use scan, verify, approve-rights or attach.');
+  } else throw new Error('Unknown assets command. Use scan, verify, probe, approve-rights or attach.');
 } else if (command === 'qa-approve') {
   if (!file) throw new Error('Usage: motion-studio qa-approve <project-with-qa.json> --actor <name> [--note <text>] [--output <path>]');
   const project = await load(file);
@@ -142,5 +147,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.7.0-alpha.1\nCommands: assets scan|verify|approve-rights|attach, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 0.7.0-alpha.1\nCommands: assets scan|verify|probe|approve-rights|attach, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
