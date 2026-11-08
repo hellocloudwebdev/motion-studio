@@ -9,6 +9,7 @@ import { renderHyperFramesProject } from '../../../packages/render-manager/src/i
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
+import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -82,6 +83,24 @@ if (command === 'assets') {
   const result = validateEditorialAssembly(await load(assemblyFile));
   print(result);
   if (!result.valid) process.exitCode = 2;
+} else if (command === 'premiere' && file === 'export') {
+  const assemblyFile = args.find(x => !x.startsWith('--'));
+  if (!assemblyFile) throw new Error('Usage: motion-studio premiere export <assembly.json> --output <sequence.fcpxml> [--asset-root <directory>] [--manifest <handoff.json>]');
+  const assembly = await load(assemblyFile);
+  const result = await exportPremiereInterchange(assembly, {
+    assetRoot: option('--asset-root', undefined),
+    sequenceName: option('--sequence-name', undefined),
+    width: Number(option('--width', '1920')),
+    height: Number(option('--height', '1080'))
+  });
+  if (!result.valid) { print(result); process.exitCode = 2; }
+  else {
+    const output = option('--output', 'sequence.fcpxml');
+    await writeFile(path.resolve(output), result.xml, 'utf8');
+    const manifestPath = option('--manifest', 'premiere-handoff.json');
+    await writeFile(path.resolve(manifestPath), JSON.stringify(result.manifest, null, 2) + '\n', 'utf8');
+    print({ valid: true, output: path.resolve(output), manifest: path.resolve(manifestPath), warnings: result.issues });
+  }
 } else if (command === 'media' && file === 'derive') {
   const source = args.find(x => !x.startsWith('--'));
   const outputDir = option('--output-dir', 'media-derived');
@@ -180,5 +199,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.9.0-alpha.1\\nCommands: assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\\nCommands: assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

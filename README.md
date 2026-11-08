@@ -2,7 +2,7 @@
 
 **Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
 
-> **Current milestone: 0.9.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning.
+> **Current milestone: 1.0.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning; 1.0 adds FCPXML interchange export with provenance.
 
 ## Install on a new PC
 
@@ -63,6 +63,16 @@ motion-studio assets attach ./project.json --registry ./asset-registry.json --ou
 ```
 
 Asset scans are read-only and stream SHA-256 hashing for large files. New media defaults to `needs-review`; an approval record is a producer's audit assertion, not legal clearance. Verification detects changed/missing bytes but does not validate license terms. See [Asset library](docs/ASSET-LIBRARY.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
+
+## Milestone 1.0: Premiere interchange export
+
+Export a validated editorial manifest to FCPXML plus a provenance sidecar:
+
+```bash
+motion-studio premiere export assembly.json --asset-root ./media --output sequence.fcpxml --manifest premiere-handoff.json
+```
+
+Relative media paths are resolved only under the explicit asset root. The exporter preserves rational frame timing, source in-points, track lanes, source checksums and rights-review state. It fails closed on unresolved files and unsupported URI schemes. This writes an interchange file; it does not launch Premiere, import the sequence or perform edits. See [Premiere interchange](docs/PREMIERE-INTERCHANGE.md) and [Milestone 1.0](docs/MILESTONE-1.0-IMPLEMENTATION-PLAN.md).
 
 ## Milestone 0.9: editorial assembly planning
 

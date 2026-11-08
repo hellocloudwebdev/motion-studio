@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0-alpha.1 — Premiere interchange and governed sequence handoff
+- Started FCPXML 1.10 export from validated editorial assembly manifests.
+- Preserved rational frame timing, track lanes, source checksums and rights-review metadata in an interchange sidecar.
+- Added CLI and MCP export entry points with explicit asset-root resolution and fail-closed unresolved-media handling.
+
+
 ## 0.9.0-alpha.1 — Editorial assembly planning
 - Added deterministic frame-accurate scene and layer timeline planning with overlap-aware video, audio and graphics tracks.
 - Added asset URI, checksum and rights-review propagation plus structural and handoff validation.

@@ -7,8 +7,9 @@ import { evaluateHostReadiness, authorizeProductionStage } from '../../../packag
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
+import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.9.0-alpha.1' });
+const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
@@ -74,6 +75,15 @@ server.tool('video.validate_editorial_assembly', 'Validate a previously generate
   assembly: projectSchema
 }, async ({ assembly }) => ({
   content: [{ type: 'text', text: JSON.stringify(validateEditorialAssembly(assembly), null, 2) }]
+}));
+server.tool('video.export_premiere_interchange', 'Export a validated editorial assembly to FCPXML plus a provenance sidecar. This does not launch or modify Premiere.', {
+  assembly: projectSchema,
+  assetRoot: z.string().optional(),
+  sequenceName: z.string().min(1).optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional()
+}, async ({ assembly, ...options }) => ({
+  content: [{ type: 'text', text: JSON.stringify(await exportPremiereInterchange(assembly, options), null, 2) }]
 }));
 server.tool('video.generate_media_derivatives', 'Generate local video proxies, thumbnails, audio waveforms or raster-image previews. Source files are never modified; outputs are hashed and are not delivery masters.', {
   sourcePath: z.string().min(1), outputDirectory: z.string().min(1),
