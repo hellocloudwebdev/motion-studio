@@ -10,6 +10,7 @@ Make HyperFrames + GSAP the deterministic primary 2D renderer for Motion Studio,
 - [x] Add deterministic inline SVG bar and line charts from structured IR data.
 - [x] Escape chart labels/titles and restrict chart color tokens.
 - [x] Restrict CSS color, border and shadow values before writing inline style attributes.
+- [x] Add estimated text-overflow and safe-area diagnostics, with an optional strict typography compile gate.
 - [x] Add tests for chart output, invalid chart data, escaping, motion timing and CSS injection attempts.
 
 ## Remaining 1.2 work
