@@ -1,8 +1,8 @@
 {
   "name": "motion-studio",
-  "version": "0.8.0-alpha.1",
+  "version": "0.9.0-alpha.1",
   "private": true,
-  "description": "Engine-independent AI video production system with governed asset intelligence and media derivatives.",
+  "description": "Engine-independent AI video production system with governed media intake and editorial assembly planning.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
