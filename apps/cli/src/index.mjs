@@ -6,6 +6,7 @@ import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/o
 import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
+import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -20,7 +21,51 @@ function paths(project, sourceFile) {
   return { sourceRoot: path.dirname(path.resolve(sourceFile)), projectRoot, engineRoot: path.join(projectRoot, 'engines', 'hyperframes'), outputRoot: path.join(projectRoot, 'renders') };
 }
 
-if (command === 'qa-approve') {
+if (command === 'assets') {
+  const subcommand = file;
+  if (subcommand === 'scan') {
+    const root = args.find(x => !x.startsWith('--'));
+    if (!root) throw new Error('Usage: motion-studio assets scan <directory> --output <registry.json> [--previous <registry.json>]');
+    const previousFile = option('--previous', '');
+    const previous = previousFile ? await load(previousFile) : null;
+    const metadataByPath = previous ? Object.fromEntries((previous.assets || []).map(asset => [asset.relativePath, asset.metadata || {}])) : undefined;
+    const registry = await scanAssetDirectory(root, { recursive: !flags().has('--no-recursive'), includeHidden: flags().has('--include-hidden'), maxFiles: Number(option('--max-files', '10000')), metadataByPath });
+    const output = path.resolve(option('--output', path.join(root, 'asset-registry.json')));
+    await writeFile(output, JSON.stringify(registry, null, 2) + '\n');
+    print({ output, assetCount: registry.assetCount, summary: registry.summary, duplicates: registry.duplicates });
+  } else if (subcommand === 'verify') {
+    const registryFile = args.find(x => !x.startsWith('--'));
+    if (!registryFile) throw new Error('Usage: motion-studio assets verify <registry.json> [--root <directory>]');
+    const registry = await load(registryFile);
+    const result = await verifyAssetRegistry(registry, { rootPath: option('--root', undefined) });
+    const report = option('--report', '');
+    if (report) await writeFile(path.resolve(report), JSON.stringify(result, null, 2) + '\n');
+    print(result);
+    if (!result.valid) process.exitCode = 4;
+  } else if (subcommand === 'approve-rights') {
+    const registryFile = args.find(x => !x.startsWith('--'));
+    if (!registryFile) throw new Error('Usage: motion-studio assets approve-rights <registry.json> --asset-id <id> --actor <name> --license <license> --usage <scope> [--attribution <text>]');
+    const registry = await load(registryFile);
+    const updated = approveAssetRights(registry, { assetId: option('--asset-id', ''), actor: option('--actor', ''), license: option('--license', ''), usageScope: option('--usage', ''), attribution: option('--attribution', null), expiresAt: option('--expires-at', null), note: option('--note', '') });
+    const output = path.resolve(option('--output', registryFile));
+    await writeFile(output, JSON.stringify(updated, null, 2) + '\n');
+    print({ updated: true, assetId: option('--asset-id', ''), output, needsRightsReview: updated.summary.needsRightsReview });
+  } else if (subcommand === 'probe') {
+    const assetFile = args.find(x => !x.startsWith('--'));
+    if (!assetFile) throw new Error('Usage: motion-studio assets probe <media-file> [--ffprobe <path>]');
+    const report = await probeAsset(assetFile, { ffprobePath: option('--ffprobe', undefined), timeoutMs: Number(option('--timeout-ms', '15000')) });
+    print(report);
+  } else if (subcommand === 'attach') {
+    const projectFile = args.find(x => !x.startsWith('--'));
+    const registryFile = option('--registry', '');
+    if (!projectFile || !registryFile) throw new Error('Usage: motion-studio assets attach <project.json> --registry <registry.json> [--output <project-with-assets.json>]');
+    const project = await load(projectFile), registry = await load(registryFile);
+    const result = attachAssetRegistry(project, registry);
+    const output = path.resolve(option('--output', 'project-with-assets.json'));
+    await writeFile(output, JSON.stringify(result.project, null, 2) + '\n');
+    print({ output, report: result.report });
+  } else throw new Error('Unknown assets command. Use scan, verify, probe, approve-rights or attach.');
+} else if (command === 'qa-approve') {
   if (!file) throw new Error('Usage: motion-studio qa-approve <project-with-qa.json> --actor <name> [--note <text>] [--output <path>]');
   const project = await load(file);
   const runs = project.qa?.runs || [];
@@ -105,5 +150,5 @@ if (command === 'qa-approve') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.6.0-alpha.1\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 0.7.0-alpha.1\nCommands: assets scan|verify|probe|approve-rights|attach, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
