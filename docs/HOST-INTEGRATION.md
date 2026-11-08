@@ -37,6 +37,6 @@ Generic stdio MCP JSON is written under the Motion Studio user config directory 
 
 After Effects: launch AE, open a copied test project and confirm its scripting preference **Allow Scripts to Write Files and Access Network**. The MCP can list and inspect context in read-only mode.
 
-Premiere: open Premiere with a test project and active sequence. On 25.6+ install the pinned v1.28.0 UXP CCX in Creative Cloud Desktop and set the generated token in the panel. Use the upstream read-only `verify_premiere_connection` check. Older Premiere versions can use the signed CEP connector installed through the upstream npm command.
+Premiere: open Premiere with a test project and active sequence. On 25.6+ install the pinned v1.30.0 UXP CCX in Creative Cloud Desktop and set the generated token in the panel. Use the upstream read-only `verify_premiere_connection` check. Older Premiere versions can use the signed CEP connector installed through the upstream npm command.
 
 A successful MCP handshake does not prove an edit/export completed. Mutations require user approval, project checkpoints and post-operation readback.

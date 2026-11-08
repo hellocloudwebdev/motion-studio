@@ -35,7 +35,7 @@ The user must sign in, install entitled products and accept Adobe trust prompts.
 
 After Effects MCP requires Node 24+, After Effects 2024–2026, and the AE preference **Allow Scripts to Write Files and Access Network**. Onboarding starts it read-only. See [Adobe setup policy](INSTALLER-ADOBE-POLICY.md).
 
-Premiere MCP is pinned to the published npm package v1.28.0. Premiere 25.6+ can use its authenticated UXP connector; the installer opens the matching official v1.28.0 CCX download and creates a local token file. The user installs/trusts the CCX in Creative Cloud and copies the token into the panel. Older Premiere versions can use the signed CEP compatibility connector; close Premiere first, then run:
+Premiere MCP is pinned to the published npm package v1.30.0. Premiere 25.6+ can use its authenticated UXP connector; the installer opens the matching official v1.30.0 CCX download and creates a local token file. The user installs/trusts the CCX in Creative Cloud and copies the token into the panel. Older Premiere versions can use the signed CEP compatibility connector; close Premiere first, then run:
 ```powershell
 .\install.ps1 --install-premiere-cep
 ```

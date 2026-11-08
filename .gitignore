@@ -6,7 +6,10 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
-projects/**/renders/
+projects/*/engines/
+projects/*/renders/
+projects/*/deliverables/
+work/flow-bottle/
 projects/**/cache/
 projects/**/temp/
 .cache/

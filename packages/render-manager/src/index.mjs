@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, access, stat, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +30,7 @@ function run(command, args, { cwd, env = process.env, onLine = () => {}, signal,
     child.once('error', reject);
     child.once('close', code => {
       if (code === 0 || allowFailure) resolve({ code, stdout, stderr });
-      else reject(new Error(command + ' ' + args.join(' ') + ' failed with exit code ' + code + '\n' + stderr));
+      else reject(new Error(command + ' ' + args.join(' ') + ' failed with exit code ' + code + '\n' + (stderr || stdout).slice(-8000)));
     });
   });
 }
@@ -82,7 +83,7 @@ export async function renderHyperFramesProject(project, options = {}) {
 
   await execute('doctor', ['doctor'], true);
   const lint = await execute('lint', ['lint', engineRoot, '--json']);
-  const check = await execute('check', ['check', engineRoot, '--json']);
+  const check = await execute('check', ['check', engineRoot, '--json'], true);
   const checkReportPath = path.join(outputRoot, 'hyperframes-check.json');
   let checkReport = null;
   try {
@@ -91,15 +92,27 @@ export async function renderHyperFramesProject(project, options = {}) {
   } catch {
     throw new Error('HyperFrames check did not return valid JSON. Output: ' + check.stdout.slice(0, 2000));
   }
+  if (check.code !== 0 || checkReport.ok === false) {
+    throw new Error('HyperFrames layout/runtime QA failed before render. Evidence: ' + checkReportPath + '\n' + JSON.stringify(checkReport.layout?.findings || checkReport.findings || [], null, 2));
+  }
 
   const fullDurationSeconds = compile.manifest.durationSeconds;
   const expectedIrDuration = Number(project.project.totalDurationFrames) * project.project.frameRate.denominator / project.project.frameRate.numerator;
-  const snapshotTimes = options.snapshotTimes || [...new Set([0, Math.max(0, fullDurationSeconds / 2), Math.max(0, fullDurationSeconds - 1 / fps.value)])];
+  // Sample each scene at its midpoint. Avoid the nominal last frame, which may
+  // fall past the last decodable frame when container durations are rounded.
+  const sampleEnd = Math.max(0, fullDurationSeconds - 2 / fps.value);
+  let nextSceneStart = 0;
+  const sceneSamples = (project.scenes || []).slice(0, 12).map(scene => {
+    const start = Number.isInteger(scene.startFrame) ? scene.startFrame : nextSceneStart;
+    nextSceneStart = Math.max(nextSceneStart, start + scene.durationFrames);
+    return Math.min(sampleEnd, (start + scene.durationFrames / 2) / fps.value);
+  });
+  const snapshotTimes = options.snapshotTimes || [...new Set(sceneSamples.length ? sceneSamples : [fullDurationSeconds / 2])];
   await execute('snapshot', ['snapshot', engineRoot, '--at', snapshotTimes.map(x => Number(x).toFixed(3)).join(',')]);
 
   const outputFile = path.join(outputRoot, (project.project.id || 'motion-studio') + '-' + quality + '.mp4');
   await rm(outputFile, { force: true });
-  await execute('render', ['render', '--output', outputFile, '--fps', fps.argument, '--quality', quality, '--workers', String(workerCount), '--no-confirm']);
+  await execute('render', ['render', '--output', outputFile, '--fps', fps.argument, '--quality', quality, '--workers', String(workerCount), '--low-memory-mode']);
   const outputStat = await stat(outputFile);
   if (!outputStat.isFile() || outputStat.size === 0) throw new Error('HyperFrames did not produce a non-empty MP4 at ' + outputFile);
 
@@ -124,7 +137,9 @@ export async function renderHyperFramesProject(project, options = {}) {
     const at = Math.max(0, Math.min(expectedDuration - 1 / fps.value, Number(snapshotTimes[i])));
     const framePath = path.join(inspectionDir, 'frame-' + String(i + 1).padStart(2, '0') + '.png');
     const ffmpeg = await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', at.toFixed(3), '-i', outputFile, '-frames:v', '1', '-update', '1', framePath], { cwd: outputRoot, signal });
-    const frameStat = await stat(framePath);
+    let frameStat;
+    try { frameStat = await stat(framePath); }
+    catch { throw new Error('FFmpeg could not decode QA sample at ' + at.toFixed(3) + 's from rendered output: ' + outputFile); }
     frameEvidence.push({ atSeconds: at, path: framePath, bytes: frameStat.size, decoded: frameStat.size > 0, ffmpegExitCode: ffmpeg.code });
   }
   const verified = Object.values(checks).every(Boolean) && frameEvidence.every(x => x.decoded);
@@ -132,6 +147,7 @@ export async function renderHyperFramesProject(project, options = {}) {
   const manifest = {
     projectId: project.project.id,
     projectRevision: project.project.revision || 1,
+    projectIrSha256: createHash('sha256').update(JSON.stringify(project)).digest('hex'),
     engine: 'hyperframes',
     hyperframesVersion: cli.version,
     output: outputFile,

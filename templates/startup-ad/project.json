@@ -70,7 +70,7 @@
             "safeArea": true
           },
           "content": {
-            "text": "Planning a house party\\nshouldn't be this hard."
+            "text": "Planning a house party\nshouldn't be this hard."
           },
           "transform": {
             "x": 140,
@@ -116,7 +116,7 @@
             "safeArea": true
           },
           "content": {
-            "text": "Make room for\\nthe good times."
+            "text": "Make room for\nthe good times."
           },
           "transform": {
             "x": 160,
@@ -171,7 +171,7 @@
             "safeArea": true
           },
           "content": {
-            "text": "Find a space.\\nBook by the hour.\\nBring everyone together."
+            "text": "Find a space.\nBook by the hour.\nBring everyone together."
           },
           "transform": {
             "x": 140,
@@ -264,6 +264,7 @@
           "id": "s5-cta",
           "kind": "text",
           "engineHint": "hyperframes",
+          "allowOcclusion": true,
           "typography": {
             "family": "Inter",
             "sizePx": 112,
@@ -273,7 +274,7 @@
             "safeArea": true
           },
           "content": {
-            "text": "Your next gathering\\nstarts here."
+            "text": "Your next gathering\nstarts here."
           },
           "transform": {
             "x": 180,

@@ -1,4 +1,4 @@
-import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProject } from '../../core/src/index.mjs';
@@ -11,14 +11,14 @@ const cssString = value => String(value ?? '').replaceAll('\\', '\\\\').replaceA
 const seconds = (frames, frameRate) => Number((frames * frameRate.denominator / frameRate.numerator).toFixed(6));
 const isExternalUri = value => /^https?:\/\//i.test(value || '');
 
-function cssFor(layer, fontFamily) {
+function cssFor(layer, fontFamily, index = 0) {
   const style = layer.style || {};
   const x = Number(layer.transform?.x ?? layer.layout?.x ?? 0);
   const y = Number(layer.transform?.y ?? layer.layout?.y ?? 0);
   const width = Number(layer.transform?.width ?? layer.layout?.width ?? 800);
   const height = Number(layer.transform?.height ?? layer.layout?.height ?? 180);
   const styles = [
-    'position:absolute', 'box-sizing:border-box',
+    'position:absolute', 'box-sizing:border-box', 'z-index:' + Number(layer.zIndex ?? layer.trackIndex ?? index),
     'left:' + x + 'px', 'top:' + y + 'px',
     'width:' + width + 'px', 'height:' + height + 'px',
     'opacity:' + Number(style.opacity ?? 1),
@@ -48,11 +48,12 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
   const durationFrames = Number(layer.durationFrames ?? Math.max(1, scene.durationFrames - localStartFrame));
   const motion = layer.motion?.preset || 'fade';
   const buildAttrs = startFrame => ' id="' + layerId + '" class="clip ms-layer ms-' + esc(layer.kind) + '"' +
+    (layer.allowOcclusion === true ? ' data-layout-allow-occlusion=""' : '') +
     ' data-start="' + seconds(startFrame, frameRate) + '"' +
     ' data-duration="' + seconds(durationFrames, frameRate) + '"' +
     ' data-track-index="' + Number(layer.trackIndex ?? index) + '"' +
     ' data-motion="' + esc(motion) + '"';
-  const style = ' style="' + esc(cssFor(layer, fontFamily)) + '"';
+  const style = ' style="' + esc(cssFor(layer, fontFamily, index)) + '"';
   const content = layer.content?.text ?? layer.content ?? layer.text ?? '';
   let local = '', global = '';
   if (layer.kind === 'text') {
@@ -115,9 +116,11 @@ export async function compileHyperFramesProject(project, options = {}) {
   const assets = new Map((project.assets || []).map(asset => [asset.id, asset]));
   const copiedAssets = new Map();
   const warnings = [];
+  const sceneSourceDir = path.join(outputDir, 'scene-sources');
   await mkdir(path.join(outputDir, 'assets'), { recursive: true });
   await mkdir(path.join(outputDir, 'snapshots'), { recursive: true });
   await mkdir(path.join(outputDir, 'renders'), { recursive: true });
+  await mkdir(sceneSourceDir, { recursive: true });
 
   async function resolveAsset(assetId) {
     if (!assetId) return null;
@@ -157,7 +160,15 @@ export async function compileHyperFramesProject(project, options = {}) {
   let cumulativeFrame = 0;
   const frameRate = project.project.frameRate;
   const displayFont = project.brand?.fonts?.display || project.brand?.fonts?.body || 'Arial';
+  // Remove the exact legacy scene source files written at the engine root by
+  // earlier compiler versions. HyperFrames only permits one root composition;
+  // keeping stale managed entrypoints here makes a valid rebuild fail lint.
+  for (const scene of project.scenes || []) {
+    await rm(path.join(outputDir, safeId(scene.id) + '.html'), { force: true });
+  }
   for (const scene of selectedScenes) {
+    const sceneStartFrame = Number.isInteger(scene.startFrame) ? scene.startFrame : cumulativeFrame;
+    const sceneEndFrame = sceneStartFrame + scene.durationFrames;
     const sceneMarkup = [];
     for (let index = 0; index < (scene.layers || []).length; index += 1) {
       const layer = scene.layers[index];
@@ -171,7 +182,7 @@ export async function compileHyperFramesProject(project, options = {}) {
         continue;
       }
       const localStartFrame = Number(layer.startFrame ?? 0);
-      const globalStartFrame = cumulativeFrame;
+      const globalStartFrame = sceneStartFrame;
       const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
       const needsAsset = ['image', 'video', 'audio'].includes(layer.kind) && !assetUri;
       if (needsAsset && options.allowMissingAssetsAsPlaceholders === false) throw new Error('Required media asset is unavailable for layer ' + layer.id + ' in scene ' + scene.id + '.');
@@ -186,13 +197,15 @@ export async function compileHyperFramesProject(project, options = {}) {
       compositionId, title: scene.name, width: project.project.canvas.width, height: project.project.canvas.height,
       duration: sceneDuration, elements: sceneMarkup, background: project.brand?.colors?.background || '#101010'
     });
-    await writeFile(path.join(outputDir, sceneId + '.html'), sceneDoc, 'utf8');
-    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: sceneId + '.html' });
-    cumulativeFrame += scene.durationFrames;
+    const sceneSource = path.join('scene-sources', sceneId + '.html').replaceAll('\\', '/');
+    await writeFile(path.join(outputDir, sceneSource), sceneDoc, 'utf8');
+    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: sceneStartFrame, html: sceneSource });
+    cumulativeFrame = Math.max(cumulativeFrame, sceneEndFrame);
   }
 
   await cp(DEFAULT_GSAP, path.join(outputDir, 'assets', 'gsap.min.js'));
-  const rootDuration = seconds(cumulativeFrame, frameRate);
+  const rootDurationFrames = Math.max(cumulativeFrame, Number(project.project.totalDurationFrames) || 0);
+  const rootDuration = seconds(rootDurationFrames, frameRate);
   const rootCompositionId = 'motion-studio-root';
   const rootDoc = documentHtml({
     compositionId: rootCompositionId, title: project.project.name, width: project.project.canvas.width, height: project.project.canvas.height,
@@ -207,7 +220,7 @@ export async function compileHyperFramesProject(project, options = {}) {
     rootCompositionId,
     frameRate,
     canvas: project.project.canvas,
-    totalDurationFrames: cumulativeFrame,
+    totalDurationFrames: rootDurationFrames,
     durationSeconds: rootDuration,
     entrypoint: 'index.html',
     scenes: sceneEntries,

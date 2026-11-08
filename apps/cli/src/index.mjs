@@ -5,6 +5,7 @@ import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
+import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -14,12 +15,29 @@ function option(name, fallback) {
 }
 function flags() { return new Set(args.filter(x => x.startsWith('--'))); }
 async function load(pathName) { return JSON.parse(await readFile(pathName, 'utf8')); }
+function audioInputsFor(project, sourceFile) {
+  const assets = new Map((project.assets || []).map(asset => [asset.id, asset]));
+  const cues = [
+    ...(project.audio?.tracks || []),
+    ...(project.scenes || []).flatMap(scene => scene.audioCues || [])
+  ];
+  return cues.map((cue, index) => {
+    const asset = assets.get(cue.assetId);
+    if (!asset || asset.kind !== 'audio' || typeof asset.uri !== 'string') throw new Error('Audio cue ' + index + ' references an unresolved audio asset: ' + cue.assetId);
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(asset.uri)) throw new Error('Remote audio assets must be resolved into the project before local delivery.');
+    const sourceRoot = path.dirname(path.resolve(sourceFile)), audioPath = path.resolve(sourceRoot, asset.uri), relative = path.relative(sourceRoot, audioPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Audio asset path escapes the project source directory: ' + cue.assetId);
+    const offsetFrames = Number(cue.offsetFrames ?? cue.startFrame ?? 0);
+    if (!Number.isInteger(offsetFrames) || offsetFrames < 0) throw new Error('Audio cue offset must be a non-negative integer frame count.');
+    return { path: audioPath, kind: cue.kind || cue.role || 'audio', offsetSeconds: offsetFrames * project.project.frameRate.denominator / project.project.frameRate.numerator, volume: cue.volume ?? 1 };
+  });
+}
 function paths(project, sourceFile) {
   const projectRoot = path.join(process.cwd(), 'projects', project.project.id);
   return { sourceRoot: path.dirname(path.resolve(sourceFile)), projectRoot, engineRoot: path.join(projectRoot, 'engines', 'hyperframes'), outputRoot: path.join(projectRoot, 'renders') };
 }
 
-if (['validate', 'route', 'qa', 'graph', 'compile', 'render'].includes(command)) {
+if (['validate', 'route', 'qa', 'graph', 'compile', 'render', 'deliver'].includes(command)) {
   if (!file) throw new Error('Usage: motion-studio ' + command + ' <project.json> [--output <path>] [--quality draft|standard|high]');
   const project = await load(file);
   const validation = validateProject(project);
@@ -35,6 +53,15 @@ if (['validate', 'route', 'qa', 'graph', 'compile', 'render'].includes(command))
     const routing = routeScenes(project);
     const graph = buildExecutionGraph(routing);
     print({ routing, graph, graphValidation: validateExecutionGraph(graph) });
+  } else if (command === 'deliver') {
+    const sourceVideo = args.find(x => !x.startsWith('--'));
+    if (!sourceVideo) throw new Error('Usage: motion-studio deliver <project.json> <rendered.mp4>');
+    const target = paths(project, file);
+    let renderManifest = null;
+    try { renderManifest = JSON.parse(await readFile(path.resolve(sourceVideo) + '.render.json', 'utf8')); } catch {}
+    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, audioInputs: audioInputsFor(project, file) });
+    print(delivery);
+    if (!delivery.acceptance.passed) process.exitCode = 2;
   } else if (command === 'compile' || command === 'render') {
     if (!validation.valid) { print(validation); process.exitCode = 1; }
     else {
@@ -64,5 +91,5 @@ if (['validate', 'route', 'qa', 'graph', 'compile', 'render'].includes(command))
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.3.0-alpha.1\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 0.3.0-alpha.1\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, type-scale --width 1920 --height 1080');
 }

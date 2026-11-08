@@ -18,7 +18,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP, Three.js, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.28.0`, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
+The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP, Three.js, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.30.0`, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
 
 The installer detects Adobe Creative Cloud, After Effects and Premiere Pro. Adobe desktop apps are licensed: the user must sign into Creative Cloud and install/activate them. Motion Studio opens Adobe's official installation workflow and verifies the apps afterward; it does not automate login or licensing.
 
@@ -37,7 +37,7 @@ See [Installation](docs/INSTALLATION.md), [Adobe policy](docs/INSTALLER-ADOBE-PO
 | Procedural/WebGL 3D | Three.js |
 | Media processing, encoding and inspection | FFmpeg / FFprobe |
 
-## Try the first renderer
+## Try the local render and delivery path
 
 ```bash
 npm install
@@ -46,9 +46,17 @@ npm run validate:example
 npm run route:example
 npm run compile:example
 node apps/cli/src/index.mjs render templates/startup-ad/project.json --quality draft --workers 1
+node apps/cli/src/index.mjs deliver templates/startup-ad/project.json projects/opendoor-startup-ad/renders/opendoor-startup-ad-draft.mp4
 ```
 
-The renderer creates `projects/opendoor-startup-ad/engines/hyperframes/index.html`, renders an MP4 with one worker, checks the result with FFprobe and writes sampled frame evidence plus a render JSON receipt. The sample includes intentional placeholder assets; replace those with licensed/user-owned media before treating its output as a delivery.
+The renderer compiles the IR, runs HyperFrames lint/runtime/layout checks, renders with one worker, probes the MP4 and stores scene-sampled frame evidence. The delivery command transcodes each declared profile, probes outputs, creates a thumbnail, packages source/provenance/assets/captions and writes a receipt. It returns a nonzero status while production evidence is incomplete. The startup-ad sample routes a Blender scene and references missing image/footage, so its render is deliberately not production-ready. For a clean local acceptance path, use `templates/kinetic-type/project.json`:
+
+```bash
+node apps/cli/src/index.mjs render templates/kinetic-type/project.json --quality draft --workers 1
+node apps/cli/src/index.mjs deliver templates/kinetic-type/project.json projects/kinetic-type-demo/renders/kinetic-type-demo-draft.mp4
+```
+
+That fixture is a silent typography demo, not a narrated production.
 
 ## Architecture
 
@@ -63,4 +71,4 @@ The renderer creates `projects/opendoor-startup-ad/engines/hyperframes/index.htm
 
 ## Important capability boundary
 
-This is a 0.3 alpha, not yet a production-ready one-click film studio. The HyperFrames compiler and MP4 pipeline are implemented, and Adobe MCP packages/configuration are installed by the installer. Actual After Effects/Premiere connection and editing require licensed app installation, user trust prompts and live host validation. Blender and Three.js render adapters, deep visual-critic repair, final Premiere sequence automation and persistent learning service remain follow-on work.
+This is a 0.3 alpha, not yet a production-ready one-click film studio. The HyperFrames compiler, local draft rendering, FFmpeg finishing and package generation are implemented. A primitive-based Blender frame-sequence adapter exists but has not run on a Blender host. Actual After Effects/Premiere edits require licensed apps and live host validation. Three.js rendering, natural-language production generation, Premiere interchange/sequence automation, AI QA/repair and cross-platform release evidence remain unimplemented. See [roadmap status](docs/IMPLEMENTATION-STATUS-1.0.md).

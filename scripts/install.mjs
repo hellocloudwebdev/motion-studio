@@ -178,9 +178,9 @@ async function setupPremiereToken() {
     }
   }
   report.adobeMcp.premiereUxpTokenPath = tokenPath;
-  report.needsUserAction.push('For Premiere Pro UXP 25.6+, install the pinned v1.28.0 CCX connector in Creative Cloud Desktop and paste the generated token into the UXP panel settings.');
+  report.needsUserAction.push('For Premiere Pro UXP 25.6+, install the pinned v1.30.0 CCX connector in Creative Cloud Desktop and paste the generated token into the UXP panel settings.');
   report.adobeMcp.premiereUxpConnector = 'needs-user-install';
-  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.28.0/premiere-pro-mcp-uxp-1.28.0-direct.ccx');
+  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.30.0/premiere-pro-mcp-uxp-1.30.0-direct.ccx');
 }
 async function main() {
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node.js 24 or newer is required for the After Effects MCP integration.');
@@ -225,13 +225,13 @@ async function main() {
       const detectedYear = Number(report.detected.premierePro.version || 0);
       if (detectedYear >= 2026) await setupPremiereToken();
       else {
-        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'compatibility decision required', status: 'needs-user-action' };
+        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'compatibility decision required', status: 'needs-user-action' };
         report.needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
       }
-    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', host: 'missing', status: 'needs-user-install' };
+    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', host: 'missing', status: 'needs-user-install' };
     if (installCep && report.detected.premierePro.installed) {
       runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
-      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.28.0', connector: 'CEP', status: 'install-command-completed' };
+      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'CEP', status: 'install-command-completed' };
     }
   }
   if (!skipHosts) await stageHosts();

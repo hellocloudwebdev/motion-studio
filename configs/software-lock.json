@@ -13,9 +13,9 @@
     "gsap": "3.14.2",
     "three": "0.181.2",
     "@modelcontextprotocol/sdk": "1.32.1",
-    "zod": "3.25.0",
+    "zod": "4.6.7",
     "@kumoproductions/mcp-aftereffects": "0.3.2",
-    "premiere-pro-mcp": "1.29.0"
+    "premiere-pro-mcp": "1.30.0"
   },
   "adobe": {
     "afterEffects": {
@@ -47,10 +47,10 @@
         "darwin"
       ],
       "mcpPackage": "premiere-pro-mcp",
-      "npmVersion": "1.29.0",
+      "npmVersion": "1.30.0",
       "uxpMinimum": "25.6",
-      "uxpReleaseTag": "v1.29.0",
-      "uxpAsset": "premiere-pro-mcp-uxp-1.29.0-direct.ccx",
+      "uxpReleaseTag": "v1.30.0",
+      "uxpAsset": "premiere-pro-mcp-uxp-1.30.0-direct.ccx",
       "cepAsset": "MCPBridgeCEP.zxp",
       "cepAllowed": true,
       "unsafeScript": false
@@ -69,7 +69,7 @@
     }
   },
   "notes": [
-    "Premiere Pro MCP v1.29.0 is the currently published npm package; use the matching v1.29.0 UXP/CEP release assets.",
+    "Premiere Pro MCP v1.30.0 is pinned; install the matching v1.30.0 UXP/CEP release assets.",
     "Premiere UXP is supported only on Premiere Pro 25.6+; exact app version is read from the installed binary or Info.plist. If the version cannot be confirmed, ask the user instead of guessing.",
     "Adobe applications are licensed products; installers must use the user's Creative Cloud account and UI.",
     "All Adobe MCPs run locally over stdio. No public network listener is enabled."

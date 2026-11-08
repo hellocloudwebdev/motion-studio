@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "kinetic-type-demo",
+    "name": "Make Ideas Move",
+    "objective": "A short kinetic typography sample for the Motion Studio local render and delivery path.",
+    "frameRate": { "numerator": 30, "denominator": 1 },
+    "canvas": { "width": 1280, "height": 720, "pixelAspectRatio": 1, "safeAreaPercent": 6 },
+    "totalDurationFrames": 120,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "Make ideas move.",
+    "audience": "Motion Studio users",
+    "message": "A minimal, self-contained sample that can render without external footage or 3D software.",
+    "mood": ["bold", "clear", "playful"],
+    "visualDirection": "Midnight navy background, warm accent, centered oversized typography."
+  },
+  "brand": {
+    "colors": { "background": "#091324", "accent": "#72F2C2", "text": "#F4F7FB" },
+    "fonts": { "display": "Arial", "body": "Arial" }
+  },
+  "assets": [],
+  "scenes": [
+    {
+      "id": "title",
+      "name": "Kinetic title",
+      "durationFrames": 120,
+      "intent": "Introduce the studio with one focused typographic statement.",
+      "layers": [
+        {
+          "id": "background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+          "style": { "backgroundColor": "#091324", "opacity": 1 }
+        },
+        {
+          "id": "headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Make ideas\nmove." },
+          "typography": { "family": "Arial", "sizePx": 116, "weight": 800, "lineHeight": 0.98, "alignment": "center", "safeArea": true },
+          "transform": { "x": 120, "y": 205, "width": 1040, "height": 320 },
+          "style": { "color": "#F4F7FB" },
+          "motion": { "preset": "fade-up", "durationFrames": 24 }
+        },
+        {
+          "id": "accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 514, "y": 568, "width": 252, "height": 8 },
+          "style": { "backgroundColor": "#72F2C2", "opacity": 1 }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    { "startFrame": 18, "endFrame": 114, "text": "Make ideas move." }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1280,
+        "height": 720,
+        "frameRate": { "numerator": 30, "denominator": 1 },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": false
+      }
+    ]
+  }
+}
