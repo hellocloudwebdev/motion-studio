@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, mkdir, realpath, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -65,10 +65,23 @@ async function sha256(filePath) {
   });
 }
 
+async function assertPathHasNoSymlinks(target, expectedKind, message) {
+  const parsed = path.parse(target);
+  const segments = target.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  let current = parsed.root;
+  let finalInfo;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const info = await lstat(current);
+    if (info.isSymbolicLink()) throw new Error(message);
+    finalInfo = info;
+  }
+  if (!finalInfo || (expectedKind === 'file' && !finalInfo.isFile()) || (expectedKind === 'directory' && !finalInfo.isDirectory())) throw new Error(message);
+  return finalInfo;
+}
+
 async function assertRegularSource(source) {
-  const info = await lstat(source);
-  if (info.isSymbolicLink() || !info.isFile() || await realpath(source) !== source) throw new Error('Media source must be a regular, non-symlink file reached without symlinked path components.');
-  return info;
+  return assertPathHasNoSymlinks(source, 'file', 'Media source must be a regular, non-symlink file reached without symlinked path components.');
 }
 
 function validateOptions(options) {
@@ -95,8 +108,7 @@ export async function generateMediaDerivatives(sourcePath, outputDirectory, opti
   const outputRoot = path.resolve(outputDirectory);
   const sourceInfo = await assertRegularSource(source);
   await mkdir(outputRoot, { recursive: true });
-  const outputInfo = await lstat(outputRoot);
-  if (outputInfo.isSymbolicLink() || !outputInfo.isDirectory() || await realpath(outputRoot) !== outputRoot) throw new Error('Output directory must be reached without symlinked path components.');
+  await assertPathHasNoSymlinks(outputRoot, 'directory', 'Output directory must be reached without symlinked path components.');
   const realOutputRoot = path.resolve(outputRoot);
   const ext = path.extname(source).toLowerCase();
   const mimeType = MIME[ext];
