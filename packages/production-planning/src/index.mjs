@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 
 const OPTIONAL_FIELDS = ['audience', 'purpose', 'durationSeconds', 'language', 'platform', 'aspectRatio'];
+const QUESTIONS = {
+  audience: 'Who is the intended audience?',
+  purpose: 'What should the video achieve?',
+  durationSeconds: 'What is the target duration in seconds?',
+  language: 'Which language should the narration and on-screen copy use?',
+  platform: 'Where will the video be published?',
+  aspectRatio: 'Which aspect ratio should the video use?'
+};
 const text = value => typeof value === 'string' ? value.trim() : '';
 const issue = (code, path, message, severity = 'error') => ({ code, path, message, severity });
 
@@ -10,7 +18,7 @@ function stableId(value) {
 
 /**
  * Convert user intake into a provider-neutral production brief.
- * This function preserves unknowns; it never invents audience, duration, platform or brand facts.
+ * Unknowns remain explicit; this function never invents creative requirements.
  */
 export function createProductionBrief(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -40,20 +48,12 @@ export function createProductionBrief(input) {
       required: input.researchRequired === true,
       reason: text(input.researchReason) || null
     },
-    constraints: Array.isArray(input.constraints) ? input.constraints.map(text).filter(Boolean) : [],
-    openQuestions: OPTIONAL_FIELDS.filter(key => brief[key] === null).map(field => ({
-      field,
-      question: ({
-        audience: 'Who is the intended audience?',
-        purpose: 'What should the video achieve?',
-        durationSeconds: 'What is the target duration in seconds?',
-        language: 'Which language should the narration and on-screen copy use?',
-        platform: 'Where will the video be published?',
-        aspectRatio: 'Which aspect ratio should the video use?'
-      })[field],
-      blocking: false
-    }))
+    constraints: Array.isArray(input.constraints) ? input.constraints.map(text).filter(Boolean) : []
   };
+
+  brief.openQuestions = OPTIONAL_FIELDS
+    .filter(field => brief[field] === null)
+    .map(field => ({ field, question: QUESTIONS[field], blocking: false }));
 
   const validation = validateProductionBrief(brief);
   if (!validation.valid) {
@@ -89,11 +89,12 @@ export function validateProductionBrief(brief) {
   if (brief.references !== undefined && !Array.isArray(brief.references)) issues.push(issue('REFERENCES_NOT_ARRAY', '$.references', 'references must be an array.'));
   if (brief.suppliedAssets !== undefined && !Array.isArray(brief.suppliedAssets)) issues.push(issue('ASSETS_NOT_ARRAY', '$.suppliedAssets', 'suppliedAssets must be an array.'));
   if (brief.constraints !== undefined && !Array.isArray(brief.constraints)) issues.push(issue('CONSTRAINTS_NOT_ARRAY', '$.constraints', 'constraints must be an array.'));
+  if (brief.openQuestions !== undefined && !Array.isArray(brief.openQuestions)) issues.push(issue('QUESTIONS_NOT_ARRAY', '$.openQuestions', 'openQuestions must be an array.'));
   return { valid: !issues.some(x => x.severity === 'error'), issues };
 }
 
 /**
- * Produce a deterministic provider-neutral DAG for the creative department.
+ * Produces a deterministic provider-neutral workflow DAG.
  * It describes work and dependencies; it does not claim that an AI agent ran.
  */
 export function buildCreativeWorkflow(brief) {
