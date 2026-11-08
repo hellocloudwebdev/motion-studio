@@ -22,7 +22,8 @@ test('scan indexes supported media deterministically with content-addressed ids'
   assert.equal(registry.summary.byKind.audio, 1);
   assert.equal(registry.summary.needsRightsReview, 3);
   assert.equal(registry.duplicates.length, 1);
-  assert.equal(registry.assets[0].id, registry.assets[1].id);
+  assert.notEqual(registry.assets[0].id, registry.assets[1].id);
+  assert.equal(registry.assets[0].contentId, registry.assets[1].contentId);
   assert.equal(registry.assets[0].sha256, registry.assets[1].sha256);
 }));
 
