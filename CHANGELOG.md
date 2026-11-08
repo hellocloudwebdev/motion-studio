@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0-alpha.1 — Editorial assembly planning
+- Added deterministic frame-accurate scene and layer timeline planning with overlap-aware video, audio and graphics tracks.
+- Added asset URI, checksum and rights-review propagation plus structural and handoff validation.
+- Added CLI and MCP planning/validation entry points, tests and operator documentation.
+
+
 ## 0.8.0-alpha.1 — Media derivatives and preview artifacts
 - Added safe FFmpeg/FFprobe derivative generation for video proxies, thumbnails, audio waveforms and raster-image previews.
 - Added SHA-256 provenance manifests, content-derived output names, bounded process execution and no-overwrite defaults.
