@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0-alpha.1 — Asset intelligence and governed media intake
+- Added deterministic asset scanning, content-addressed IDs, streaming SHA-256 checksums and duplicate detection.
+- Added FFprobe media metadata inspection and file-integrity verification.
+- Added rights-review records with actor, license, usage scope, attribution and optional expiry.
+- Added additive registry-to-IR attachment and asset identity/reference validation.
+- Added CLI asset scan, verify, probe, approve-rights and attach commands.
+- Added asset-library guide, milestone plan and regression tests.
+
+
 ## 0.6.0-alpha.1 — Verified production orchestration
 - Added fail-closed host readiness evaluation for routed engines, Premiere assembly and FFmpeg delivery.
 - Added project/run/stage-scoped, time-bounded approval gates before Premiere assembly and final export.
