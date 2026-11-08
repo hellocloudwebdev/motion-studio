@@ -28,7 +28,7 @@ test('compiles IR scene into HyperFrames HTML with exact composition and timelin
     assert.match(html, /data-composition-id="scene-scene-1"/);
     assert.match(html, /window\.__timelines\[compositionId\]=tl/);
     assert.match(html, /&lt;Hello &amp; world&gt;/);
-    assert.equal(result.warnings[0].code, 'NON_HYPERFRAMES_LAYER');
+    assert.ok(result.warnings.some(warning => warning.code === 'NON_HYPERFRAMES_LAYER'));
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -78,5 +78,25 @@ test('sanitizes untrusted color and style values before emitting inline CSS', as
     assert.doesNotMatch(html, /javascript:/);
     assert.doesNotMatch(html, /red;position:fixed/);
     assert.match(html, /color:\s*#ffffff/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('reports estimated text overflow and unsafe text bounds', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-typography-'));
+  try {
+    const input = structuredClone(project);
+    input.scenes[0].layers = [{
+      id: 'long-title', kind: 'text', engineHint: 'hyperframes',
+      content: { text: 'A very long headline that cannot fit in this tiny text box' },
+      typography: { family: 'Inter', sizePx: 96, maxLines: 1 },
+      transform: { x: 0, y: 0, width: 160, height: 48 }
+    }];
+    const result = await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    assert.ok(result.warnings.some(warning => warning.code === 'TEXT_OVERFLOW_ESTIMATED'));
+    assert.ok(result.warnings.some(warning => warning.code === 'TEXT_OUTSIDE_SAFE_AREA'));
+    await assert.rejects(
+      () => compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd(), strictTypography: true }),
+      /Text overflow estimated/
+    );
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
