@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
+import { lstat, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -130,10 +130,15 @@ export async function generateMediaDerivatives(sourcePath, outputDirectory, opti
       if (error.code !== 'ENOENT') throw error;
     }
     const writeArgs = [...args, settings.overwrite ? '-y' : '-n', target];
-    await run(ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', ...writeArgs], { timeoutMs: settings.timeoutMs });
-    const info = await stat(target);
-    if (!info.isFile() || info.size === 0) throw new Error('FFmpeg produced an empty or invalid derivative: ' + target);
-    outputs.push({ kind, path: target, mimeType: type, byteSize: info.size, sha256: await sha256(target) });
+    try {
+      await run(ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', ...writeArgs], { timeoutMs: settings.timeoutMs });
+      const info = await stat(target);
+      if (!info.isFile() || info.size === 0) throw new Error('FFmpeg produced an empty or invalid derivative: ' + target);
+      outputs.push({ kind, path: target, mimeType: type, byteSize: info.size, sha256: await sha256(target) });
+    } catch (error) {
+      await rm(target, { force: true }).catch(() => {});
+      throw error;
+    }
   };
 
   if (hasVideo && settings.profile !== 'preview') {
