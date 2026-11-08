@@ -191,3 +191,25 @@ export async function probeAsset(assetPath, options = {}) {
     });
   });
 }
+
+export function attachAssetRegistry(project, registry) {
+  if (!project || typeof project !== 'object') throw new Error('A Canonical Video IR project is required.');
+  if (!registry || registry.registryVersion !== '1.0.0' || !Array.isArray(registry.assets)) throw new Error('A valid asset registry is required.');
+  const next = structuredClone(project);
+  if (!Array.isArray(next.assets)) next.assets = [];
+  const byId = new Map(next.assets.map(asset => [asset.id, asset]));
+  for (const asset of registry.assets) {
+    const normalized = {
+      id: asset.id, kind: asset.kind, uri: asset.relativePath,
+      mimeType: asset.mimeType, sha256: asset.sha256, byteSize: asset.byteSize,
+      metadata: structuredClone(asset.metadata)
+    };
+    const existing = byId.get(asset.id);
+    if (existing && existing.sha256 && existing.sha256 !== asset.sha256) throw new Error('Asset id collision with different content: ' + asset.id);
+    if (existing) Object.assign(existing, normalized);
+    else { next.assets.push(normalized); byId.set(asset.id, normalized); }
+  }
+  const referenced = [];
+  for (const scene of next.scenes || []) for (const layer of scene.layers || []) if (layer.assetId && !byId.has(layer.assetId)) referenced.push({ sceneId: scene.id, layerId: layer.id, assetId: layer.assetId });
+  return { project: next, report: { attached: registry.assets.length, totalAssets: next.assets.length, unresolvedReferences: referenced, rightsReviewRequired: registry.assets.filter(x => x.metadata?.rightsStatus !== 'approved').map(x => x.id) } };
+}
