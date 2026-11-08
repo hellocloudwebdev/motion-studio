@@ -6,8 +6,9 @@ import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/o
 import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
+import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.8.0-alpha.1' });
+const server = new McpServer({ name: 'motion-studio', version: '0.9.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
@@ -62,6 +63,17 @@ server.tool('video.probe_asset', 'Inspect local media streams and container meta
   filePath: z.string().min(1), timeoutMs: z.number().int().positive().max(120000).optional()
 }, async ({ filePath, timeoutMs }) => ({
   content: [{ type: 'text', text: JSON.stringify(await probeAsset(filePath, { timeoutMs }), null, 2) }]
+}));
+server.tool('video.plan_editorial_assembly', 'Build a deterministic frame-accurate sequence manifest from Canonical Video IR. This is planning only; it does not modify Premiere or source files.', {
+  project: projectSchema,
+  sequenceName: z.string().min(1).optional()
+}, async ({ project, sequenceName }) => ({
+  content: [{ type: 'text', text: JSON.stringify(createEditorialAssembly(project, { sequenceName }), null, 2) }]
+}));
+server.tool('video.validate_editorial_assembly', 'Validate a previously generated editorial assembly manifest.', {
+  assembly: projectSchema
+}, async ({ assembly }) => ({
+  content: [{ type: 'text', text: JSON.stringify(validateEditorialAssembly(assembly), null, 2) }]
 }));
 server.tool('video.generate_media_derivatives', 'Generate local video proxies, thumbnails, audio waveforms or raster-image previews. Source files are never modified; outputs are hashed and are not delivery masters.', {
   sourcePath: z.string().min(1), outputDirectory: z.string().min(1),
