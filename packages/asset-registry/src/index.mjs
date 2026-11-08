@@ -34,6 +34,21 @@ const inside = (root, target) => {
   const relative = path.relative(root, target);
   return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 };
+async function isSafeRegularFile(root, target) {
+  if (!inside(root, target)) return false;
+  const relative = path.relative(root, target);
+  const parts = relative.split(path.sep);
+  let current = root;
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    let info;
+    try { info = await lstat(current); } catch { return false; }
+    if (info.isSymbolicLink()) return false;
+    if (index === parts.length - 1) return info.isFile();
+    if (!info.isDirectory()) return false;
+  }
+  return false;
+}
 function classify(ext) {
   for (const [kind, extensions] of Object.entries(EXT_KIND)) if (extensions.has(ext)) return kind;
   return 'other';
@@ -74,8 +89,8 @@ export async function scanAssetDirectory(rootPath, options = {}) {
   for (const relativePath of relativePaths) {
     const absolutePath = path.resolve(root, relativePath);
     if (!inside(root, absolutePath)) throw new Error('Asset path escapes scan root: ' + relativePath);
+    if (!(await isSafeRegularFile(root, absolutePath))) continue;
     const info = await lstat(absolutePath);
-    if (!info.isFile() || info.isSymbolicLink()) continue;
     const digest = await hashFile(absolutePath);
     const ext = path.extname(relativePath).toLowerCase();
     const metadata = options.metadataByPath?.[relativePath] || {};
@@ -142,8 +157,7 @@ export async function verifyAssetRegistry(registry, options = {}) {
       continue;
     }
     try {
-      const info = await lstat(absolutePath);
-      if (!info.isFile() || info.isSymbolicLink()) {
+      if (!(await isSafeRegularFile(root, absolutePath))) {
         results.push({ id: asset.id, relativePath: asset.relativePath, valid: false, reason: 'NOT_REGULAR_FILE' });
         continue;
       }
