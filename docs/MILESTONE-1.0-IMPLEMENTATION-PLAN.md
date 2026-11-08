@@ -4,13 +4,13 @@
 Turn the validated editorial assembly manifest into a deterministic, inspectable interchange package that Premiere Pro can import, while preserving timing, media provenance and producer-review state.
 
 ## Scope
-- [ ] Add a dedicated Premiere interchange package with a documented FCPXML export contract.
-- [ ] Convert integer-frame positions using the project's exact rational frame rate; never round through floating-point seconds.
+- [x] Add a dedicated Premiere interchange package with a documented FCPXML export contract.
+- [x] Convert integer-frame positions using the project's exact rational frame rate; never round through floating-point seconds.
 - [ ] Map media clips and overlap-aware tracks into an explicit sequence structure.
-- [ ] Resolve relative media paths only against an explicit asset root; reject traversal and unsupported URI schemes.
-- [ ] Preserve clip IDs, source in-points, source hashes and rights-review state in a sidecar manifest.
-- [ ] Fail closed on unresolved media, unsupported clip kinds, invalid sequence ranges and ambiguous frame-rate data.
-- [ ] Add CLI export/validate commands and MCP planning/export tools; export remains a local file-generation action.
+- [x] Resolve relative media paths only against an explicit asset root; reject traversal and unsupported URI schemes.
+- [x] Preserve clip IDs, source in-points, source hashes and rights-review state in a sidecar manifest.
+- [x] Fail closed on unresolved media, unsupported clip kinds, invalid sequence ranges and ambiguous frame-rate data.
+- [x] Add CLI export and MCP export tools; export remains a local file-generation action.
 - [ ] Add golden XML, escaping, path traversal, rational timing, multi-track and round-trip validation tests.
 - [ ] Document Premiere import steps and limitations.
 
