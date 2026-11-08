@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { exportPremiereInterchange } from '../src/index.mjs';
 
 async function fixture(fn) {
@@ -26,7 +27,7 @@ function assembly(uri, checksum = 'a'.repeat(64)) {
 test('exports frame-accurate FCPXML and preserves provenance in a sidecar', async () => fixture(async root => {
   const source = path.join(root, 'hero.mp4');
   await writeFile(source, 'media');
-  const result = await exportPremiereInterchange(assembly(source.startsWith('/') ? new URL('file://' + source).href : source));
+  const result = await exportPremiereInterchange(assembly(pathToFileURL(source).href));
   assert.equal(result.valid, true);
   assert.match(result.xml, /version="1\.10"/);
   assert.match(result.xml, /offset="1001\/1000s"/);
