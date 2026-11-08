@@ -28,7 +28,7 @@ if (command === 'assets') {
     if (!root) throw new Error('Usage: motion-studio assets scan <directory> --output <registry.json>');
     const registry = await scanAssetDirectory(root, { recursive: !flags().has('--no-recursive'), includeHidden: flags().has('--include-hidden'), maxFiles: Number(option('--max-files', '10000')) });
     const output = path.resolve(option('--output', path.join(root, 'asset-registry.json')));
-    await writeFile(output, JSON.stringify(registry, null, 2) + '\\n');
+    await writeFile(output, JSON.stringify(registry, null, 2) + '\n');
     print({ output, assetCount: registry.assetCount, summary: registry.summary, duplicates: registry.duplicates });
   } else if (subcommand === 'verify') {
     const registryFile = args.find(x => !x.startsWith('--'));
@@ -36,7 +36,7 @@ if (command === 'assets') {
     const registry = await load(registryFile);
     const result = await verifyAssetRegistry(registry, { rootPath: option('--root', undefined) });
     const report = option('--report', '');
-    if (report) await writeFile(path.resolve(report), JSON.stringify(result, null, 2) + '\\n');
+    if (report) await writeFile(path.resolve(report), JSON.stringify(result, null, 2) + '\n');
     print(result);
     if (!result.valid) process.exitCode = 4;
   } else if (subcommand === 'approve-rights') {
@@ -45,7 +45,7 @@ if (command === 'assets') {
     const registry = await load(registryFile);
     const updated = approveAssetRights(registry, { assetId: option('--asset-id', ''), actor: option('--actor', ''), license: option('--license', ''), usageScope: option('--usage', ''), attribution: option('--attribution', null), expiresAt: option('--expires-at', null), note: option('--note', '') });
     const output = path.resolve(option('--output', registryFile));
-    await writeFile(output, JSON.stringify(updated, null, 2) + '\\n');
+    await writeFile(output, JSON.stringify(updated, null, 2) + '\n');
     print({ updated: true, assetId: option('--asset-id', ''), output, needsRightsReview: updated.summary.needsRightsReview });
   } else if (subcommand === 'attach') {
     const projectFile = args.find(x => !x.startsWith('--'));
@@ -54,7 +54,7 @@ if (command === 'assets') {
     const project = await load(projectFile), registry = await load(registryFile);
     const result = attachAssetRegistry(project, registry);
     const output = path.resolve(option('--output', 'project-with-assets.json'));
-    await writeFile(output, JSON.stringify(result.project, null, 2) + '\\n');
+    await writeFile(output, JSON.stringify(result.project, null, 2) + '\n');
     print({ output, report: result.report });
   } else throw new Error('Unknown assets command. Use scan, verify, approve-rights or attach.');
 } else if (command === 'qa-approve') {
@@ -142,5 +142,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 0.6.0-alpha.1\nCommands: doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 0.7.0-alpha.1\nCommands: assets scan|verify|approve-rights|attach, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
