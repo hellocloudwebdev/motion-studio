@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
 import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
+import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 
 const server = new McpServer({ name: 'motion-studio', version: '0.7.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
@@ -35,6 +36,31 @@ server.tool('video.authorize_production_stage', 'Validate a time-bounded, projec
   hostReadiness: projectSchema, approval: z.record(z.string(), z.unknown()), now: z.number().optional()
 }, async ({ projectId, runId, stage, hostReadiness, approval, now }) => ({
   content: [{ type: 'text', text: JSON.stringify(authorizeProductionStage({ projectId, runId, stage, hostReadiness, approval, now }), null, 2) }]
+}));
+server.tool('video.scan_asset_directory', 'Scan a local media directory into a deterministic asset registry. Scanning is read-only; new assets require rights review.', {
+  rootPath: z.string().min(1), recursive: z.boolean().optional(), includeHidden: z.boolean().optional(), maxFiles: z.number().int().positive().max(100000).optional()
+}, async ({ rootPath, recursive, includeHidden, maxFiles }) => ({
+  content: [{ type: 'text', text: JSON.stringify(await scanAssetDirectory(rootPath, { recursive, includeHidden, maxFiles }), null, 2) }]
+}));
+server.tool('video.verify_asset_registry', 'Verify indexed asset files still exist and match their recorded SHA-256 checksums.', {
+  registry: projectSchema, rootPath: z.string().optional()
+}, async ({ registry, rootPath }) => ({
+  content: [{ type: 'text', text: JSON.stringify(await verifyAssetRegistry(registry, { rootPath }), null, 2) }]
+}));
+server.tool('video.attach_asset_registry', 'Attach an asset registry to a Canonical Video IR project as a new, non-mutating project object.', {
+  project: projectSchema, registry: projectSchema
+}, async ({ project, registry }) => ({
+  content: [{ type: 'text', text: JSON.stringify(attachAssetRegistry(project, registry), null, 2) }]
+}));
+server.tool('video.approve_asset_rights', 'Record a producer-provided rights review for one asset. This is audit metadata, not legal clearance.', {
+  registry: projectSchema, assetId: z.string().min(1), actor: z.string().min(1), license: z.string().min(1), usageScope: z.string().min(1), attribution: z.string().nullable().optional(), expiresAt: z.string().nullable().optional(), note: z.string().optional()
+}, async ({ registry, assetId, actor, license, usageScope, attribution, expiresAt, note }) => ({
+  content: [{ type: 'text', text: JSON.stringify(approveAssetRights(registry, { assetId, actor, license, usageScope, attribution, expiresAt, note }), null, 2) }]
+}));
+server.tool('video.probe_asset', 'Inspect local media streams and container metadata with FFprobe.', {
+  filePath: z.string().min(1), timeoutMs: z.number().int().positive().max(120000).optional()
+}, async ({ filePath, timeoutMs }) => ({
+  content: [{ type: 'text', text: JSON.stringify(await probeAsset(filePath, { timeoutMs }), null, 2) }]
 }));
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));
 await server.connect(new StdioServerTransport());
