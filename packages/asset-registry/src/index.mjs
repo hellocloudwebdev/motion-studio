@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readdir, lstat, readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readdir, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -22,7 +23,13 @@ const EXT_KIND = {
   '3d': new Set(['.blend','.obj','.fbx','.glb','.gltf','.abc']),
   document: new Set(['.pdf'])
 };
-const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const hashFile = filePath => new Promise((resolve, reject) => {
+  const digest = createHash('sha256');
+  const stream = createReadStream(filePath);
+  stream.on('data', chunk => digest.update(chunk));
+  stream.once('error', reject);
+  stream.once('end', () => resolve(digest.digest('hex')));
+});
 const inside = (root, target) => {
   const relative = path.relative(root, target);
   return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
@@ -67,11 +74,11 @@ export async function scanAssetDirectory(rootPath, options = {}) {
     if (!inside(root, absolutePath)) throw new Error('Asset path escapes scan root: ' + relativePath);
     const info = await lstat(absolutePath);
     if (!info.isFile() || info.isSymbolicLink()) continue;
-    const bytes = await readFile(absolutePath);
-    const digest = hash(bytes);
+    const digest = await hashFile(absolutePath);
     const ext = path.extname(relativePath).toLowerCase();
     const metadata = options.metadataByPath?.[relativePath] || {};
     const approvedRights = metadata.rightsApproval?.approved === true &&
+      (!metadata.rightsApproval.expiresAt || Date.parse(metadata.rightsApproval.expiresAt) > Date.now()) &&
       typeof metadata.rightsApproval.actor === 'string' && metadata.rightsApproval.actor.trim() &&
       typeof metadata.rightsApproval.license === 'string' && metadata.rightsApproval.license.trim() &&
       typeof metadata.rightsApproval.usageScope === 'string' && metadata.rightsApproval.usageScope.trim();
@@ -134,7 +141,7 @@ export async function verifyAssetRegistry(registry, options = {}) {
         results.push({ id: asset.id, relativePath: asset.relativePath, valid: false, reason: 'NOT_REGULAR_FILE' });
         continue;
       }
-      const digest = hash(await readFile(absolutePath));
+      const digest = await hashFile(absolutePath);
       results.push({
         id: asset.id, relativePath: asset.relativePath,
         valid: digest === asset.sha256,
