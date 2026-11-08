@@ -2,7 +2,7 @@
 
 **Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
 
-> **Current milestone: 0.6.0-alpha.1.** Milestone 0.5 added evidence-driven render QA. Milestone 0.6 adds verified engine-host preflight, project/run-scoped stage approvals and approval-gated Adobe MCP tool calls.
+> **Current milestone: 0.7.0-alpha.1.** Milestone 0.5 added evidence-driven render QA; 0.6 added verified host preflight and scoped approvals; 0.7 adds media asset indexing, integrity checks and rights-review metadata.
 
 ## Install on a new PC
 
@@ -50,6 +50,20 @@ node apps/cli/src/index.mjs render templates/startup-ad/project.json --quality d
 
 The renderer creates a HyperFrames project, renders an MP4, probes the result with FFprobe and writes sampled frame evidence plus a render receipt. Replace sample placeholder assets with licensed/user-owned media before delivery.
 
+## Milestone 0.7: asset intelligence and media intake
+
+Index a media folder, detect duplicates and record exact file checksums:
+
+```bash
+motion-studio assets scan ./media --output ./asset-registry.json
+motion-studio assets verify ./asset-registry.json
+motion-studio assets probe ./media/clip.mp4
+motion-studio assets approve-rights ./asset-registry.json --asset-id <asset-id> --actor "Producer" --license "Licensed stock" --usage "Online advertising"
+motion-studio assets attach ./project.json --registry ./asset-registry.json --output ./project-with-assets.json
+```
+
+Asset scans are read-only and stream SHA-256 hashing for large files. New media defaults to `needs-review`; an approval record is a producer's audit assertion, not legal clearance. Verification detects changed/missing bytes but does not validate license terms. See [Asset library](docs/ASSET-LIBRARY.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
+
 ## Milestone 0.6: host preflight and approval gates
 
 Create a JSON file containing actual local host-check evidence, then run:
@@ -73,7 +87,7 @@ Preflight fails closed if any routed engine, Premiere assembly host or FFmpeg de
 
 Edit-enabled Adobe MCP calls require a short-lived approval bound to the project, run, app, tool name and exact arguments. Production-run transitions into Premiere assembly and final export require matching approvals and verified host readiness. Approval records are audit/governance records, not cryptographic identity proof.
 
-See [Milestone 0.5](docs/MILESTONE-0.5-IMPLEMENTATION-PLAN.md) and [Milestone 0.6](docs/MILESTONE-0.6-IMPLEMENTATION-PLAN.md).
+See [Milestone 0.5](docs/MILESTONE-0.5-IMPLEMENTATION-PLAN.md), [Milestone 0.6](docs/MILESTONE-0.6-IMPLEMENTATION-PLAN.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
 
 ## Architecture
 
