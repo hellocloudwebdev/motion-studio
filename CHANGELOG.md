@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.7.0-alpha.1 — Asset intelligence and governed media intake
-- Added deterministic asset scanning, content-addressed IDs, streaming SHA-256 checksums and duplicate detection.
+- Added deterministic asset scanning, path-specific IDs plus content IDs, streaming SHA-256 checksums and duplicate detection.
 - Added FFprobe media metadata inspection and file-integrity verification.
 - Added rights-review records with actor, license, usage scope, attribution and optional expiry.
 - Added additive registry-to-IR attachment and asset identity/reference validation.
