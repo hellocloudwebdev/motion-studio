@@ -7,6 +7,7 @@ import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-r
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
+import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -65,6 +66,19 @@ if (command === 'assets') {
     await writeFile(output, JSON.stringify(result.project, null, 2) + '\n');
     print({ output, report: result.report });
   } else throw new Error('Unknown assets command. Use scan, verify, probe, approve-rights or attach.');
+} else if (command === 'media' && file === 'derive') {
+  const source = args.find(x => !x.startsWith('--'));
+  const outputDir = option('--output-dir', 'media-derived');
+  if (!source) throw new Error('Usage: motion-studio media derive <media-file> --output-dir <directory> [--profile all|proxy|preview] [--overwrite]');
+  const result = await generateMediaDerivatives(source, outputDir, {
+    profile: option('--profile', 'all'),
+    thumbnailAtSeconds: Number(option('--at-seconds', '1')),
+    ffmpegPath: option('--ffmpeg', undefined), ffprobePath: option('--ffprobe', undefined),
+    timeoutMs: Number(option('--timeout-ms', '120000')), overwrite: flags().has('--overwrite')
+  });
+  const manifestPath = option('--manifest', '');
+  if (manifestPath) await writeFile(path.resolve(manifestPath), JSON.stringify(result, null, 2) + '\\n');
+  print(result);
 } else if (command === 'qa-approve') {
   if (!file) throw new Error('Usage: motion-studio qa-approve <project-with-qa.json> --actor <name> [--note <text>] [--output <path>]');
   const project = await load(file);
