@@ -62,11 +62,13 @@ export async function scanAssetDirectory(rootPath, options = {}) {
   const root = path.resolve(rootPath);
   const rootInfo = await lstat(root);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('Asset root must be an existing, non-symlink directory.');
+  const maxFiles = options.maxFiles ?? 10000;
+  if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new Error('maxFiles must be a positive integer.');
   const relativePaths = [];
   await walk(root, root, relativePaths, {
     recursive: options.recursive !== false,
     includeHidden: options.includeHidden === true,
-    maxFiles: options.maxFiles ?? 10000
+    maxFiles
   });
   const assets = [];
   for (const relativePath of relativePaths) {
@@ -77,13 +79,15 @@ export async function scanAssetDirectory(rootPath, options = {}) {
     const digest = await hashFile(absolutePath);
     const ext = path.extname(relativePath).toLowerCase();
     const metadata = options.metadataByPath?.[relativePath] || {};
+    const assetId = 'asset-' + createHash('sha256').update(relativePath + '\\0' + digest).digest('hex').slice(0, 20);
     const approvedRights = metadata.rightsApproval?.approved === true &&
       (!metadata.rightsApproval.expiresAt || Date.parse(metadata.rightsApproval.expiresAt) > Date.now()) &&
       typeof metadata.rightsApproval.actor === 'string' && metadata.rightsApproval.actor.trim() &&
       typeof metadata.rightsApproval.license === 'string' && metadata.rightsApproval.license.trim() &&
       typeof metadata.rightsApproval.usageScope === 'string' && metadata.rightsApproval.usageScope.trim();
     assets.push({
-      id: 'asset-' + digest.slice(0, 20),
+      id: assetId,
+      contentId: 'content-' + digest.slice(0, 20),
       sha256: digest,
       relativePath,
       fileName: path.basename(relativePath),
@@ -128,6 +132,8 @@ export async function verifyAssetRegistry(registry, options = {}) {
     throw new Error('Invalid asset registry: expected registryVersion 1.0.0, rootPath and assets[].');
   }
   const root = path.resolve(options.rootPath || registry.rootPath);
+  const rootInfo = await lstat(root);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('Verification root must be an existing, non-symlink directory.');
   const results = [];
   for (const asset of registry.assets) {
     const absolutePath = path.resolve(root, asset.relativePath);
@@ -207,7 +213,7 @@ export function attachAssetRegistry(project, registry) {
   const byId = new Map(next.assets.map(asset => [asset.id, asset]));
   for (const asset of registry.assets) {
     const normalized = {
-      id: asset.id, kind: asset.kind, uri: asset.relativePath,
+      id: asset.id, contentId: asset.contentId || null, kind: asset.kind, uri: asset.relativePath,
       mimeType: asset.mimeType, sha256: asset.sha256, byteSize: asset.byteSize,
       metadata: structuredClone(asset.metadata)
     };
