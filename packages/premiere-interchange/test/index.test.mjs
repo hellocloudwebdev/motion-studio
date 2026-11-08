@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,13 +28,14 @@ function assembly(uri, checksum = 'a'.repeat(64)) {
 test('exports frame-accurate FCPXML and preserves provenance in a sidecar', async () => fixture(async root => {
   const source = path.join(root, 'hero.mp4');
   await writeFile(source, 'media');
-  const result = await exportPremiereInterchange(assembly(pathToFileURL(source).href));
+  const checksum = createHash('sha256').update('media').digest('hex');
+  const result = await exportPremiereInterchange(assembly(pathToFileURL(source).href, checksum));
   assert.equal(result.valid, true);
   assert.match(result.xml, /version="1\.10"/);
   assert.match(result.xml, /offset="1001\/1000s"/);
   assert.match(result.xml, /start="1001\/2000s"/);
   assert.match(result.xml, /Hero &amp; Product/);
-  assert.equal(result.manifest.clips[0].sourceSha256, 'a'.repeat(64));
+  assert.equal(result.manifest.clips[0].sourceSha256, checksum);
   assert.equal(result.manifest.clips[0].rightsStatus, 'approved');
 }));
 
