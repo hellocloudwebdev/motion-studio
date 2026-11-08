@@ -25,8 +25,11 @@ if (command === 'assets') {
   const subcommand = file;
   if (subcommand === 'scan') {
     const root = args.find(x => !x.startsWith('--'));
-    if (!root) throw new Error('Usage: motion-studio assets scan <directory> --output <registry.json>');
-    const registry = await scanAssetDirectory(root, { recursive: !flags().has('--no-recursive'), includeHidden: flags().has('--include-hidden'), maxFiles: Number(option('--max-files', '10000')) });
+    if (!root) throw new Error('Usage: motion-studio assets scan <directory> --output <registry.json> [--previous <registry.json>]');
+    const previousFile = option('--previous', '');
+    const previous = previousFile ? await load(previousFile) : null;
+    const metadataByPath = previous ? Object.fromEntries((previous.assets || []).map(asset => [asset.relativePath, asset.metadata || {}])) : undefined;
+    const registry = await scanAssetDirectory(root, { recursive: !flags().has('--no-recursive'), includeHidden: flags().has('--include-hidden'), maxFiles: Number(option('--max-files', '10000')), metadataByPath });
     const output = path.resolve(option('--output', path.join(root, 'asset-registry.json')));
     await writeFile(output, JSON.stringify(registry, null, 2) + '\n');
     print({ output, assetCount: registry.assetCount, summary: registry.summary, duplicates: registry.duplicates });
