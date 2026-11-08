@@ -8,6 +8,7 @@ import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
+import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -66,6 +67,21 @@ if (command === 'assets') {
     await writeFile(output, JSON.stringify(result.project, null, 2) + '\n');
     print({ output, report: result.report });
   } else throw new Error('Unknown assets command. Use scan, verify, probe, approve-rights or attach.');
+} else if (command === 'editorial' && file === 'plan') {
+  const projectFile = args.find(x => !x.startsWith('--'));
+  if (!projectFile) throw new Error('Usage: motion-studio editorial plan <project.json> --output <assembly.json>');
+  const project = await load(projectFile);
+  const assembly = createEditorialAssembly(project, { sequenceName: option('--sequence-name', undefined) });
+  const output = option('--output', '');
+  if (output) await writeFile(path.resolve(output), JSON.stringify(assembly, null, 2) + '\\n');
+  print(assembly);
+  if (!assembly.summary.valid) process.exitCode = 2;
+} else if (command === 'editorial' && file === 'validate') {
+  const assemblyFile = args.find(x => !x.startsWith('--'));
+  if (!assemblyFile) throw new Error('Usage: motion-studio editorial validate <assembly.json>');
+  const result = validateEditorialAssembly(await load(assemblyFile));
+  print(result);
+  if (!result.valid) process.exitCode = 2;
 } else if (command === 'media' && file === 'derive') {
   const source = args.find(x => !x.startsWith('--'));
   const outputDir = option('--output-dir', 'media-derived');
