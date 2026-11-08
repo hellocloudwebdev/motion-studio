@@ -8,6 +8,7 @@ import { validateEditorialAssembly } from '../../editorial-assembly/src/index.mj
 const issue = (code, pathName, message, severity = 'error') => ({ code, path: pathName, message, severity });
 const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
 function frameTime(frames, rate) {
+  if (frames === 0) return '0s';
   const numerator = frames * rate.denominator;
   const divisor = gcd(numerator, rate.numerator);
   return (numerator / divisor) + '/' + (rate.numerator / divisor) + 's';
@@ -67,6 +68,12 @@ export async function exportPremiereInterchange(assembly, options = {}) {
     return { valid: false, issues: [issue('INVALID_SEQUENCE_DURATION', '$.sequence.durationFrames', 'A positive integer sequence duration is required.')], xml: null, manifest: null };
   }
   const issues = [];
+  for (const [index, clip] of assembly.clips.entries()) {
+    if (clip.startFrame < 0 || clip.endFrame > duration || clip.durationFrames !== clip.endFrame - clip.startFrame || !Number.isInteger(clip.sourceInFrame || 0) || (clip.sourceInFrame || 0) < 0) {
+      issues.push(issue('CLIP_OUTSIDE_SEQUENCE', '$.clips[' + index + ']', 'Clip frame range and source in-point must be valid and fit within the sequence.'));
+    }
+  }
+  if (issues.length) return { valid: false, issues, xml: null, manifest: null };
   const mediaClips = assembly.clips.filter(clip => clip.media === true);
   const unsupported = assembly.clips.filter(clip => clip.media !== true);
   for (const clip of unsupported) issues.push(issue('UNSUPPORTED_CLIP_KIND', '$.clips.' + clip.clipId, 'Non-media clip ' + clip.clipId + ' is retained in the sidecar but not represented in FCPXML.', 'warning'));
@@ -88,7 +95,10 @@ export async function exportPremiereInterchange(assembly, options = {}) {
       if (!resourceByKey.has(key)) {
         const id = 'r' + (resources.length + 2);
         resourceByKey.set(key, id);
-        resources.push({ id, src, sha256: clip.sourceSha256.toLowerCase(), name: clip.name, kind: clip.kind });
+        resources.push({ id, src, sha256: clip.sourceSha256.toLowerCase(), name: clip.name, kind: clip.kind, durationFrames: (clip.sourceInFrame || 0) + clip.durationFrames });
+      } else {
+        const resource = resources.find(item => item.id === resourceByKey.get(key));
+        resource.durationFrames = Math.max(resource.durationFrames, (clip.sourceInFrame || 0) + clip.durationFrames);
       }
       clipRows.push({ ...clip, resourceId: resourceByKey.get(key) });
     } catch (error) {
