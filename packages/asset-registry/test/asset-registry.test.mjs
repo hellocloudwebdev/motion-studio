@@ -66,3 +66,13 @@ test('attach merges indexed assets into Canonical Video IR without mutating the 
   assert.equal(project.assets.length, 0);
   assert.equal(result.report.rightsReviewRequired.length, 1);
 }));
+
+test('rescanning can preserve current rights metadata for the same relative path', async () => fixture(async root => {
+  await writeFile(path.join(root, 'music.wav'), Buffer.from('music'));
+  const initial = await scanAssetDirectory(root);
+  const reviewed = approveAssetRights(initial, { assetId: initial.assets[0].id, actor: 'producer', license: 'Direct license', usageScope: 'Social campaign' });
+  const metadataByPath = Object.fromEntries(reviewed.assets.map(asset => [asset.relativePath, asset.metadata]));
+  const rescanned = await scanAssetDirectory(root, { metadataByPath });
+  assert.equal(rescanned.assets[0].id, reviewed.assets[0].id);
+  assert.equal(rescanned.assets[0].metadata.rightsStatus, 'approved');
+}));
