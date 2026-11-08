@@ -54,3 +54,14 @@ test('verify rejects registry paths that escape the configured root', async () =
   assert.equal(result.valid, false);
   assert.equal(result.failures[0].reason, 'PATH_OUTSIDE_ROOT');
 }));
+
+test('attach merges indexed assets into Canonical Video IR without mutating the input', async () => fixture(async root => {
+  await writeFile(path.join(root, 'logo.png'), Buffer.from('logo'));
+  const registry = await scanAssetDirectory(root);
+  const project = { assets: [], scenes: [{ id: 's1', layers: [{ id: 'l1', assetId: 'missing-asset' }] }] };
+  const result = (await import('../src/index.mjs')).attachAssetRegistry(project, registry);
+  assert.equal(result.project.assets.length, 1);
+  assert.equal(result.report.unresolvedReferences[0].assetId, 'missing-asset');
+  assert.equal(project.assets.length, 0);
+  assert.equal(result.report.rightsReviewRequired.length, 1);
+}));
