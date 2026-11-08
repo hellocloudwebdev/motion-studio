@@ -98,7 +98,7 @@ if (command === 'assets') {
     const output = option('--output', 'sequence.fcpxml');
     await writeFile(path.resolve(output), result.xml, 'utf8');
     const manifestPath = option('--manifest', 'premiere-handoff.json');
-    await writeFile(path.resolve(manifestPath), JSON.stringify(result.manifest, null, 2) + '\\n', 'utf8');
+    await writeFile(path.resolve(manifestPath), JSON.stringify(result.manifest, null, 2) + '\n', 'utf8');
     print({ valid: true, output: path.resolve(output), manifest: path.resolve(manifestPath), warnings: result.issues });
   }
 } else if (command === 'media' && file === 'derive') {
