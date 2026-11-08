@@ -5,8 +5,9 @@ import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
 import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
+import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.7.0-alpha.1' });
+const server = new McpServer({ name: 'motion-studio', version: '0.8.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
@@ -61,6 +62,15 @@ server.tool('video.probe_asset', 'Inspect local media streams and container meta
   filePath: z.string().min(1), timeoutMs: z.number().int().positive().max(120000).optional()
 }, async ({ filePath, timeoutMs }) => ({
   content: [{ type: 'text', text: JSON.stringify(await probeAsset(filePath, { timeoutMs }), null, 2) }]
+}));
+server.tool('video.generate_media_derivatives', 'Generate local video proxies, thumbnails, audio waveforms or raster-image previews. Source files are never modified; outputs are hashed and are not delivery masters.', {
+  sourcePath: z.string().min(1), outputDirectory: z.string().min(1),
+  profile: z.enum(['all', 'proxy', 'preview']).optional(),
+  thumbnailAtSeconds: z.number().min(0).max(86400).optional(),
+  ffmpegPath: z.string().optional(), ffprobePath: z.string().optional(),
+  timeoutMs: z.number().int().min(1000).max(600000).optional(), overwrite: z.boolean().optional()
+}, async ({ sourcePath, outputDirectory, ...options }) => ({
+  content: [{ type: 'text', text: JSON.stringify(await generateMediaDerivatives(sourcePath, outputDirectory, options), null, 2) }]
 }));
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));
 await server.connect(new StdioServerTransport());
