@@ -1,8 +1,8 @@
 {
   "name": "motion-studio",
-  "version": "0.6.0-alpha.1",
+  "version": "0.7.0-alpha.1",
   "private": true,
-  "description": "Engine-independent AI video production system with verified host readiness and approval-gated Adobe MCP orchestration.",
+  "description": "Engine-independent AI video production system with verified production orchestration and media asset intelligence.",
   "type": "module",
   "engines": { "node": ">=24.0.0" },
   "workspaces": ["packages/*", "apps/*", "servers/*"],
