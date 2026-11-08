@@ -38,3 +38,31 @@ test('intake CLI returns a non-zero exit code for an invalid brief', async () =>
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('intake CLI compiles validated planning artifacts into Canonical Video IR', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-studio-compile-'));
+  try {
+    const input = path.join(dir, 'planning.json');
+    const output = path.join(dir, 'project.json');
+    const planning = {
+      brief: {
+        schemaVersion: '1.0.0', id: 'brief-cli', createdAt: '2026-11-08T00:00:00.000Z',
+        idea: 'A launch film', audience: 'Designers', purpose: 'Introduce a product',
+        durationSeconds: 10, language: 'English', platform: 'YouTube', aspectRatio: '16:9',
+        customDimensions: null, references: [], suppliedAssets: [], research: { required: false }, constraints: []
+      },
+      creativeDirection: { concept: 'A clear launch', message: 'Make better work', mood: ['confident'] },
+      script: { narration: 'A new way to work.', onScreenCopy: ['Make better work'] },
+      storyboard: { scenes: [{ id: 'scene-1', name: 'Opening', intent: 'Introduce product', durationFrames: 300, layers: [{ id: 'title', kind: 'text', content: { text: 'Make better work' }, typography: { family: 'Inter', sizePx: 80 } }] }] },
+      designSystem: { colors: { background: '#000000', foreground: '#ffffff' }, fonts: [{ family: 'Inter' }] }
+    };
+    await writeFile(input, JSON.stringify(planning));
+    const result = spawnSync(process.execPath, [cli, 'compile', input, '--output', output], { encoding: 'utf8', shell: false });
+    assert.equal(result.status, 0, result.stderr);
+    const project = JSON.parse(await readFile(output, 'utf8'));
+    assert.equal(project.schemaVersion, '1.0.0');
+    assert.equal(project.scenes[0].layers[0].content.text, 'Make better work');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
