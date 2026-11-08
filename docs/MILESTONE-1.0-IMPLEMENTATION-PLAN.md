@@ -11,7 +11,7 @@ Turn the validated editorial assembly manifest into a deterministic, inspectable
 - [x] Preserve clip IDs, source in-points, source hashes and rights-review state in a sidecar manifest.
 - [x] Fail closed on unresolved media, unsupported clip kinds, invalid sequence ranges and ambiguous frame-rate data.
 - [x] Add CLI export and MCP export tools; export remains a local file-generation action.
-- [ ] Add golden XML, escaping, path traversal, rational timing, multi-track and round-trip validation tests.
+- [ ] Expand golden XML, multi-track and Premiere-version round-trip validation tests (current tests cover XML escaping, rational timing, traversal, unresolved sources and CLI export).
 - [ ] Document Premiere import steps and limitations.
 
 ## Governance
