@@ -2,6 +2,7 @@ import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProject } from '../../core/src/index.mjs';
+import { renderChartSvg } from './charts.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GSAP = path.resolve(__dirname, '../../../node_modules/gsap/dist/gsap.min.js');
@@ -86,6 +87,11 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
     const volume = Number(layer.volume ?? 1);
     local = '<audio' + buildAttrs(localStartFrame) + ' src="' + esc(assetUri) + '" preload="auto" data-volume="' + volume + '"></audio>';
     global = '<audio' + buildAttrs(globalStartFrame + localStartFrame) + ' src="' + esc(assetUri) + '" preload="auto" data-volume="' + volume + '"></audio>';
+  } else if (layer.kind === 'chart') {
+    const svg = renderChartSvg(layer.content, { color: layer.style?.color || layer.style?.fill });
+    const chartStyle = ' style="' + esc(cssFor(layer, fontFamily) + ';display:block') + '"';
+    local = '<div' + buildAttrs(localStartFrame) + chartStyle + '>' + svg + '</div>';
+    global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + chartStyle + '>' + svg + '</div>';
   } else if (placeholder) {
     const label = '[ASSET REQUIRED: ' + (layer.assetId || layer.kind) + ']';
     const placeholderStyle = ' style="position:absolute;left:40px;top:40px;padding:24px;background:#7f1d1d;color:#fff;font:700 28px Arial;width:calc(100% - 128px)"';
@@ -188,7 +194,7 @@ export async function compileHyperFramesProject(project, options = {}) {
         warnings.push({ code: 'NON_HYPERFRAMES_LAYER', sceneId: scene.id, layerId: layer.id, engine: hintedEngine, message: 'Layer is routed to another engine and is excluded from this HTML renderer.' });
         continue;
       }
-      if (!['text', 'shape', 'image', 'video', 'audio'].includes(layer.kind)) {
+      if (!['text', 'shape', 'image', 'video', 'audio', 'chart'].includes(layer.kind)) {
         warnings.push({ code: 'UNSUPPORTED_LAYER_KIND', sceneId: scene.id, layerId: layer.id, kind: layer.kind, message: 'This layer kind is not yet emitted by the HyperFrames adapter.' });
         continue;
       }
