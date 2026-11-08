@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { realpath, stat } from 'node:fs/promises';
 import { validateEditorialAssembly } from '../../editorial-assembly/src/index.mjs';
@@ -14,6 +16,15 @@ function escapeXml(value) {
   return String(value ?? '').replace(/[<>&"']/g, character => ({
     '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;'
   })[character]);
+}
+async function sha256(filePath) {
+  return await new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.once('error', reject);
+    stream.once('end', () => resolve(hash.digest('hex')));
+  });
 }
 function isWithin(root, target) {
   const relative = path.relative(root, target);
@@ -71,6 +82,8 @@ export async function exportPremiereInterchange(assembly, options = {}) {
     }
     try {
       const src = await resolveMediaUri(clip.sourceUri, options.assetRoot);
+      const actualHash = await sha256(fileURLToPath(src));
+      if (actualHash !== clip.sourceSha256.toLowerCase()) throw new Error('Media source SHA-256 does not match the editorial assembly manifest.');
       const key = src + ':' + clip.sourceSha256.toLowerCase();
       if (!resourceByKey.has(key)) {
         const id = 'r' + (resources.length + 2);
