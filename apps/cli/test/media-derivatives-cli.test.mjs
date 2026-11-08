@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, mkdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -9,7 +9,7 @@ const cli = path.resolve('apps/cli/src/index.mjs');
 const ffmpegAvailable = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore', shell: false }).status === 0;
 
 test('CLI creates derivative files and an optional provenance manifest', { skip: !ffmpegAvailable }, async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'motion-studio-media-cli-'));
+  const root = await mkdtemp(path.join(await realpath(tmpdir()), 'motion-studio-media-cli-'));
   try {
     const source = path.join(root, 'source.mp4');
     const output = path.join(root, 'derived');
