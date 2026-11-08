@@ -71,3 +71,15 @@ test('rejects malformed assembly clips', () => {
   const result = validateEditorialAssembly({ assemblyVersion: '1.0.0', scenes: [], clips: [{ clipId: 'x', startFrame: 8, endFrame: 4, track: 'Z0' }] });
   assert.equal(result.valid, false);
 });
+
+test('rejects overlapping clips assigned to the same track', () => {
+  const result = validateEditorialAssembly({
+    assemblyVersion: '1.0.0', scenes: [],
+    clips: [
+      { clipId: 'a', startFrame: 0, endFrame: 30, track: 'V1' },
+      { clipId: 'b', startFrame: 20, endFrame: 40, track: 'V1' }
+    ]
+  });
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some(x => x.code === 'TRACK_OVERLAP'));
+});
