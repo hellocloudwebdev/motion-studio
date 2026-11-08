@@ -6,7 +6,7 @@ Make project media traceable and reproducible before render. A production should
 ## Implemented
 - [x] Workspace package `@motion-studio/asset-registry`.
 - [x] Recursive, deterministic media discovery with extension/MIME classification and symlink exclusion.
-- [x] Streaming SHA-256 hashing; content-addressed asset IDs and duplicate-content grouping.
+- [x] Streaming SHA-256 hashing; path-specific asset IDs plus content IDs and duplicate-content grouping.
 - [x] File metadata: relative path, media kind, MIME type, size, modified time, title, source, creator, description, tags, license and attribution fields.
 - [x] Integrity verification for missing, modified and out-of-root files.
 - [x] Human-attributed rights-review records with license, usage scope, attribution, expiry and note.
@@ -54,7 +54,7 @@ motion-studio assets attach ./project.json --registry ./asset-registry.json \
 - Live Adobe desktop project relinking.
 
 ## Acceptance criteria
-- Duplicate byte content receives the same content-addressed asset ID.
+- Duplicate byte content receives the same content ID while retaining separate path-specific asset IDs for provenance and rights.
 - Missing, tampered or out-of-root paths fail verification.
 - Unreviewed media is visibly marked `needs-review`.
 - Rights approval requires actor, license and usage scope and remains attached to the exact asset ID.
