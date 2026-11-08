@@ -1,7 +1,7 @@
 import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateProject } from '../../core/src/index.mjs';
+import { validateProject, estimateTextFit } from '../../core/src/index.mjs';
 import { renderChartSvg } from './charts.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -205,6 +205,34 @@ export async function compileHyperFramesProject(project, options = {}) {
       }
       const localStartFrame = Number(layer.startFrame ?? 0);
       const globalStartFrame = cumulativeFrame;
+      if (layer.kind === 'text') {
+        const textValue = String(layer.content?.text ?? layer.content ?? layer.text ?? '');
+        const typo = layer.typography || {};
+        const boxWidth = Number(layer.transform?.width ?? layer.layout?.width ?? 800);
+        const boxHeight = Number(layer.transform?.height ?? layer.layout?.height ?? 180);
+        const fontSize = Number(typo.sizePx || 48);
+        const fit = estimateTextFit({
+          text: textValue,
+          fontSizePx: fontSize,
+          boxWidthPx: boxWidth,
+          boxHeightPx: boxHeight,
+          lineHeight: Number(typo.lineHeight || 1.08),
+          maxLines: Number(typo.maxLines || Infinity)
+        });
+        if (!fit.fits) {
+          const warning = { code: 'TEXT_OVERFLOW_ESTIMATED', sceneId: scene.id, layerId: layer.id, fontFamily: typo.family || displayFont, ...fit };
+          warnings.push(warning);
+          if (options.strictTypography === true) throw new Error('Text overflow estimated for layer ' + layer.id + ' in scene ' + scene.id + '.');
+        }
+        const safePercent = Number(project.project.canvas.safeAreaPercent ?? 5);
+        const marginX = project.project.canvas.width * safePercent / 100;
+        const marginY = project.project.canvas.height * safePercent / 100;
+        const x = Number(layer.transform?.x ?? layer.layout?.x ?? 0);
+        const y = Number(layer.transform?.y ?? layer.layout?.y ?? 0);
+        if (x < marginX || y < marginY || x + boxWidth > project.project.canvas.width - marginX || y + boxHeight > project.project.canvas.height - marginY) {
+          warnings.push({ code: 'TEXT_OUTSIDE_SAFE_AREA', sceneId: scene.id, layerId: layer.id, safeAreaPercent: safePercent, bounds: { x, y, width: boxWidth, height: boxHeight } });
+        }
+      }
       const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
       const needsAsset = ['image', 'video', 'audio'].includes(layer.kind) && !assetUri;
       if (needsAsset && options.allowMissingAssetsAsPlaceholders === false) throw new Error('Required media asset is unavailable for layer ' + layer.id + ' in scene ' + scene.id + '.');
