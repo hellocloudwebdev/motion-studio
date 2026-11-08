@@ -64,3 +64,19 @@ test('compiles chart layers to inline SVG and uses frame-based motion timing', a
     assert.match(html, /slide-left/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('sanitizes untrusted color and style values before emitting inline CSS', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-css-'));
+  try {
+    const input = structuredClone(project);
+    input.scenes[0].layers = [{
+      id: 'unsafe-style', kind: 'shape', engineHint: 'hyperframes',
+      style: { color: 'red;position:fixed', backgroundColor: 'url(javascript:alert(1))', border: '1px solid #ffffff' }
+    }];
+    await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    assert.doesNotMatch(html, /javascript:/);
+    assert.doesNotMatch(html, /red;position:fixed/);
+    assert.match(html, /color:\\s*#ffffff/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
