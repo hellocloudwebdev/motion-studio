@@ -102,13 +102,20 @@ function documentHtml({ compositionId, title, width, height, duration, elements,
     ' const duration=' + Number(duration) + ';\n' +
     ' const tl=gsap.timeline({paused:true});\n' +
     ' document.querySelectorAll(".ms-layer").forEach(function(el){\n' +
-    '   const start=Number(el.dataset.start||0);\n' +
+    '   const start=Number(el.dataset.start||0)+Number(el.dataset.motionDelay||0);\n' +
     '   const motion=el.dataset.motion||"fade";\n' +
-    '   if(motion==="fade-up"||motion==="slide-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration:0.65,ease:"power3.out"},start);}\n' +
-    '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration:0.6,ease:"power3.out"},start);}\n' +
-    '   else {tl.fromTo(el,{opacity:0},{opacity:1,duration:0.25,ease:"power1.out"},start);}\n' +
-    ' });\n' +
-    ' const endMarker={value:0};\n' +
+    '   const duration=Math.max(0.001,Number(el.dataset.motionDuration||0.667));\n' +
+    '   const allowed=["none","power1.out","power2.out","power3.out","power4.out","back.out(1.7)","sine.out","circ.out"];\n' +
+    '   const requested=el.dataset.motionEase||"power3.out";\n' +
+    '   const ease=allowed.includes(requested)?requested:"power3.out";\n' +
+    '   if(motion==="none"){tl.set(el,{opacity:1},start);}\n' +
+    '   else if(motion==="fade-up"||motion==="slide-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration,ease},start);}\n' +
+    '   else if(motion==="slide-left"){tl.fromTo(el,{opacity:0,x:48},{opacity:1,x:0,duration,ease},start);}\n' +
+    '   else if(motion==="slide-right"){tl.fromTo(el,{opacity:0,x:-48},{opacity:1,x:0,duration,ease},start);}\n' +
+    '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration,ease},start);}\n' +
+    '   else if(motion==="rotate"){tl.fromTo(el,{opacity:0,rotation:-8},{opacity:1,rotation:0,duration,ease},start);}\n' +
+    '   else {tl.fromTo(el,{opacity:0},{opacity:1,duration,ease},start);}\n' +
+    ' });\n' +    ' const endMarker={value:0};\n' +
     ' tl.to(endMarker,{value:1,duration:duration,ease:"none"},0);\n' +
     ' window.__timelines=window.__timelines||{};\n' +
     ' window.__timelines[compositionId]=tl;\n' +
