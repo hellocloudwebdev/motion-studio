@@ -8,6 +8,7 @@ import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAsse
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
+import { createProductionBrief, buildCreativeWorkflow, validateProductionBrief, validatePlanningArtifacts, compilePlanningArtifacts } from '../../../packages/production-planning/src/index.mjs';
 
 const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
@@ -19,6 +20,27 @@ server.tool('video.create_project_template', 'Return a starter Canonical Video I
   const frames = Math.round(fps * durationSeconds);
   const project = { schemaVersion: '1.0.0', project: { id: 'project-' + Date.now(), name, objective: 'Define the audience outcome.', frameRate: { numerator: Math.round(fps), denominator: 1 }, canvas: { width, height, pixelAspectRatio: 1, safeAreaPercent: 5 }, totalDurationFrames: frames, colorSpace: 'Rec.709', revision: 1 }, creative: { concept: 'Replace with the central concept.', audience: 'Define the audience.', message: 'Define the key message.' }, assets: [], scenes: [{ id: 'scene-001', name: 'Opening', durationFrames: frames, intent: 'Introduce the message.', layers: [] }], delivery: { targets: [{ id: 'master', format: 'mp4', width, height, frameRate: { numerator: Math.round(fps), denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', colorSpace: 'Rec.709', alpha: false }] } };
   return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+});
+server.tool('video.create_production_brief', 'Normalize and validate a natural-language video idea as a provider-neutral production brief. Unknown requirements remain explicit.', {
+  intake: projectSchema
+}, async ({ intake }) => {
+  const brief = createProductionBrief(intake);
+  return { content: [{ type: 'text', text: JSON.stringify({ brief, workflow: buildCreativeWorkflow(brief) }, null, 2) }] };
+});
+server.tool('video.validate_production_brief', 'Validate a previously created production brief.', {
+  brief: projectSchema
+}, async ({ brief }) => ({ content: [{ type: 'text', text: JSON.stringify(validateProductionBrief(brief), null, 2) }] }));
+server.tool('video.plan_creative_workflow', 'Return the provider-neutral creative stage dependency graph. It does not claim that AI agents have executed.', {
+  brief: projectSchema
+}, async ({ brief }) => ({ content: [{ type: 'text', text: JSON.stringify(buildCreativeWorkflow(brief), null, 2) }] }));
+server.tool('video.validate_planning_artifacts', 'Validate research evidence, creative direction, script, storyboard and design-system artifacts before IR compilation.', {
+  planning: projectSchema
+}, async ({ planning }) => ({ content: [{ type: 'text', text: JSON.stringify(validatePlanningArtifacts(planning), null, 2) }] }));
+server.tool('video.compile_planning_artifacts', 'Compile approved planning artifacts into Canonical Video IR and run the project validator. Does not render or approve a production.', {
+  planning: projectSchema
+}, async ({ planning }) => {
+  const result = compilePlanningArtifacts(planning);
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
 });
 server.tool('video.validate_project', 'Validate Canonical Video IR structure.', { project: projectSchema }, async ({ project }) => ({ content: [{ type: 'text', text: JSON.stringify(validateProject(project), null, 2) }] }));
 server.tool('video.route_scenes', 'Plan engine tasks for each scene layer. This plans work; it does not render.', { project: projectSchema, availableEngines: engineList }, async ({ project, availableEngines }) => ({ content: [{ type: 'text', text: JSON.stringify(routeScenes(project, { availableEngines }), null, 2) }] }));

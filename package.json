@@ -15,6 +15,7 @@
   "scripts": {
     "test": "node --test",
     "studio": "node apps/cli/src/index.mjs",
+    "intake": "node apps/cli/src/intake.mjs",
     "mcp": "node servers/mcp-server/src/index.mjs",
     "runtime": "node apps/local-runtime/src/server.mjs",
     "validate:example": "node apps/cli/src/index.mjs validate templates/startup-ad/project.json",
