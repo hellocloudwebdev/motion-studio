@@ -9,6 +9,7 @@ import { renderHyperFramesProject } from '../../../packages/render-manager/src/i
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
+import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -82,6 +83,24 @@ if (command === 'assets') {
   const result = validateEditorialAssembly(await load(assemblyFile));
   print(result);
   if (!result.valid) process.exitCode = 2;
+} else if (command === 'premiere' && file === 'export') {
+  const assemblyFile = args.find(x => !x.startsWith('--'));
+  if (!assemblyFile) throw new Error('Usage: motion-studio premiere export <assembly.json> --output <sequence.fcpxml> [--asset-root <directory>] [--manifest <handoff.json>]');
+  const assembly = await load(assemblyFile);
+  const result = await exportPremiereInterchange(assembly, {
+    assetRoot: option('--asset-root', undefined),
+    sequenceName: option('--sequence-name', undefined),
+    width: Number(option('--width', '1920')),
+    height: Number(option('--height', '1080'))
+  });
+  if (!result.valid) { print(result); process.exitCode = 2; }
+  else {
+    const output = option('--output', 'sequence.fcpxml');
+    await writeFile(path.resolve(output), result.xml, 'utf8');
+    const manifestPath = option('--manifest', 'premiere-handoff.json');
+    await writeFile(path.resolve(manifestPath), JSON.stringify(result.manifest, null, 2) + '\\n', 'utf8');
+    print({ valid: true, output: path.resolve(output), manifest: path.resolve(manifestPath), warnings: result.issues });
+  }
 } else if (command === 'media' && file === 'derive') {
   const source = args.find(x => !x.startsWith('--'));
   const outputDir = option('--output-dir', 'media-derived');
