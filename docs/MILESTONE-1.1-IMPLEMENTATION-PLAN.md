@@ -11,6 +11,17 @@ Connect the existing creative roles through explicit, provider-neutral contracts
 - Research is included in the workflow DAG only when the brief explicitly requires it.
 - Deterministic stage dependency graph for creative direction → script → storyboard/design system → Canonical Video IR.
 - Unit tests for normalization, validation, custom dimensions, optional fields and workflow dependencies.
+- CLI intake commands for creating, validating and planning a brief; optional workflow DAG output.
+- CLI integration tests for successful output creation and invalid-input failure behavior.
+
+## CLI usage
+```bash
+npm run intake -- create idea.json --output production-brief.json --workflow creative-workflow.json
+npm run intake -- validate production-brief.json
+npm run intake -- workflow production-brief.json
+```
+
+The input JSON should contain an `idea` string and may include `audience`, `purpose`, `durationSeconds`, `language`, `platform`, `aspectRatio`, `customDimensions`, `brandGuidelines`, `references`, `suppliedAssets`, `constraints`, `researchRequired` and `researchReason`.
 
 ## Remaining 1.1 work
 - [ ] Connect actual provider-backed agents to each stage with typed input/output contracts.
@@ -21,10 +32,10 @@ Connect the existing creative roles through explicit, provider-neutral contracts
 - [ ] Generate brand tokens and validate font installation/glyph coverage.
 - [ ] Compile approved planning artifacts into Canonical Video IR and run the existing project validator.
 - [ ] Persist revisions, approval state and artifact provenance in the run journal.
-- [ ] Add end-to-end intake → IR fixture and CLI/MCP entry points.
+- [ ] Add MCP entry points and end-to-end intake → IR fixture.
 
 ## Boundaries
-The package currently defines and validates contracts and a workflow DAG; it does not call an LLM, create research evidence or claim that an agent ran. Unknown brief fields remain unknown. Rendering remains blocked until a validated IR and the required human approval are present.
+The package defines and validates contracts and a workflow DAG; it does not call an LLM, create research evidence or claim that an agent ran. Unknown brief fields remain unknown. Rendering remains blocked until a validated IR and the required human approval are present.
 
 ## Exit gate
 A user supplies an idea and receives a complete, validated, render-ready Canonical Video IR without manually constructing project JSON. This milestone is not complete until the remaining checklist and an end-to-end acceptance fixture pass.
