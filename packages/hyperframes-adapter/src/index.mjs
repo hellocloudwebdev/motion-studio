@@ -13,7 +13,7 @@ const safeCssColor = (value, fallback = 'transparent') => {
   const candidate = String(value ?? '').trim();
   if (/^#[0-9a-f]{3,8}$/i.test(candidate)) return candidate;
   if (/^(transparent|black|white|red|green|blue|yellow|orange|purple|gray|grey|silver|navy|teal|maroon)$/i.test(candidate)) return candidate;
-  return /^(rgba?|hsla?)\\([0-9.% ,+-]+\\)$/i.test(candidate) ? candidate : fallback;
+  return /^(rgba?|hsla?)\([0-9.% ,+-]+\)$/i.test(candidate) ? candidate : fallback;
 };
 const seconds = (frames, frameRate) => Number((frames * frameRate.denominator / frameRate.numerator).toFixed(6));
 const isExternalUri = value => /^https?:\/\//i.test(value || '');
@@ -40,8 +40,8 @@ function cssFor(layer, fontFamily) {
   const scale = Number(layer.transform?.scale ?? 1);
   if (Number.isFinite(rotation) && rotation !== 0) styles.push('transform:rotate(' + rotation + 'deg) scale(' + (Number.isFinite(scale) ? scale : 1) + ')');
   else if (Number.isFinite(scale) && scale !== 1) styles.push('transform:scale(' + scale + ')');
-  if (typeof style.border === 'string' && /^\\d+(?:\\.\\d+)?px solid #[0-9a-f]{3,8}$/i.test(style.border.trim())) styles.push('border:' + style.border.trim());
-  if (typeof style.boxShadow === 'string' && /^-?[\\d.]+px\\s+-?[\\d.]+px\\s+[\\d.]+px\\s+#[0-9a-f]{3,8}$/i.test(style.boxShadow.trim())) styles.push('box-shadow:' + style.boxShadow.trim());
+  if (typeof style.border === 'string' && /^\d+(?:\.\d+)?px solid #[0-9a-f]{3,8}$/i.test(style.border.trim())) styles.push('border:' + style.border.trim());
+  if (typeof style.boxShadow === 'string' && /^-?[\d.]+px\s+-?[\d.]+px\s+[\d.]+px\s+#[0-9a-f]{3,8}$/i.test(style.boxShadow.trim())) styles.push('box-shadow:' + style.boxShadow.trim());
   if (style.gradient && Array.isArray(style.gradient.colors) && style.gradient.colors.length >= 2) {
     const colors = style.gradient.colors.slice(0, 4).map(color => safeCssColor(color, '#000000'));
     const angle = Number.isFinite(Number(style.gradient.angle)) ? Number(style.gradient.angle) : 135;
