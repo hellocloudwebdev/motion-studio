@@ -111,7 +111,7 @@ export async function exportPremiereInterchange(assembly, options = {}) {
   const formatId = 'r1';
   const resourceXml = [
     '<format id="' + formatId + '" name="Motion Studio ' + width + 'x' + height + '" frameDuration="' + frameTime(1, rate) + '" width="' + width + '" height="' + height + '"/>',
-    ...resources.map(resource => '<asset id="' + resource.id + '" name="' + escapeXml(resource.name) + '" src="' + escapeXml(resource.src) + '" start="0s" duration="' + frameTime(duration, rate) + '" hasVideo="' + (resource.kind === 'audio' ? '0' : '1') + '" hasAudio="' + (resource.kind === 'audio' || resource.kind === 'video' ? '1' : '0') + '"/>')
+    ...resources.map(resource => '<asset id="' + resource.id + '" name="' + escapeXml(resource.name) + '" src="' + escapeXml(resource.src) + '" start="0s" duration="' + frameTime(resource.durationFrames, rate) + '" format="' + formatId + '" hasVideo="' + (resource.kind === 'audio' ? '0' : '1') + '" hasAudio="' + (resource.kind === 'audio' || resource.kind === 'video' ? '1' : '0') + '"/>')
   ].join('');
   const clipXml = clipRows.sort((a, b) => a.startFrame - b.startFrame || a.track.localeCompare(b.track) || a.clipId.localeCompare(b.clipId)).map(clip =>
     '<asset-clip ref="' + clip.resourceId + '" name="' + escapeXml(clip.name) + '" lane="' + laneByTrack.get(clip.track) + '" offset="' + frameTime(clip.startFrame, rate) + '" start="' + frameTime(clip.sourceInFrame || 0, rate) + '" duration="' + frameTime(clip.durationFrames, rate) + '"/>'
