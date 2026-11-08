@@ -73,7 +73,7 @@ if (command === 'assets') {
   const project = await load(projectFile);
   const assembly = createEditorialAssembly(project, { sequenceName: option('--sequence-name', undefined) });
   const output = option('--output', '');
-  if (output) await writeFile(path.resolve(output), JSON.stringify(assembly, null, 2) + '\\n');
+  if (output) await writeFile(path.resolve(output), JSON.stringify(assembly, null, 2) + '\n');
   print(assembly);
   if (!assembly.summary.valid) process.exitCode = 2;
 } else if (command === 'editorial' && file === 'validate') {
@@ -93,7 +93,7 @@ if (command === 'assets') {
     timeoutMs: Number(option('--timeout-ms', '120000')), overwrite: flags().has('--overwrite')
   });
   const manifestPath = option('--manifest', '');
-  if (manifestPath) await writeFile(path.resolve(manifestPath), JSON.stringify(result, null, 2) + '\\n');
+  if (manifestPath) await writeFile(path.resolve(manifestPath), JSON.stringify(result, null, 2) + '\n');
   print(result);
 } else if (command === 'qa-approve') {
   if (!file) throw new Error('Usage: motion-studio qa-approve <project-with-qa.json> --actor <name> [--note <text>] [--output <path>]');
