@@ -6,7 +6,7 @@ import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/o
 import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
-import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights } from '../../../packages/asset-registry/src/index.mjs';
+import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry } from '../../../packages/asset-registry/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -47,7 +47,16 @@ if (command === 'assets') {
     const output = path.resolve(option('--output', registryFile));
     await writeFile(output, JSON.stringify(updated, null, 2) + '\\n');
     print({ updated: true, assetId: option('--asset-id', ''), output, needsRightsReview: updated.summary.needsRightsReview });
-  } else throw new Error('Unknown assets command. Use scan, verify or approve-rights.');
+  } else if (subcommand === 'attach') {
+    const projectFile = args.find(x => !x.startsWith('--'));
+    const registryFile = option('--registry', '');
+    if (!projectFile || !registryFile) throw new Error('Usage: motion-studio assets attach <project.json> --registry <registry.json> [--output <project-with-assets.json>]');
+    const project = await load(projectFile), registry = await load(registryFile);
+    const result = attachAssetRegistry(project, registry);
+    const output = path.resolve(option('--output', 'project-with-assets.json'));
+    await writeFile(output, JSON.stringify(result.project, null, 2) + '\\n');
+    print({ output, report: result.report });
+  } else throw new Error('Unknown assets command. Use scan, verify, approve-rights or attach.');
 } else if (command === 'qa-approve') {
   if (!file) throw new Error('Usage: motion-studio qa-approve <project-with-qa.json> --actor <name> [--note <text>] [--output <path>]');
   const project = await load(file);
