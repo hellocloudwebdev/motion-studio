@@ -9,7 +9,7 @@ import { generateMediaDerivatives } from '../../../packages/media-derivatives/sr
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.9.0-alpha.1' });
+const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
