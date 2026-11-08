@@ -39,3 +39,28 @@ test('rejects invalid Canonical Video IR before writing output', async () => {
   try { await assert.rejects(() => compileHyperFramesProject(invalid, { outputDir: dir }), /invalid Video IR/i); }
   finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('compiles chart layers to inline SVG and uses frame-based motion timing', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-chart-'));
+  try {
+    const input = structuredClone(project);
+    input.scenes[0].layers = [
+      {
+        id: 'revenue-chart', kind: 'chart', engineHint: 'hyperframes',
+        content: { chartType: 'bar', title: 'Revenue', data: [{ label: 'Q1', value: 10 }, { label: 'Q2', value: 18 }] },
+        transform: { x: 120, y: 100, width: 1500, height: 800 },
+        style: { color: '#ff9900' },
+        motion: { preset: 'slide-left', durationFrames: 30, delayFrames: 15, easing: 'power2.out' }
+      }
+    ];
+    const result = await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    assert.equal(result.warnings.length, 0);
+    assert.match(html, /<svg/);
+    assert.match(html, /Revenue/);
+    assert.match(html, /data-motion-duration="1"/);
+    assert.match(html, /data-motion-delay="0.5"/);
+    assert.match(html, /data-motion-ease="power2.out"/);
+    assert.match(html, /slide-left/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
