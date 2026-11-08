@@ -1,0 +1,6 @@
+{
+  "name": "@motion-studio/editorial-assembly",
+  "version": "0.9.0-alpha.1",
+  "type": "module",
+  "exports": { ".": "./src/index.mjs" }
+}
