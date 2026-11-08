@@ -67,7 +67,7 @@ async function sha256(filePath) {
 
 async function assertRegularSource(source) {
   const info = await lstat(source);
-  if (info.isSymbolicLink() || !info.isFile() || await realpath(source) !== source) throw new Error('Media source must be a regular file reached without symlinked path components.');
+  if (info.isSymbolicLink() || !info.isFile() || await realpath(source) !== source) throw new Error('Media source must be a regular, non-symlink file reached without symlinked path components.');
   return info;
 }
 
