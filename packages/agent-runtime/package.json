@@ -1,0 +1,6 @@
+{
+  "name": "@motion-studio/agent-runtime",
+  "version": "0.5.0-alpha.1",
+  "type": "module",
+  "exports": "./src/index.mjs"
+}
