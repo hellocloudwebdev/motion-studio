@@ -72,7 +72,7 @@ Export a validated editorial manifest to FCPXML plus a provenance sidecar:
 motion-studio premiere export assembly.json --asset-root ./media --output sequence.fcpxml --manifest premiere-handoff.json
 ```
 
-Relative media paths are resolved only under the explicit asset root. The exporter preserves rational frame timing, source in-points, track lanes, source checksums and rights-review state. It fails closed on unresolved files and unsupported URI schemes. This writes an interchange file; it does not launch Premiere, import the sequence or perform edits. See [Milestone 1.0](docs/MILESTONE-1.0-IMPLEMENTATION-PLAN.md).
+Relative media paths are resolved only under the explicit asset root. The exporter preserves rational frame timing, source in-points, track lanes, source checksums and rights-review state. It fails closed on unresolved files and unsupported URI schemes. This writes an interchange file; it does not launch Premiere, import the sequence or perform edits. See [Premiere interchange](docs/PREMIERE-INTERCHANGE.md) and [Milestone 1.0](docs/MILESTONE-1.0-IMPLEMENTATION-PLAN.md).
 
 ## Milestone 0.9: editorial assembly planning
 
