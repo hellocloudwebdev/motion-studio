@@ -77,6 +77,6 @@ test('sanitizes untrusted color and style values before emitting inline CSS', as
     const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
     assert.doesNotMatch(html, /javascript:/);
     assert.doesNotMatch(html, /red;position:fixed/);
-    assert.match(html, /color:\\s*#ffffff/);
+    assert.match(html, /color:\s*#ffffff/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
