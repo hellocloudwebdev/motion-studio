@@ -5,7 +5,7 @@ import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
 import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
 
-const server = new McpServer({ name: 'motion-studio', version: '0.6.0-alpha.1' });
+const server = new McpServer({ name: 'motion-studio', version: '0.7.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 
