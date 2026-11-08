@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm, lstat } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { generateMediaDerivatives } from '../src/index.mjs';
 
 async function fixture(fn) {
-  const root = await mkdtemp(path.join(tmpdir(), 'motion-studio-derivatives-'));
+  const root = await mkdtemp(path.join(await realpath(tmpdir()), 'motion-studio-derivatives-'));
   try { await fn(root); } finally { await rm(root, { recursive: true, force: true }); }
 }
 const ffmpegAvailable = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore', shell: false }).status === 0;
