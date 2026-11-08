@@ -2,7 +2,7 @@
 
 **Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
 
-> **Current milestone: 0.7.0-alpha.1.** Milestone 0.5 added evidence-driven render QA; 0.6 added verified host preflight and scoped approvals; 0.7 adds media asset indexing, integrity checks and rights-review metadata.
+> **Current milestone: 0.8.0-alpha.1.** Milestones 0.5–0.7 added evidence-driven QA, verified production approvals and governed asset intake; 0.8 adds local, hashed media previews and proxy generation.
 
 ## Install on a new PC
 
@@ -63,6 +63,18 @@ motion-studio assets attach ./project.json --registry ./asset-registry.json --ou
 ```
 
 Asset scans are read-only and stream SHA-256 hashing for large files. New media defaults to `needs-review`; an approval record is a producer's audit assertion, not legal clearance. Verification detects changed/missing bytes but does not validate license terms. See [Asset library](docs/ASSET-LIBRARY.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
+
+## Milestone 0.8: media derivatives and preview artifacts
+
+Create local proxies and review assets without modifying source media:
+
+```bash
+motion-studio media derive ./media/clip.mp4 --output-dir ./media/derived
+motion-studio media derive ./media/music.wav --output-dir ./media/derived
+motion-studio media derive ./media/still.png --output-dir ./media/derived
+```
+
+Video creates an H.264/AAC proxy and representative thumbnail, audio creates a waveform PNG, and raster images create a bounded JPEG preview. Every output is hashed in a provenance manifest; existing outputs are not overwritten unless `--overwrite` is supplied. These files are previews, not delivery masters. See [Media derivatives](docs/MEDIA-DERIVATIVES.md) and [Milestone 0.8](docs/MILESTONE-0.8-IMPLEMENTATION-PLAN.md).
 
 ## Milestone 0.6: host preflight and approval gates
 
