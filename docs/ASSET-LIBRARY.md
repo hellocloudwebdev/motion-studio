@@ -18,7 +18,7 @@ The scanner recognizes common video, audio, image, font, document and 3D formats
 
 ## Registry identity and integrity
 
-Each file receives a SHA-256 digest and a deterministic `asset-<digest-prefix>` ID. Two files with identical bytes share an ID and are listed in a duplicate group. The registry also stores a root directory and root-relative paths. When moving the folder, verify with `--root <new-root>` if the relative layout is unchanged.
+Each file receives a SHA-256 digest, a stable path-specific `asset-...` ID, and a shared content ID derived from its digest. Identical files at different paths remain separate provenance/rights records but share a content ID and are listed in a duplicate group. The registry also stores a root directory and root-relative paths. When moving the folder, verify with `--root <new-root>` if the relative layout is unchanged.
 
 Integrity verification catches changed or missing files. It does not detect whether a license is valid or whether an asset is appropriate for a particular campaign.
 
