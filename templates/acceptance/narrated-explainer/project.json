@@ -24,8 +24,8 @@
   "production": {
     "script": [
       { "narration": "Big ideas can get lost in scattered notes and busy days." },
-      { "narration": "Give every task a clear home, a next step, and an owner." },
-      { "narration": "Make progress visible. Share the plan. Keep moving together." }
+      { "narration": "Give every task a clear home, a next step, and an owner.", "leadInFrames": 18 },
+      { "narration": "Make progress visible. Share the plan. Keep moving together.", "leadInFrames": 18 }
     ]
   },
   "scenes": [

@@ -2,6 +2,7 @@ import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { finalizeMedia, renderCaptions, runMediaCommand } from '../../ffmpeg/src/index.mjs';
+import { analyzeRenderedMedia } from '../../render-manager/src/media-analysis.mjs';
 
 function hashFile(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function safeFilename(value) { return String(value || 'asset').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'asset'; }
@@ -72,7 +73,8 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     const defaultAudioCodec = target.format === 'webm' ? 'libopus' : target.format === 'prores' ? 'pcm_s16le' : 'aac';
     const durationSeconds = project.project.totalDurationFrames * project.project.frameRate.denominator / project.project.frameRate.numerator;
     const receipt = await finalizeMedia({ input: source, output, width: target.width, height: target.height, fps, durationSeconds, videoCodec: target.videoCodec || defaultVideoCodec, audioCodec: target.audioCodec || defaultAudioCodec, crf: target.crf ?? 18, audioInputs, audioRequired: Boolean(target.audioRequired), signal });
-    variants.push({ target, ...receipt });
+    const mediaAnalysis = await analyzeRenderedMedia({ input: output, media: receipt.media, options: { ocr: false }, signal });
+    variants.push({ target, ...receipt, mediaAnalysis });
   }
   const primaryVideo = variants.find(variant => variant.target.id === primary.id)?.output || variants[0].output;
   const thumbnail = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'thumbnail.jpg'));
@@ -171,12 +173,13 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   const assetsPackaged = assetManifest.every(asset => asset.included);
   const canonicalIrSha256 = createHash('sha256').update(JSON.stringify(project)).digest('hex');
   const renderSourceMatches = renderManifest?.projectIrSha256 === canonicalIrSha256;
-  const productionAccepted = renderManifest?.productionReady === true && renderManifest?.verified === true && renderSourceMatches && rightsCleared && assetsPackaged;
+  const mediaAnalysisPassed = variants.every(variant => variant.mediaAnalysis?.passed === true);
+  const productionAccepted = renderManifest?.productionReady === true && renderManifest?.verified === true && renderSourceMatches && rightsCleared && assetsPackaged && mediaAnalysisPassed;
   const receipt = {
     schemaVersion: '1.0', projectId: project.project.id, projectRevision: project.project.revision || 1,
     createdAt: new Date().toISOString(),
     status: productionAccepted ? 'accepted' : 'packaged-awaiting-production-evidence',
-    acceptance: { passed: productionAccepted, reason: productionAccepted ? null : !renderManifest?.productionReady ? 'A verified production-ready render manifest is required for acceptance.' : !renderSourceMatches ? 'Render evidence does not match the packaged Canonical Video IR.' : !rightsCleared ? 'Asset rights must be cleared or user-owned before acceptance.' : !assetsPackaged ? 'Every project asset must be included in the package or generated locally.' : 'Render evidence is incomplete.' },
+    acceptance: { passed: productionAccepted, reason: productionAccepted ? null : !renderManifest?.productionReady ? 'A verified production-ready render manifest is required for acceptance.' : !renderSourceMatches ? 'Render evidence does not match the packaged Canonical Video IR.' : !mediaAnalysisPassed ? 'A delivery variant failed final media analysis.' : !rightsCleared ? 'Asset rights must be cleared or user-owned before acceptance.' : !assetsPackaged ? 'Every project asset must be included in the package or generated locally.' : 'Render evidence is incomplete.' },
     variants, thumbnail,
     captions: captionFiles, sourceProject: { path: projectCopy, sha256: hashFile(sourceProjectBytes), canonicalIrSha256 },
     portableProject: { path: portableProjectPath, sha256: hashFile(portableProjectBytes) },

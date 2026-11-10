@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,20 +59,31 @@ export async function generateSpeech(text, { outputPath, projectRoot, signal, ti
   const info = resolveSpeechCommand();
   await access(info.executable);
   if (info.provider === 'windows-sapi') await access(WINDOWS_SAPI_SCRIPT);
-  const textFile = path.join(realDirectory, '.speech-' + process.pid + '-' + Date.now() + '.txt');
+  const runId = process.pid + '-' + Date.now();
+  const textFile = path.join(realDirectory, '.speech-' + runId + '.txt');
+  const rawOutput = path.join(realDirectory, '.speech-source-' + runId + info.extension);
+  const trimmedOutput = path.join(realDirectory, '.speech-trimmed-' + runId + info.extension);
   await writeFile(textFile, text.trim(), { encoding: 'utf8', flag: 'wx' });
   try {
     let args;
-    if (info.provider === 'windows-sapi') args = [...info.argsPrefix, textFile, output];
-    else if (info.provider === 'macos-say') args = ['-f', textFile, '-o', output];
-    else args = ['-f', textFile, '-w', output];
+    if (info.provider === 'windows-sapi') args = [...info.argsPrefix, textFile, rawOutput];
+    else if (info.provider === 'macos-say') args = ['-f', textFile, '-o', rawOutput];
+    else args = ['-f', textFile, '-w', rawOutput];
     const execution = await run(info.executable, args, { cwd: realDirectory, signal, timeoutMs });
-    const outputStat = await stat(output);
-    if (!outputStat.isFile() || outputStat.size === 0) throw new Error('Local speech engine returned no output file.');
-    const audio = await probeAudio(output, { signal });
+    const rawStat = await stat(rawOutput);
+    if (!rawStat.isFile() || rawStat.size === 0) throw new Error('Local speech engine returned no output file.');
+    const sourceAudio = await probeAudio(rawOutput, { signal });
+    const outputCodec = info.extension === '.aiff' ? 'pcm_s16be' : 'pcm_s16le';
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', rawOutput, '-af', 'areverse,silenceremove=start_periods=1:start_duration=0.35:start_threshold=-60dB:start_silence=0.15,areverse', '-c:a', outputCodec, trimmedOutput], { cwd: realDirectory, signal, timeoutMs });
+    const audio = await probeAudio(trimmedOutput, { signal });
+    const outputStat = await stat(trimmedOutput);
+    if (!outputStat.isFile() || outputStat.size === 0) throw new Error('Silence-trimmed local speech output is empty.');
+    await rename(trimmedOutput, output);
     const digest = createHash('sha256').update(await readFile(output)).digest('hex');
-    return { provider: info.provider, output, sha256: digest, byteSize: outputStat.size, audio, verified: true, process: { exitCode: execution.code, logTail: (execution.stderr || execution.stdout).slice(-1000) } };
-  } finally { await rm(textFile, { force: true }); }
+    return { provider: info.provider, output, sha256: digest, byteSize: outputStat.size, audio, sourceAudioDurationSeconds: sourceAudio.durationSeconds, trailingSilenceTrimmed: Math.max(0, sourceAudio.durationSeconds - audio.durationSeconds), verified: true, process: { exitCode: execution.code, logTail: (execution.stderr || execution.stdout).slice(-1000) } };
+  } finally {
+    await Promise.all([rm(textFile, { force: true }), rm(rawOutput, { force: true }), rm(trimmedOutput, { force: true })]);
+  }
 }
 
 export function narrationTextFromProject(project) {
@@ -81,18 +92,22 @@ export function narrationTextFromProject(project) {
 
 export function narrationSegmentsFromProject(project) {
   const sources = [project?.production?.script, project?.planning?.script, project?.script].filter(Boolean);
+  const segment = (text, item = {}) => ({ text: text.trim(), ...(Number.isInteger(item.leadInFrames) && item.leadInFrames > 0 ? { leadInFrames: item.leadInFrames } : {}) });
   for (const source of sources) {
     if (Array.isArray(source)) {
-      const segments = source.map(item => item?.narration).filter(value => typeof value === 'string' && value.trim()).map(text => ({ text: text.trim() }));
+      const segments = source.filter(item => typeof item?.narration === 'string' && item.narration.trim()).map(item => segment(item.narration, item));
       if (segments.length) return segments;
     }
     if (typeof source.narration === 'string' && source.narration.trim()) return [{ text: source.narration.trim() }];
     if (Array.isArray(source.narrationSegments)) {
-      const segments = source.narrationSegments.map(item => typeof item === 'string' ? item : item?.text || item?.narration).filter(value => typeof value === 'string' && value.trim()).map(text => ({ text: text.trim() }));
+      const segments = source.narrationSegments.map(item => {
+        const text = typeof item === 'string' ? item : item?.text || item?.narration;
+        return typeof text === 'string' && text.trim() ? segment(text, typeof item === 'object' ? item : {}) : null;
+      }).filter(Boolean);
       if (segments.length) return segments;
     }
     if (Array.isArray(source.segments)) {
-      const segments = source.segments.map(item => item?.narration).filter(value => typeof value === 'string' && value.trim()).map(text => ({ text: text.trim() }));
+      const segments = source.segments.filter(item => typeof item?.narration === 'string' && item.narration.trim()).map(item => segment(item.narration, item));
       if (segments.length) return segments;
     }
   }

@@ -36,7 +36,8 @@ Never promote a capability to runtime-verified or production-accepted based only
 
 - Added the explicit, bounded `float` motion preset for IR-selected scene motion and sized compositions from the canonical canvas. The narrated fixture now passes all nine HyperFrames seek/layout samples; the check remains enabled.
 - Rendered an 18-second 1280×720, 30 fps H.264 scene master with no black/frozen-frame or sampled perceptual-duplicate findings. FFmpeg then mixed the generated narration into a verified H.264/AAC delivery variant and generated SRT/VTT; package integrity verified 19 files.
-- Delivery acceptance remains correctly pending because the generated system voice has `rightsStatus: unknown`. Audio review also found a 2.77-second silence interval between narration cues; this needs an intentional edit or approved sound bed and human review. No music/SFX rights or creative approval is recorded.
+- Offline speech generation now trims trailing silence while retaining internal phrase pauses; approved script segments may specify integer-frame lead-ins. The final mixed-audio analysis reports no silence events for the fixture.
+- Delivery acceptance remains correctly pending because the generated system voice has `rightsStatus: unknown`. No licensed music/SFX or human speech/creative approval is recorded.
 - Latest automated suite: 128 passed, 0 failed, 1 skipped; `npm audit --omit=dev` reports zero vulnerabilities.
 
 ## Detailed execution plan mapped to the four architecture phases
@@ -55,6 +56,10 @@ This section turns the attached Z Code architecture recommendation into sequence
 - **Exit evidence:** compile, lint, runtime/layout check, snapshots and FFmpeg render succeed; FFprobe matches IR canvas, rational FPS, frame duration and audio requirement; decoded QA frames are nonempty; the accepted check report contains no error.
 
 **P1.1 status (2026-11-11):** The original false-positive `sweep_static` on the narrated fixture is cleared locally with the `float` scene-motion preset and explicit IR canvas dimensions. All nine HyperFrames seek/layout samples now pass on HyperFrames 0.8.86. The 18-second video render, deterministic visual render QA, audio mix, SRT/VTT generation, FFprobe profile checks and package integrity checks pass. Producer acceptance remains pending: the generated narration asset is rights-unknown, the sample has a measured 2.77-second narration gap, and music/SFX and human speech review are absent.
+
+The `sweep_static` finding used a zero-size sentinel bbox when every sampled element geometry/opacity signature was identical; the root composition itself was not actually zero-sized. Scene cuts changed text/colors but those changes were outside the check's geometry fingerprint. An explicit scene-duration `float` motion preset makes authored movement visible to the seek check without suppressing it.
+
+**P1.1/P1.2 current status (2026-11-11):** All nine HyperFrames seek/layout samples pass; the final 18-second render and audio-mixed delivery variant pass their visual/audio analysis, FFprobe profile checks, caption generation and 19-file integrity verification. Trailing system-voice padding is trimmed and the sample script uses frame-based narration lead-ins. The package remains pending only because voice rights are unknown and licensed music/SFX plus human speech/creative review have not been supplied.
 
 **P1.2 — Complete the narrated audio and caption path**
 - Retain offline SAPI/`say`/`espeak` as optional local speech backends; make provider choice, voice, locale, speaking rate and provenance explicit when supported by the host.
@@ -385,7 +390,7 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 ## Current tracker
 
-Updated 2026-11-11 after local integration on `main`. The latest recorded automated suite reports 128 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
+Updated 2026-11-11 after local integration on `main`. The latest recorded automated suite reports 129 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
 
 Runtime evidence: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). The Three.js demo also passes browser render and independent FFprobe checks, and delivery packaging tests exercise local FFmpeg media. These are narrow technical samples, not narrated production acceptance.
 

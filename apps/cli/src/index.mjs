@@ -162,7 +162,8 @@ if (command === 'assets') {
       sceneStart = 0;
       for (const previous of project.scenes?.slice(0, index) || []) sceneStart = Math.max(sceneStart, (previous.startFrame ?? sceneStart) + (previous.durationFrames || 0));
     }
-    const startFrame = Math.max(cursorFrame, sceneStart);
+    const leadInFrames = Number.isInteger(segment.leadInFrames) ? segment.leadInFrames : 0;
+    const startFrame = Math.max(cursorFrame, Math.max(0, sceneStart - leadInFrames));
     const assetId = 'generated-narration-' + String(index + 1).padStart(3, '0');
     const audioFile = path.join(realProjectRoot, 'assets', 'narration', 'segment-' + String(index + 1).padStart(3, '0') + speechInfo.extension);
     const receipt = await generateSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')) });
@@ -170,7 +171,7 @@ if (command === 'assets') {
     const endFrame = startFrame + durationFrames;
     if (endFrame > project.project.totalDurationFrames) throw new Error('Generated narration segment ' + (index + 1) + ' extends beyond the project duration; revise the script or increase the target duration before attaching audio.');
     const relativeUri = path.relative(realProjectRoot, audioFile).split(path.sep).join('/');
-    project.assets = [...(project.assets || []).filter(item => item.id !== assetId), { id: assetId, kind: 'audio', uri: relativeUri, sha256: receipt.sha256, byteSize: receipt.byteSize, source: 'generated-local-speech', rightsStatus: 'unknown', metadata: { generated: true, provider: receipt.provider, sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds } }];
+    project.assets = [...(project.assets || []).filter(item => item.id !== assetId), { id: assetId, kind: 'audio', uri: relativeUri, sha256: receipt.sha256, byteSize: receipt.byteSize, source: 'generated-local-speech', rightsStatus: 'unknown', metadata: { generated: true, provider: receipt.provider, sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds, trailingSilenceTrimmedSeconds: receipt.trailingSilenceTrimmed } }];
     assetIds.push(assetId); receipts.push(receipt);
     cues.push({ assetId, kind: 'narration', offsetFrames: startFrame, durationFrames, volume: Number(option('--gain', '1')) });
     captions.push({ id: 'narration-caption-' + String(index + 1).padStart(3, '0'), startFrame, endFrame, text: segment.text });

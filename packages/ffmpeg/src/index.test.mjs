@@ -35,6 +35,7 @@ test('finalization builds explicit safe audio mix and video mappings', () => {
   assert.match(filters, /afade=t=in:st=0:d=0\.400000/);
   assert.match(filters, /afade=t=out:st=3\.500000:d=0\.500000/);
   assert.match(filters, /sidechaincompress/);
+  assert.match(filters, /apad=whole_dur=4\.000000/);
   assert.throws(() => buildFinalizationPlan({ input: 'a.mp4', output: 'b.mp4', width: 1280, height: 720, fps: 30, audioInputs: [{ path: 'music.wav', kind: 'music', duckAgainstNarration: true }] }), /requires at least one narration/);
   assert.throws(() => buildFinalizationPlan({ input: 'a.mp4', output: 'b.mp4', width: 1280, height: 720, fps: 30, audioRequired: true }), /requires audio/);
 });

@@ -80,7 +80,8 @@ export function buildFinalizationPlan({ input, output, width, height, fps, durat
       filters.push('[a' + i + '][' + sidechainLabels.get(i) + ']sidechaincompress=threshold=0.035:ratio=8:attack=15:release=250:makeup=1[' + out + ']');
       return '[' + out + ']';
     });
-    filters.push(ducked.join('') + 'amix=inputs=' + ducked.length + ':duration=longest:normalize=0[aout]');
+    const audioPadding = durationSeconds === undefined ? '' : ',apad=whole_dur=' + durationSeconds.toFixed(6);
+    filters.push(ducked.join('') + 'amix=inputs=' + ducked.length + ':duration=longest:normalize=0' + audioPadding + '[aout]');
   }
   if (subtitlePath) {
     const subtitles = assertSafePath(subtitlePath, 'subtitle');

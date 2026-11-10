@@ -7,8 +7,8 @@ import path from 'node:path';
 import { buildDeliveryPackage, verifyDeliveryPackage } from './index.mjs';
 import { runMediaCommand } from '../../ffmpeg/src/index.mjs';
 
-async function makeVideo(file) {
-  await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0x223344:s=320x180:r=30:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file]);
+async function makeVideo(file, durationSeconds = 2) {
+  await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30:duration=' + durationSeconds, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file]);
 }
 
 function project(assets = []) {
@@ -42,6 +42,8 @@ test('packages only referenced assets, rewrites a portable IR and verifies packa
     const assembly = { assemblyVersion: '1.0.0', project: input.project, sequence: { durationFrames: 60 }, scenes: [], clips: [] };
     const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: packageRoot, renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, frameEvidence: [{ path: qaFrame, decoded: true, bytes: 1, atSeconds: 0.5 }], qa: { passed: true, defects: [] } }, editorialAssembly: assembly, operationHistory: [{ stage: 'render', status: 'passed' }] });
     assert.equal(result.acceptance.passed, true);
+    assert.equal(result.variants[0].mediaAnalysis.passed, true);
+    assert.equal(result.variants[0].mediaAnalysis.detectors.silence.skipped, true);
     assert.equal(result.assetManifest ? JSON.parse(await readFile(result.assetManifest, 'utf8')).assets.length : 0, 1);
     const portable = JSON.parse(await readFile(result.portableProject.path, 'utf8'));
     assert.match(portable.assets[0].uri, /^assets\/still-/);
@@ -70,5 +72,31 @@ test('delivery refuses to package a referenced asset that escapes the project ro
     assert.equal(result.acceptance.passed, false);
     assert.match(result.limitations[0].reason, /project-relative path|escapes the project directory/);
     assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery'))).passed, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('delivery records silence findings from the final audio-mixed variant', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-audio-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.project.totalDurationFrames = 180;
+    input.scenes[0].durationFrames = 180;
+    input.delivery.targets[0].audioRequired = true;
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4'), narration = path.join(root, 'narration.wav');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo, 6);
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'pcm_s16le', narration]);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const result = await buildDeliveryPackage({
+      project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'),
+      renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha },
+      audioInputs: [{ path: narration, kind: 'narration' }]
+    });
+    const mediaAnalysis = result.variants[0].mediaAnalysis;
+    assert.equal(mediaAnalysis.passed, true);
+    assert.ok(mediaAnalysis.detectors.silence.events.some(event => event.duration >= 2.5));
+    assert.equal(result.variants[0].media.hasAudio, true);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
