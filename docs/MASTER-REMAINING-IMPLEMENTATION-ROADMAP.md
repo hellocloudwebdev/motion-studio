@@ -248,6 +248,8 @@ Updated 2026-11-10 after local integration of the 0.5–1.2 dependency stack. Th
 
 Runtime evidence added during this integration: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). This is a silent typography sample only; it does not satisfy the narrated production target.
 
+The rendered MP4 was also scanned and checksum-verified into the asset registry, attached to a derived Canonical Video IR, converted into an editorial assembly, and exported to FCPXML with its provenance sidecar. The assembly correctly retained an unapproved-rights warning. The interchange has not been imported/read back in Premiere.
+
 | Milestone | Current evidence status | Remaining acceptance evidence |
 |---|---|---|
 | 0.5–0.9 | Integrated locally; unit/CLI coverage passes | Fresh combined CI on supported platforms; run real asset → derivative → editorial → interchange chain |
