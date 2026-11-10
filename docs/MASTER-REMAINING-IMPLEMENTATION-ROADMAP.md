@@ -16,7 +16,7 @@ Keep the locked roles: HyperFrames + GSAP (programmable 2D), After Effects (spec
 
 The repository already contains the Canonical Video IR, agent/orchestration foundations, installer, HyperFrames compiler/render path, asset registry, media derivatives, editorial assembly, initial Premiere FCPXML interchange, deterministic render QA, bounded-repair scaffolding and Adobe MCP governance. Retain and extend these packages.
 
-PRs #4–#9 are a dependency chain for milestones 0.5–1.0. At the time this roadmap was created, their CI runs reported success, but they were open and CI is not production acceptance. Merge and validate in dependency order. A real licensed Adobe workstation test is a separate acceptance gate.
+PRs #4–#9 were the dependency chain for milestones 0.5–1.0; their work is integrated in the current `main` baseline. Revalidate the combined chain in CI and on target hosts. A real licensed Adobe workstation test remains a separate acceptance gate.
 
 Use these evidence states consistently:
 - **Implemented:** code exists.
@@ -31,6 +31,126 @@ Never promote a capability to runtime-verified or production-accepted based only
 - Local offline narration is implemented through fixed platform speech executables (Windows SAPI, macOS `say`, Linux `espeak`). `narration-generate` verifies WAV/audio output with FFprobe, writes project-scoped assets and narration cues, derives captions from measured segment timing, and flags rights review as required. A Windows runtime test generated a verified speech file.
 - An 18-second three-scene narrated fixture was generated and its HyperFrames snapshots visually show the intended scenes. HyperFrames' pre-render check reports a zero-size composition root (`sweep_static`), so the render manager correctly stopped before MP4 export. This is not narrated render acceptance.
 - Latest automated suite at this update: 127 passed, 0 failed, 1 skipped. Three.js runtime acceptance is available locally; Blender and licensed Adobe workstation acceptance remain external gates.
+
+## Detailed execution plan mapped to the four architecture phases
+
+This section turns the attached Z Code architecture recommendation into sequenced, reviewable work. The existing milestone checklists below remain the technical detail. A work package is complete only when its listed evidence is checked in or attached to the release record. "Implemented" and "runtime verified" are separate states.
+
+### Phase 1 — Foundation: one accepted 2D narrated production
+
+**Outcome:** A user idea becomes a rights-reviewed, narrated 2D video with a verified master, captions, source IR, QA evidence and portable delivery.
+
+**P1.1 — Clear the multi-scene HyperFrames render gate (P0)**
+- Reproduce the 18-second narrated fixture failure with pinned HyperFrames version and preserve the check JSON, generated HTML, seek samples and environment details.
+- Identify why the composition root receives a zero-sized bounding box during `check`; changing canvas CSS dimensions alone did not clear the finding.
+- Fix the generated composition/seek contract or upstream-compatible integration. Do not suppress `sweep_static` or mark a failed check green.
+- Add a regression fixture with multiple scene boundaries and at least one cue beginning in each scene. Verify arbitrary-time seeks and nonzero root bounds at every sampled time.
+- **Exit evidence:** compile, lint, runtime/layout check, snapshots and FFmpeg render succeed; FFprobe matches IR canvas, rational FPS, frame duration and audio requirement; decoded QA frames are nonempty; the accepted check report contains no error.
+
+**P1.2 — Complete the narrated audio and caption path**
+- Retain offline SAPI/`say`/`espeak` as optional local speech backends; make provider choice, voice, locale, speaking rate and provenance explicit when supported by the host.
+- Measure generated speech; align it to scene/frame ranges; reject overflow and preserve authorized cue offsets when projects are regenerated.
+- Generate SRT and WebVTT from approved caption text and final integer-frame timing; validate monotonic cues, duration, UTF-8 and round-trip timing.
+- Attach approved music/SFX assets only after source, license and usage scope are recorded. Exercise gain, fades and narration ducking in a final render.
+- Add loudness, clipping, silence and speech/music synchronization reports. Keep human review visible where intelligibility or rights cannot be decided deterministically.
+- **Exit evidence:** the narrated acceptance project has audible, intelligible speech; captions match reviewed words and timing; FFprobe and audio QA pass; unapproved rights remain a blocking or explicit review state.
+
+**P1.3 — Close bounded visual/audio repair and delivery**
+- Turn each critical QA finding into a defect with severity, evidence, integer-frame range, owning scene/layer and repair owner.
+- Execute only bounded, schema-validated patches; rerender affected scenes; rerun the failed check and nearby regression samples; escalate after the documented retry limit.
+- Include the editorial manifest, canonical source, referenced assets, caption sidecars, render/operation receipts, QA defects, inspection frames and integrity hashes in the package.
+- Record output settings and compare a repeat build for deterministic metadata/content where exact pixel identity is not guaranteed.
+- **Exit evidence:** tamper/missing-file checks reject a damaged package; a clean package independently verifies and contains every required source/evidence item.
+
+**P1.4 — Complete the first advertisement acceptance**
+- Produce one 15–30 second startup/product advertisement from a brief, including hook, message, CTA, design system, generated/approved assets, music and one requested profile.
+- Require explicit rights review and inspect the actual master, not only snapshots.
+- **Phase 1 exit:** the end-to-end advertisement and narrated explainer meet the global definition of done on the local supported path; acceptance records include the IR, script/storyboard, source/asset manifests, captions, reports and verified master.
+
+### Phase 2 — Advanced production: verified mixed 2D and 3D
+
+**Outcome:** At least one canonical scene rendered by Blender is combined with HyperFrames/Three.js material in a final, inspected production.
+
+**P2.1 — Expand the Blender scene contract**
+- Define supported canonical mappings for meshes/primitives, materials, camera, lighting, transforms, integer-frame animation and alpha requirements; reject unsupported features explicitly.
+- Add deterministic fixtures for camera move, lighting/material variations, imported approved asset, and cancellation/error behavior. Keep local rendering concurrency at one.
+
+**P2.2 — Run Blender on a supported host**
+- Install or provision a supported Blender version on an authorized machine; record OS, Blender/build version, render engine, fonts, hardware and settings.
+- Execute actual frame-sequence renders; verify expected frame count, dimensions, alpha, color and hashes from returned artifacts.
+- Exercise recovery from a failed frame without accepting incomplete output.
+
+**P2.3 — Complete mixed-scene editorial acceptance**
+- Route a 3D scene through the Blender adapter and 2D scenes through HyperFrames/Three.js using the same IR timing and provenance.
+- Assemble using the locked editorial owner (Premiere for editorial assembly where the Adobe path is available; FFmpeg for the approved open-source delivery path).
+- Inspect scene boundaries, color/alpha integration, sync and final output metadata.
+- **Phase 2 exit:** a verified Blender receipt and mixed 2D/3D delivery package pass all relevant QA. Adapter tests alone do not close this phase.
+
+### Phase 3 — Production intelligence: broader inputs and automatic improvement
+
+**Outcome:** The same controlled pipeline can produce multiple video categories and formats, while preserving asset rights, source evidence and bounded repair.
+
+**P3.1 — Add provider-neutral asset production/acquisition**
+- Define capability contracts for image, video/stock, music, SFX and speech providers; keep API credentials outside project artifacts and logs.
+- Implement providers incrementally, record prompt/source, model/provider, hash, license/usage terms and approval state, and make unlicensed or unknown-rights assets non-final by default.
+- Keep MCP planning usable under a host harness without forcing a Motion Studio model key; external research/search costs remain explicit and opt-in.
+
+**P3.2 — Add directed narration and real-footage editing**
+- Extend script-to-voice direction (voice/locale/pace/pronunciation) and timing review with provider-independent metadata.
+- Support footage ingest, probe, proxy/derivative and frame-accurate trims while treating media metadata and embedded text as untrusted input.
+- Verify source in-points, frame rate conversion, audio sync, rights and editorial manifest against rendered output.
+
+**P3.3 — Add audio-reactive and multi-format production**
+- Define deterministic audio-analysis inputs and frame-bound outputs before adding audio-reactive graphics.
+- Produce 16:9, 9:16, 1:1 and custom profiles from the same canonical project; reflow/reposition typography and graphics rather than merely crop where a profile requires layout changes.
+- Verify each output’s codec, dimensions, rational frame rate, duration, captions, safe area and audio.
+
+**P3.4 — Complete advanced creative critique and repair**
+- Evaluate brief/message alignment, hook, pacing, continuity, art direction and CTA using structured advisory findings tied to evidence and time ranges.
+- Distinguish subjective review from hard deterministic gates; never allow an AI critic to waive rights, timing, media integrity or renderer checks.
+- Run the bounded targeted repair/retest loop from P1.3 against visual, audio and creative defects.
+- **Phase 3 exit:** at least the advertisement, kinetic typography, narrated explainer and data-visualization acceptance projects pass in their requested formats, with reviewable evidence and no silent unresolved critical findings.
+
+### Phase 4 — Production platform: reliable repeatable operation
+
+**Outcome:** Teams can maintain, resume and operate projects across supported hosts without losing provenance or weakening security.
+
+**P4.1 — Resumable local orchestration and reusable systems**
+- Persist stage state, inputs/outputs, approvals, checkpoints, retry count and logs per project; resume only from verified artifacts and invalidate downstream work when an input hash changes.
+- Keep a single local render worker by default; make resource scheduling/cancel behavior observable and safe.
+- Version reusable brand systems, templates and motion components with explicit approval, compatibility, migration and rollback metadata.
+
+**P4.2 — Portability, host adapters and secure operations**
+- Verify fresh install, upgrade, uninstall and recovery on supported Windows/macOS/Linux combinations; preserve project data and user-owned software/configuration.
+- Test host adapters and MCP capabilities independently; publish a compatibility matrix instead of assuming similar host behavior.
+- Validate fixed executables/argument arrays, workspace path boundaries, untrusted media handling, credential storage, approval scope and audit records.
+- Treat cloud/distributed rendering as optional; define its artifact identity, access control, cost/resource limits and cancellation before enabling it.
+
+**P4.3 — Release and operations evidence**
+- Establish CI for supported Node/platform combinations, unit/integration/real-media fixtures, installer lifecycle and dependency audit.
+- Maintain benchmarks for representative durations/resolutions and memory use; publish results with machine and settings context.
+- Track production failures, repair rates, render cost/time and accepted outputs without collecting secrets or unapproved media.
+- **Phase 4 exit:** clean-install release produces reproducible, auditable deliveries on the supported matrix and safely upgrades/recovers without data loss.
+
+**Optional integrations:** Remotion remains a future specialist adapter; DaVinci Resolve remains optional finishing. Neither is a prerequisite for the four phase exit gates. Do not add distributed rendering before the local acceptance pipeline is stable.
+
+### Cross-phase acceptance status
+
+| Acceptance project | Current state | Required closeout |
+|---|---|---|
+| Startup/product advertisement | Foundation pieces exist; no current end-to-end accepted project | Complete P1.4 and package verified output/evidence |
+| Kinetic typography | A short technical sample was rendered and packaged; narration-driven acceptance is not established | Add approved narration/captions/transitions, run safe-area and timing QA, record acceptance |
+| Narrated explainer | Local TTS and captions generated; scene snapshots inspected; export blocked by `sweep_static` | Close P1.1–P1.3 and verify final audio/video/package |
+| Data visualization | Chart layer support exists; full production acceptance not established | Add sourced data, evidence/provenance, visual hierarchy and verified final render |
+| Mixed 2D/3D | Three.js runtime fixture passes; Blender runtime unavailable; no accepted mixed delivery | Complete P2.1–P2.3 on a supported Blender host |
+
+### Dependency and status rules
+
+1. Close the Phase 1 renderer and narrated delivery gates before broadening provider or platform scope.
+2. Run Adobe workstation operations only on a licensed, configured host with exact-operation approval and readback; an unavailable workstation is an external gate, not a reason to claim completion.
+3. Run Blender runtime acceptance on a host that has Blender installed; retain the emitted render receipt and inspect actual frames.
+4. Re-run the full local suite and dependency audit after each package change; update test counts and this tracker in the same change.
+5. Mark each work package **implemented**, **CI verified**, **runtime verified**, or **production accepted** only at the evidence level actually achieved. Record a blocker with its owner and required host/input when progress depends on external setup.
 
 ## Milestone 1.0 — Close and stabilize the existing foundation
 
@@ -256,7 +376,7 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 ## Current tracker
 
-Updated 2026-11-10 after local integration on `main`. The automated suite reports 118 passing tests and one environment-dependent symlink test skipped; `npm audit --omit=dev` reports zero vulnerabilities. These are not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
+Updated 2026-11-10 after local integration on `main`. The latest recorded automated suite reports 127 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
 
 Runtime evidence: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). The Three.js demo also passes browser render and independent FFprobe checks, and delivery packaging tests exercise local FFmpeg media. These are narrow technical samples, not narrated production acceptance.
 
@@ -268,7 +388,7 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 | 1.0 | FCPXML exporter, provenance sidecar, multi-track overlap/rational-time golden assertions, and fail-closed safety tests implemented; CLI requires `--allow-unsupported` for intentionally incomplete XML | Live import and readback comparison in licensed Premiere; publish a version compatibility record from that evidence |
 | 1.1 | Provider-neutral MCP stages, optional OpenRouter CLI adapter, and immutable planning/IR revision journal with exact-hash approvals implemented | Complete host-harness idea-to-IR render/QA/delivery acceptance; source-grounded web research remains explicit opt-in because search can cost extra; cross-host run orchestration remains open |
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
-| 1.3 | FFmpeg integration test creates a real H.264 master with two audio tracks, frame-derived offsets, gain, trims, fades and narration side-chain ducking; FFprobe verifies dimensions/audio/duration | Speech intelligibility/loudness QA, caption synchronization against produced speech, stem exports, and full narrated acceptance package |
+| 1.3 | FFmpeg audio mixing integration verifies a real H.264/AAC master; offline TTS creates project-scoped speech assets, measured narration cues and captions, independently verified by FFprobe | Fix the narrated multi-scene HyperFrames layout-check failure; speech intelligibility/loudness QA, reviewed caption sync, stem exports, music/SFX rights and complete narrated acceptance package |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |
 | 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
 | 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |
