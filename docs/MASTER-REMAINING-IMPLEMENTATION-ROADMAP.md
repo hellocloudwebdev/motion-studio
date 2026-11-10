@@ -26,6 +26,12 @@ Use these evidence states consistently:
 
 Never promote a capability to runtime-verified or production-accepted based only on mocks, package tests, or a successful command exit.
 
+### Progress evidence update — 2026-11-10
+
+- Local offline narration is implemented through fixed platform speech executables (Windows SAPI, macOS `say`, Linux `espeak`). `narration-generate` verifies WAV/audio output with FFprobe, writes project-scoped assets and narration cues, derives captions from measured segment timing, and flags rights review as required. A Windows runtime test generated a verified speech file.
+- An 18-second three-scene narrated fixture was generated and its HyperFrames snapshots visually show the intended scenes. HyperFrames' pre-render check reports a zero-size composition root (`sweep_static`), so the render manager correctly stopped before MP4 export. This is not narrated render acceptance.
+- Latest automated suite at this update: 127 passed, 0 failed, 1 skipped. Three.js runtime acceptance is available locally; Blender and licensed Adobe workstation acceptance remain external gates.
+
 ## Milestone 1.0 — Close and stabilize the existing foundation
 
 **Goal:** Complete the 0.5–1.0 dependency chain and establish a reliable baseline.

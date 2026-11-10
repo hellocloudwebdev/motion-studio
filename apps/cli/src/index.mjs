@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale, persistQaRecord } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
@@ -14,6 +14,7 @@ import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/ind
 import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
+import { generateSpeech, narrationSegmentsFromProject, resolveSpeechCommand } from '../../../packages/speech-adapter/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -129,6 +130,60 @@ if (command === 'assets') {
   const receipt = await renderThreeJsScene(project, sceneId, { projectRoot, installRoot: process.cwd(), quality: option('--quality', 'draft'), timeoutMs: Number(option('--timeout-ms', '600000')) });
   print(receipt);
   if (!receipt.verified) process.exitCode = 2;
+} else if (command === 'narration-generate') {
+  if (!file) throw new Error('Usage: motion-studio narration-generate <project.json> [--project-root <projects/project-id>]');
+  const sourceProject = await load(file);
+  const projectId = sourceProject.project?.id;
+  if (typeof projectId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(projectId)) throw new Error('Project id must contain only letters, numbers, underscores or hyphens.');
+  const projectsRoot = path.resolve(process.cwd(), 'projects');
+  const projectRoot = path.resolve(option('--project-root', path.join(projectsRoot, projectId)));
+  const relative = path.relative(projectsRoot, projectRoot);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('--project-root must remain inside the current workspace projects directory.');
+  await mkdir(projectRoot, { recursive: true });
+  const realProjectsRoot = await realpath(projectsRoot);
+  const realProjectRoot = await realpath(projectRoot);
+  const realRelative = path.relative(realProjectsRoot, realProjectRoot);
+  if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) throw new Error('Resolved project root escaped the workspace projects directory.');
+  const projectFile = path.join(realProjectRoot, 'project.json');
+  try {
+    const existing = await load(projectFile);
+    if (JSON.stringify(existing) !== JSON.stringify(sourceProject)) throw new Error('A different project already exists in this project workspace.');
+  } catch (error) { if (error.code !== 'ENOENT') throw error; await writeFile(projectFile, JSON.stringify(sourceProject, null, 2) + '\n', { flag: 'wx' }); }
+  const project = await load(projectFile);
+  const narrationSegments = narrationSegmentsFromProject(project);
+  const speechInfo = resolveSpeechCommand();
+  const assetIds = [], captions = [], cues = [], receipts = [];
+  const secondsPerFrame = project.project.frameRate.denominator / project.project.frameRate.numerator;
+  let cursorFrame = 0;
+  for (const [index, segment] of narrationSegments.entries()) {
+    const scene = project.scenes?.[index];
+    let sceneStart = scene?.startFrame;
+    if (!Number.isInteger(sceneStart)) {
+      sceneStart = 0;
+      for (const previous of project.scenes?.slice(0, index) || []) sceneStart = Math.max(sceneStart, (previous.startFrame ?? sceneStart) + (previous.durationFrames || 0));
+    }
+    const startFrame = Math.max(cursorFrame, sceneStart);
+    const assetId = 'generated-narration-' + String(index + 1).padStart(3, '0');
+    const audioFile = path.join(realProjectRoot, 'assets', 'narration', 'segment-' + String(index + 1).padStart(3, '0') + speechInfo.extension);
+    const receipt = await generateSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')) });
+    const durationFrames = Math.max(1, Math.ceil(receipt.audio.durationSeconds / secondsPerFrame));
+    const endFrame = startFrame + durationFrames;
+    if (endFrame > project.project.totalDurationFrames) throw new Error('Generated narration segment ' + (index + 1) + ' extends beyond the project duration; revise the script or increase the target duration before attaching audio.');
+    const relativeUri = path.relative(realProjectRoot, audioFile).split(path.sep).join('/');
+    project.assets = [...(project.assets || []).filter(item => item.id !== assetId), { id: assetId, kind: 'audio', uri: relativeUri, sha256: receipt.sha256, byteSize: receipt.byteSize, source: 'generated-local-speech', rightsStatus: 'unknown', metadata: { generated: true, provider: receipt.provider, sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds } }];
+    assetIds.push(assetId); receipts.push(receipt);
+    cues.push({ assetId, kind: 'narration', offsetFrames: startFrame, durationFrames, volume: Number(option('--gain', '1')) });
+    captions.push({ id: 'narration-caption-' + String(index + 1).padStart(3, '0'), startFrame, endFrame, text: segment.text });
+    cursorFrame = endFrame;
+  }
+  project.audio = project.audio || {};
+  const generatedIds = new Set(assetIds);
+  project.audio.tracks = [...(project.audio.tracks || []).filter(cue => !generatedIds.has(cue.assetId)), ...cues];
+  project.captions = [...(project.captions || []).filter(cue => !String(cue.id || '').startsWith('narration-caption-')), ...captions];
+  const validation = validateProject(project);
+  if (!validation.valid) throw new Error('Generated narration project failed Canonical Video IR validation: ' + JSON.stringify(validation.issues));
+  await writeFile(projectFile, JSON.stringify(project, null, 2) + '\n');
+  print({ provider: speechInfo.provider, segments: receipts, assetIds, captionCount: captions.length, projectFile, projectId, projectRevision: project.project.revision || 1, validation, rightsReviewRequired: true });
 } else if (command === 'plan') {
   const optionValues = new Set(['--duration', '--audience', '--purpose', '--language', '--platform', '--aspect-ratio', '--model', '--output', '--references-json', '--assets-json', '--brand-json']);
   const ideaParts = [];
@@ -259,5 +314,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json>, render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
