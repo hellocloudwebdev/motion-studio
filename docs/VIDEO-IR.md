@@ -21,7 +21,7 @@ Scenes may declare `startFrame` for intentional gaps or overlaps. A layer's `sta
 ## Scene layers
 A scene may contain text, shapes, images, video, 3D, camera, effects, audio, charts, particles and composite layers. Each layer may specify an engine hint and required capabilities.
 
-Project-level `audio.tracks` and scene-level `audioCues` reference declared assets with `kind: "audio"`. Cues may set `offsetFrames` (or `startFrame` for scene cues), `durationFrames` and a gain multiplier from 0 to 4. Delivery profiles may set `audioRequired` to require an audio stream at final inspection.
+Project-level `audio.tracks` and scene-level `audioCues` reference declared assets with `kind: "audio"`. Cues may set `offsetFrames` (or `startFrame` for scene cues), `durationFrames`, `fadeInFrames`, `fadeOutFrames`, `duckAgainstNarration` and a gain multiplier from 0 to 4. Fade lengths must fit inside their cue. Ducking is a music/SFX side-chain against a narration cue and fails if there is no narration track. Delivery profiles may set `audioRequired` to require an audio stream at final inspection.
 
 ## Engine-neutral output contract
 Rendered scene artifacts must declare dimensions, frame rate, duration frames, color space, alpha support, codec/container and audio metadata. Never mark a render complete without a verified artifact.

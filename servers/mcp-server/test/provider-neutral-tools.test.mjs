@@ -20,6 +20,12 @@ test('MCP planning and compilation tools run without a model API credential', as
     assert.ok(names.has('video.render_threejs_scene'));
     assert.ok(names.has('video.package_delivery'));
     assert.ok(!names.has('video.generate_production'));
+    const templateResult = await client.callTool({ name: 'video.create_project_template', arguments: { name: 'Rational-rate smoke test', fps: 29.97, durationSeconds: 30 } });
+    assert.notEqual(templateResult.isError, true);
+    const template = JSON.parse(templateResult.content[0].text);
+    assert.deepEqual(template.project.frameRate, { numerator: 30000, denominator: 1001 });
+    assert.deepEqual(template.delivery.targets[0].frameRate, template.project.frameRate);
+    assert.equal(template.project.totalDurationFrames, template.scenes[0].durationFrames);
   } finally {
     await client.close();
   }

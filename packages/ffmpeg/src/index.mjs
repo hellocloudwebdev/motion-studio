@@ -41,8 +41,11 @@ export function buildFinalizationPlan({ input, output, width, height, fps, durat
   const normalizedAudio = audioInputs.map((source, index) => {
     const file = assertSafePath(source.path, 'audio input ' + index);
     const offset = Number(source.offsetSeconds || 0), volume = Number(source.volume ?? 1);
-    if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(volume) || volume < 0 || volume > 4) throw new Error('Invalid audio offset or volume.');
-    return { path: file, offset, volume, label: ['narration', 'music', 'sfx'].includes(source.kind) ? source.kind : 'audio' };
+    const duration = source.durationSeconds === undefined ? null : Number(source.durationSeconds);
+    const fadeIn = Number(source.fadeInSeconds || 0), fadeOut = Number(source.fadeOutSeconds || 0);
+    if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(volume) || volume < 0 || volume > 4 || duration !== null && (!Number.isFinite(duration) || duration <= 0) || !Number.isFinite(fadeIn) || fadeIn < 0 || !Number.isFinite(fadeOut) || fadeOut < 0 || fadeOut && duration === null || duration !== null && fadeIn + fadeOut > duration) throw new Error('Invalid audio offset, gain, cue duration or fade range.');
+    if (source.duckAgainstNarration !== undefined && typeof source.duckAgainstNarration !== 'boolean') throw new Error('duckAgainstNarration must be boolean.');
+    return { path: file, offset, volume, duration, fadeIn, fadeOut, duckAgainstNarration: source.duckAgainstNarration === true, label: ['narration', 'music', 'sfx'].includes(source.kind) ? source.kind : 'audio' };
   });
   if (audioRequired && !normalizedAudio.length) throw new Error('This delivery requires audio, but no audio inputs were supplied.');
   const target = assertSafePath(output, 'output');
@@ -50,12 +53,34 @@ export function buildFinalizationPlan({ input, output, width, height, fps, durat
   const args = ['-hide_banner', '-y', '-i', inputs[0]];
   for (const source of normalizedAudio) { args.push('-i', source.path); inputs.push(source.path); }
   const filters = ['[0:v]scale=' + Math.round(width) + ':' + Math.round(height) + ':force_original_aspect_ratio=decrease,pad=' + Math.round(width) + ':' + Math.round(height) + ':(ow-iw)/2:(oh-ih)/2,fps=' + fps + '[vout]'];
-  if (normalizedAudio.length === 1) {
-    const a = normalizedAudio[0], delay = Math.round(a.offset * 1000);
-    filters.push('[1:a]volume=' + a.volume + ',adelay=' + delay + '|' + delay + '[aout]');
-  } else if (normalizedAudio.length > 1) {
-    const labels = normalizedAudio.map((a, i) => { const delay = Math.round(a.offset * 1000), label = 'a' + i; filters.push('[' + (i + 1) + ':a]volume=' + a.volume + ',adelay=' + delay + '|' + delay + '[' + label + ']'); return '[' + label + ']'; });
-    filters.push(labels.join('') + 'amix=inputs=' + normalizedAudio.length + ':duration=longest:normalize=0[aout]');
+  if (normalizedAudio.length) {
+    normalizedAudio.forEach((a, i) => {
+      const chain = ['volume=' + a.volume];
+      if (a.duration !== null) chain.push('atrim=duration=' + a.duration.toFixed(6), 'asetpts=PTS-STARTPTS');
+      if (a.fadeIn) chain.push('afade=t=in:st=0:d=' + a.fadeIn.toFixed(6));
+      if (a.fadeOut) chain.push('afade=t=out:st=' + (a.duration - a.fadeOut).toFixed(6) + ':d=' + a.fadeOut.toFixed(6));
+      const delay = Math.round(a.offset * 1000);
+      chain.push('adelay=' + delay + '|' + delay);
+      filters.push('[' + (i + 1) + ':a]' + chain.join(',') + '[a' + i + ']');
+    });
+    const narration = normalizedAudio.findIndex(a => a.label === 'narration');
+    const duckedIndices = normalizedAudio.map((a, i) => a.duckAgainstNarration ? i : -1).filter(i => i >= 0);
+    if (duckedIndices.length && narration < 0) throw new Error('Audio ducking requires at least one narration track.');
+    if (duckedIndices.includes(narration)) throw new Error('Narration cannot be ducked against itself.');
+    const sidechainLabels = new Map();
+    if (duckedIndices.length) {
+      const labels = duckedIndices.map((_, index) => 'narrationduck' + index);
+      labels.push('narrationmix');
+      filters.push('[a' + narration + ']asplit=' + labels.length + labels.map(label => '[' + label + ']').join(''));
+      duckedIndices.forEach((index, duckIndex) => sidechainLabels.set(index, labels[duckIndex]));
+    }
+    const ducked = normalizedAudio.map((a, i) => {
+      if (!a.duckAgainstNarration) return '[' + (i === narration && duckedIndices.length ? 'narrationmix' : 'a' + i) + ']';
+      const out = 'duck' + i;
+      filters.push('[a' + i + '][' + sidechainLabels.get(i) + ']sidechaincompress=threshold=0.035:ratio=8:attack=15:release=250:makeup=1[' + out + ']');
+      return '[' + out + ']';
+    });
+    filters.push(ducked.join('') + 'amix=inputs=' + ducked.length + ':duration=longest:normalize=0[aout]');
   }
   if (subtitlePath) {
     const subtitles = assertSafePath(subtitlePath, 'subtitle');

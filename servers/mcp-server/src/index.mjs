@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '../../../packages/core/src/index.mjs';
@@ -8,6 +9,7 @@ import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/o
 import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
+import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { renderBlenderScene } from '../../../packages/blender-adapter/src/index.mjs';
 import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
@@ -19,6 +21,11 @@ import { createProductionBrief, buildCreativeWorkflow, validateProductionBrief, 
 const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
+function rationalFrameRate(fps) {
+  for (const [decimal, numerator, denominator] of [[23.976, 24000, 1001], [29.97, 30000, 1001], [59.94, 60000, 1001]]) if (Math.abs(fps - decimal) < 0.001) return { numerator, denominator };
+  if ([24, 25, 30, 50, 60].includes(fps)) return { numerator: fps, denominator: 1 };
+  throw new Error('fps must be one of 23.976, 24, 25, 29.97, 30, 50, 59.94 or 60 so it can be represented as an approved rational rate.');
+}
 function projectPaths(id) {
   if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new Error('projectId must contain only letters, numbers, underscores or hyphens.');
   const projectsRoot = path.resolve(process.cwd(), 'projects'), root = path.resolve(projectsRoot, id);
@@ -26,24 +33,13 @@ function projectPaths(id) {
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Project path escaped the projects directory.');
   return { root, source: path.join(root, 'project.json'), engine: path.join(root, 'engines', 'hyperframes'), renders: path.join(root, 'renders'), delivery: path.join(root, 'deliverables') };
 }
-function audioInputs(project, projectFile) {
-  const assets = new Map((project.assets || []).map(asset => [asset.id, asset]));
-  const cues = [...(project.audio?.tracks || []), ...(project.scenes || []).flatMap(scene => scene.audioCues || [])];
-  return cues.map((cue, index) => {
-    const asset = assets.get(cue.assetId);
-    if (!asset || asset.kind !== 'audio' || typeof asset.uri !== 'string' || /^[a-z][a-z0-9+.-]*:\/\//i.test(asset.uri)) throw new Error('Audio cue ' + index + ' must reference a local audio asset.');
-    const sourceRoot = path.dirname(projectFile), file = path.resolve(sourceRoot, asset.uri), relative = path.relative(sourceRoot, file);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Audio asset path escapes the project directory.');
-    const start = Number(cue.offsetFrames ?? cue.startFrame ?? 0);
-    return { path: file, kind: cue.kind || cue.role || 'audio', offsetSeconds: start * project.project.frameRate.denominator / project.project.frameRate.numerator, volume: cue.volume ?? 1 };
-  });
-}
 
 server.tool('video.create_project_template', 'Return a starter Canonical Video IR project. Fill the creative brief and assets before production.', {
-  name: z.string().min(1), width: z.number().int().positive().default(1920), height: z.number().int().positive().default(1080), fps: z.number().positive().default(30), durationSeconds: z.number().positive().default(30)
+  name: z.string().min(1).max(160), width: z.number().int().min(240).max(7680).default(1920), height: z.number().int().min(240).max(7680).default(1080), fps: z.number().positive().max(60).default(30), durationSeconds: z.number().int().min(1).max(180).default(30)
 }, async ({ name, width, height, fps, durationSeconds }) => {
-  const frames = Math.round(fps * durationSeconds);
-  const project = { schemaVersion: '1.0.0', project: { id: 'project-' + Date.now(), name, objective: 'Define the audience outcome.', frameRate: { numerator: Math.round(fps), denominator: 1 }, canvas: { width, height, pixelAspectRatio: 1, safeAreaPercent: 5 }, totalDurationFrames: frames, colorSpace: 'Rec.709', revision: 1 }, creative: { concept: 'Replace with the central concept.', audience: 'Define the audience.', message: 'Define the key message.' }, assets: [], scenes: [{ id: 'scene-001', name: 'Opening', durationFrames: frames, intent: 'Introduce the message.', layers: [] }], delivery: { targets: [{ id: 'master', format: 'mp4', width, height, frameRate: { numerator: Math.round(fps), denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', colorSpace: 'Rec.709', alpha: false }] } };
+  const frameRate = rationalFrameRate(fps);
+  const frames = Math.round(durationSeconds * frameRate.numerator / frameRate.denominator);
+  const project = { schemaVersion: '1.0.0', project: { id: 'project-' + randomUUID(), name, objective: 'Define the audience outcome.', frameRate, canvas: { width, height, pixelAspectRatio: 1, safeAreaPercent: 5 }, totalDurationFrames: frames, colorSpace: 'Rec.709', revision: 1 }, creative: { concept: 'Replace with the central concept.', audience: 'Define the audience.', message: 'Define the key message.' }, assets: [], scenes: [{ id: 'scene-001', name: 'Opening', durationFrames: frames, intent: 'Introduce the message.', layers: [] }], delivery: { primaryTargetId: 'master', targets: [{ id: 'master', format: 'mp4', width, height, frameRate, videoCodec: 'libx264', audioCodec: 'aac', colorSpace: 'Rec.709', alpha: false }] } };
   return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
 });
 server.tool('video.create_production_brief', 'Normalize and validate a natural-language video idea as a provider-neutral production brief. Unknown requirements remain explicit.', {
@@ -184,7 +180,7 @@ server.tool('video.package_delivery', 'Create and independently verify delivery 
   const renderFile = path.join(paths.renders, (project.project.id || projectId) + '-' + quality + '.mp4');
   let renderManifest = null;
   try { renderManifest = JSON.parse(await readFile(renderFile + '.render.json', 'utf8')); } catch {}
-  const receipt = await buildDeliveryPackage({ project, projectFile: paths.source, sourceVideo: renderFile, projectRoot: paths.root, outputRoot: paths.delivery, renderManifest, audioInputs: audioInputs(project, paths.source) });
+  const receipt = await buildDeliveryPackage({ project, projectFile: paths.source, sourceVideo: renderFile, projectRoot: paths.root, outputRoot: paths.delivery, renderManifest, audioInputs: await audioInputsFromProject(project, paths.source) });
   return { content: [{ type: 'text', text: JSON.stringify(receipt, null, 2) }], isError: !receipt.acceptance.passed };
 });
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));

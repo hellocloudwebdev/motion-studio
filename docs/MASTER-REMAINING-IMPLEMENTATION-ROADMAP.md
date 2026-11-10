@@ -76,7 +76,7 @@ Never promote a capability to runtime-verified or production-accepted based only
 **Goal:** Produce a synchronized, verified final video from scene renders and audio/caption assets.
 
 - [ ] Assemble scenes in exact frame order, including transitions/overlaps and mixed source formats.
-- [ ] Mix narration, music and SFX; align to script/scenes; support gain, fades, ducking, stems and multiple tracks.
+- [x] Mix narration, music and SFX; align project and scene cues to the Canonical IR frame rate; support gain, fades, ducking and multiple tracks. Stems/alternate mixdown exports remain open.
 - [ ] Detect clipping, silence, synchronization errors and invalid frame-rate changes.
 - [ ] Generate SRT and WebVTT from approved narration; synchronize to final timing; support styled subtitle overlays and language/font handling.
 - [ ] Add approved overlays, logos and end cards; normalize color, dimensions and frame rate; handle crop/letterbox per profile.
@@ -202,7 +202,7 @@ delivery/
 - [ ] Adobe apps are user-installed/user-licensed; guide setup but never bypass sign-in, subscription or activation.
 
 **Security/reliability**
-- [ ] Local-first, loopback-only protected runtime, authenticated operations and secure token storage.
+- [x] Local-first, loopback-only protected runtime and authenticated operations (runtime test verifies loopback endpoint, bearer auth, payload limit and strong-token requirement). Secure token storage integration remains open.
 - [ ] Allowlisted process execution, workspace path restrictions, untrusted media/prompt-injection protections.
 - [ ] Checkpoints, approval/audit records, resource-aware scheduling, safe cancellation/recovery.
 - [ ] No arbitrary Adobe scripts by default.
@@ -260,13 +260,13 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 | 1.0 | FCPXML exporter, provenance sidecar, multi-track overlap/rational-time golden assertions, and fail-closed safety tests implemented; CLI requires `--allow-unsupported` for intentionally incomplete XML | Live import and readback comparison in licensed Premiere; publish a version compatibility record from that evidence |
 | 1.1 | Provider-neutral MCP stages and optional OpenRouter Responses API CLI adapter with free-model default and structured output implemented; MCP tools verified without a model key; offline tests pass | Complete host-harness idea-to-IR acceptance and revision lineage; source-grounded web research remains explicit opt-in because search can cost extra; standalone live-model testing is optional |
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
-| 1.3 | FFmpeg finalization, simple offset/gain audio mixing, caption conversion and output inspection foundations exist | Full narrated master with sync, fades/ducking/stems, all target profiles and verified final media evidence |
+| 1.3 | FFmpeg integration test creates a real H.264 master with two audio tracks, frame-derived offsets, gain, trims, fades and narration side-chain ducking; FFprobe verifies dimensions/audio/duration | Speech intelligibility/loudness QA, caption synchronization against produced speech, stem exports, and full narrated acceptance package |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |
 | 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
 | 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |
 | 1.7 | Structured render QA, advisory critic and bounded repair planning implemented | Defect-to-patch execution, affected render, retest and multimodal acceptance evidence |
 | 1.8 | Master/profile transcodes, captions, source and portable IR, referenced-asset packaging, human report and SHA-256 integrity verification implemented; local FFmpeg integration cases pass, including traversal/tamper rejection | Narrated production package; editorial manifest/source projects, production-ready render evidence and reproducible rebuild comparison |
-| 1.9 | Installer, process safety, auth/approval and host integration foundations present | Fresh Windows/macOS/Linux install, upgrade/uninstall, host matrix, recovery and security acceptance |
+| 1.9 | Installer and host process safety foundation; local runtime now requires a >=32-byte bearer token and uses constant-time comparisons, covered by loopback HTTP integration tests | Secure OS-backed token storage, fresh Windows/macOS/Linux install, upgrade/uninstall, host matrix, recovery and security acceptance |
 
 No milestone is marked production-accepted by this integration. A passing automated test suite does not replace actual renderer/editor execution or the five end-to-end acceptance projects.
 

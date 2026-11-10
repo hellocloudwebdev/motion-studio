@@ -35,6 +35,10 @@ The production state machine separately requires project/run/stage-matched appro
 
 These records provide application-level governance and audit evidence; they are not cryptographic identity proof and cannot constrain direct calls made outside Motion Studio. A trusted local UI/host must obtain the producer's explicit confirmation before creating an approval record. The Adobe servers remain local stdio processes.
 
+## Optional authenticated local HTTP runtime
+
+The separate local runtime binds only to `127.0.0.1`. Before starting it, set `MOTION_STUDIO_TOKEN` to a cryptographically random secret of at least 32 bytes. Protected API routes require an exact bearer token match; `/health` returns only service liveness. `MOTION_STUDIO_PORT` must be an integer from 1024 to 65535. The HTTP runtime is not enabled by the stdio MCP registration.
+
 ## Claude Code
 
 The installer copies skills to `~/.claude/skills`, copies agent role files to `~/.claude/agents`, and calls the Claude CLI to register the three stdio MCP services where supported. Generated JSON fallback is under the Motion Studio user config `adapters/claude.mcp.json`.

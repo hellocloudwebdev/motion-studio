@@ -1,9 +1,19 @@
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { validateProject, routeScenes, runProjectQA } from '../../../packages/core/src/index.mjs';
 const host = '127.0.0.1';
 const port = Number(process.env.MOTION_STUDIO_PORT || 47831);
 const token = process.env.MOTION_STUDIO_TOKEN;
 const maxBody = 2 * 1024 * 1024;
+
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('MOTION_STUDIO_PORT must be an integer between 1024 and 65535.');
+if (typeof token !== 'string' || Buffer.byteLength(token) < 32) throw new Error('MOTION_STUDIO_TOKEN must be set to a random secret of at least 32 bytes.');
+
+function authorized(header) {
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) return false;
+  const received = Buffer.from(header.slice(7), 'utf8'), expected = Buffer.from(token, 'utf8');
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
 
 function send(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -20,7 +30,7 @@ async function readJson(req) {
 }
 const server = createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true, service: 'motion-studio-local-runtime' });
-  if (!token || req.headers.authorization !== 'Bearer ' + token) return send(res, 401, { error: 'Unauthorized' });
+  if (!authorized(req.headers.authorization)) return send(res, 401, { error: 'Unauthorized' });
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
   try {
     const body = await readJson(req);

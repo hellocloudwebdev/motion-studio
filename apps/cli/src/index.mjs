@@ -11,6 +11,7 @@ import { generateMediaDerivatives } from '../../../packages/media-derivatives/sr
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
+import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
 
@@ -22,20 +23,6 @@ function option(name, fallback) {
 }
 function flags() { return new Set(args.filter(x => x.startsWith('--'))); }
 async function load(pathName) { return JSON.parse(await readFile(pathName, 'utf8')); }
-function audioInputsFor(project, sourceFile) {
-  const assets = new Map((project.assets || []).map(asset => [asset.id, asset]));
-  const cues = [...(project.audio?.tracks || []), ...(project.scenes || []).flatMap(scene => scene.audioCues || [])];
-  return cues.map((cue, index) => {
-    const asset = assets.get(cue.assetId);
-    if (!asset || asset.kind !== 'audio' || typeof asset.uri !== 'string') throw new Error('Audio cue ' + index + ' references an unresolved audio asset: ' + cue.assetId);
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(asset.uri)) throw new Error('Remote audio assets must be resolved into the project before local delivery.');
-    const sourceRoot = path.dirname(path.resolve(sourceFile)), audioPath = path.resolve(sourceRoot, asset.uri), relative = path.relative(sourceRoot, audioPath);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Audio asset path escapes the project source directory: ' + cue.assetId);
-    const offsetFrames = Number(cue.offsetFrames ?? cue.startFrame ?? 0);
-    if (!Number.isInteger(offsetFrames) || offsetFrames < 0) throw new Error('Audio cue offset must be a non-negative integer frame count.');
-    return { path: audioPath, kind: cue.kind || cue.role || 'audio', offsetSeconds: offsetFrames * project.project.frameRate.denominator / project.project.frameRate.numerator, volume: cue.volume ?? 1 };
-  });
-}
 function paths(project, sourceFile) {
   const projectRoot = path.join(process.cwd(), 'projects', project.project.id);
   return { sourceRoot: path.dirname(path.resolve(sourceFile)), projectRoot, engineRoot: path.join(projectRoot, 'engines', 'hyperframes'), outputRoot: path.join(projectRoot, 'renders') };
@@ -225,7 +212,7 @@ if (command === 'assets') {
     const target = paths(project, file);
     let renderManifest = null;
     try { renderManifest = JSON.parse(await readFile(path.resolve(sourceVideo) + '.render.json', 'utf8')); } catch {}
-    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, audioInputs: audioInputsFor(project, file) });
+    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, audioInputs: await audioInputsFromProject(project, file) });
     print(delivery);
     if (!delivery.acceptance.passed) process.exitCode = 2;
   } else if (command === 'compile' || command === 'render') {
