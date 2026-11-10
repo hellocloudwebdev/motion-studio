@@ -76,7 +76,8 @@ export async function exportPremiereInterchange(assembly, options = {}) {
   if (issues.length) return { valid: false, issues, xml: null, manifest: null };
   const mediaClips = assembly.clips.filter(clip => clip.media === true);
   const unsupported = assembly.clips.filter(clip => clip.media !== true);
-  for (const clip of unsupported) issues.push(issue('UNSUPPORTED_CLIP_KIND', '$.clips.' + clip.clipId, 'Non-media clip ' + clip.clipId + ' is retained in the sidecar but not represented in FCPXML.', 'warning'));
+  for (const clip of unsupported) issues.push(issue('UNSUPPORTED_CLIP_KIND', '$.clips.' + clip.clipId, 'Non-media clip ' + clip.clipId + ' is retained in the sidecar but not represented in FCPXML.' + (options.allowUnsupportedClips === true ? '' : ' Explicit approval is required to export this incomplete interchange.'), options.allowUnsupportedClips === true ? 'warning' : 'error'));
+  if (unsupported.length && options.allowUnsupportedClips !== true) return { valid: false, issues, xml: null, manifest: null };
   const tracks = [...new Set(mediaClips.map(clip => clip.track))].sort();
   const laneByTrack = new Map(tracks.map((track, index) => [track, index + 1]));
   const resourceByKey = new Map();

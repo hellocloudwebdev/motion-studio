@@ -55,3 +55,38 @@ test('fails closed when media checksum or source file is unresolved', async () =
   const noSource = await exportPremiereInterchange(assembly('file:///missing.mp4'));
   assert.equal(noSource.valid, false);
 }));
+
+test('preserves multi-track overlaps, source in-points and exact rational ranges', async () => fixture(async root => {
+  const media = {};
+  for (const [id, content] of Object.entries({ narration: 'voice', hero: 'hero', insert: 'insert', music: 'music' })) {
+    const file = path.join(root, id + '.mov');
+    await writeFile(file, content);
+    media[id] = { uri: pathToFileURL(file).href, sha256: createHash('sha256').update(content).digest('hex') };
+  }
+  const input = {
+    assemblyVersion: '1.0.0',
+    project: { id: 'multi', name: 'Multi-track', frameRate: { numerator: 24000, denominator: 1001 } },
+    sequence: { name: 'Multi-track sequence', durationFrames: 240 }, scenes: [{ sceneId: 's1', startFrame: 0, endFrame: 240 }],
+    clips: [
+      { clipId: 'narration', sceneId: 's1', name: 'Narration', kind: 'audio', track: 'A1', startFrame: 0, endFrame: 240, durationFrames: 240, sourceInFrame: 24, sourceUri: media.narration.uri, sourceSha256: media.narration.sha256, media: true },
+      { clipId: 'hero', sceneId: 's1', name: 'Hero', kind: 'video', track: 'V1', startFrame: 0, endFrame: 180, durationFrames: 180, sourceInFrame: 12, sourceUri: media.hero.uri, sourceSha256: media.hero.sha256, media: true },
+      { clipId: 'music', sceneId: 's1', name: 'Music', kind: 'audio', track: 'A2', startFrame: 12, endFrame: 240, durationFrames: 228, sourceInFrame: 0, sourceUri: media.music.uri, sourceSha256: media.music.sha256, media: true },
+      { clipId: 'insert', sceneId: 's1', name: 'Insert', kind: 'video', track: 'V2', startFrame: 120, endFrame: 240, durationFrames: 120, sourceInFrame: 8, sourceUri: media.insert.uri, sourceSha256: media.insert.sha256, media: true },
+      { clipId: 'title', sceneId: 's1', name: 'Title card', kind: 'text', track: 'G1', startFrame: 0, endFrame: 48, durationFrames: 48, sourceInFrame: 0, media: false }
+    ]
+  };
+  const blocked = await exportPremiereInterchange(input, { width: 1920, height: 1080 });
+  assert.equal(blocked.valid, false);
+  assert.equal(blocked.xml, null);
+  const result = await exportPremiereInterchange(input, { width: 1920, height: 1080, allowUnsupportedClips: true });
+  assert.equal(result.valid, true);
+  const clipRows = [...result.xml.matchAll(/<asset-clip ref="([^"]+)" name="([^"]+)" lane="([^"]+)" offset="([^"]+)" start="([^"]+)" duration="([^"]+)"\/>/g)].map(match => match.slice(1));
+  assert.deepEqual(clipRows, [
+    ['r2', 'Narration', '1', '0s', '1001/1000s', '1001/100s'],
+    ['r3', 'Hero', '3', '0s', '1001/2000s', '3003/400s'],
+    ['r4', 'Music', '2', '1001/2000s', '0s', '19019/2000s'],
+    ['r5', 'Insert', '4', '1001/200s', '1001/3000s', '1001/200s']
+  ]);
+  assert.equal(result.manifest.unsupportedClips[0].clipId, 'title');
+  assert.ok(result.issues.some(item => item.code === 'UNSUPPORTED_CLIP_KIND' && item.severity === 'warning'));
+}));

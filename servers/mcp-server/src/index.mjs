@@ -128,7 +128,8 @@ server.tool('video.export_premiere_interchange', 'Export a validated editorial a
   assetRoot: z.string().optional(),
   sequenceName: z.string().min(1).optional(),
   width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional()
+  height: z.number().int().positive().optional(),
+  allowUnsupportedClips: z.boolean().default(false)
 }, async ({ assembly, ...options }) => ({
   content: [{ type: 'text', text: JSON.stringify(await exportPremiereInterchange(assembly, options), null, 2) }]
 }));

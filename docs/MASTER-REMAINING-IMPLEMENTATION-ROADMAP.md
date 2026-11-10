@@ -30,12 +30,12 @@ Never promote a capability to runtime-verified or production-accepted based only
 
 **Goal:** Complete the 0.5–1.0 dependency chain and establish a reliable baseline.
 
-- [ ] Integrate asset registry → derivatives → editorial assembly → Premiere interchange using actual upstream outputs.
-- [ ] Complete FCPXML golden fixtures for multiple video/audio/graphics tracks, overlaps, source in-points, offsets, durations and rational frame-rate conversion.
-- [ ] Test unsupported clip types, missing media, unsafe paths and unresolved sources; fail closed.
+- [x] Integrate asset registry → derivatives → editorial assembly → Premiere interchange using actual upstream outputs (local kinetic typography artifact chain recorded above).
+- [x] Add golden multi-track overlap assertions for video/audio lanes, source in-points, offsets, durations and exact rational frame-rate conversion.
+- [x] Test unsupported clip types, missing media, unsafe paths and unresolved sources; unsupported non-media clips block export unless explicitly approved, then remain warnings in the sidecar.
 - [ ] Verify engine output metadata: dimensions, rational frame rate, duration, color space, alpha, codec and audio metadata.
 - [ ] Carry project revision and source hashes across stages; reject incomplete artifacts.
-- [ ] Document supported Premiere import versions and the manual import/readback procedure.
+- [x] Document the manual Premiere import/readback procedure and state that no release is certified until a live receipt exists.
 - [ ] Import generated FCPXML on a licensed Premiere workstation and compare the imported sequence against the editorial manifest.
 
 **Exit gate:** Validated IR → editorial manifest → valid FCPXML/sidecar → real Premiere import and sequence readback. CI alone is insufficient.
@@ -160,12 +160,12 @@ Never promote a capability to runtime-verified or production-accepted based only
 
 ## Milestone 1.8 — Complete delivery and production packaging
 
-- [ ] Generate master and requested platform variants.
-- [ ] Include captions/subtitle files, Canonical IR, editorial manifest, required source projects and only the assets actually used.
+- [x] Generate master and requested platform variants for supported FFmpeg container/codec profiles.
+- [ ] Include captions/subtitle files, Canonical IR, editorial manifest, required source projects and only the assets actually used. Captions, source/portable IR and referenced local assets are included; editorial manifest and conditional engine project references remain open.
 - [ ] Include AE/Premiere/Blender project references only when actually created.
 - [ ] Include asset/provenance manifests, source hashes, rights-review records, render manifest, QA report/defect history, sampled frames, export receipts, software/engine versions and settings.
-- [ ] Generate human-readable DELIVERY-REPORT.md.
-- [ ] Verify package integrity and reproducibility.
+- [x] Generate human-readable `DELIVERY-REPORT.md`.
+- [x] Verify package file integrity with a SHA-256 manifest and independent verifier. Reproducible rebuild comparison remains open.
 
 Suggested layout (include folders conditionally):
 ```
@@ -180,6 +180,8 @@ delivery/
 ```
 
 **Exit gate:** A successful production creates a self-describing, integrity-checked delivery package with all required source and evidence artifacts.
+
+**Status:** Local FFmpeg integration tests create a package from a real two-second MP4, verify portable asset remapping and hashes, reject a path escape, and detect post-package tampering. Full acceptance still needs the narrated production bundle, editorial manifest/source projects, reproducibility comparison, and production-ready render evidence.
 
 ## Milestone 1.9 — Learning, portability, security and release hardening
 
@@ -246,26 +248,26 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 ## Current tracker
 
-Updated 2026-11-10 after local integration of the 0.5–1.2 dependency stack. The automated suite reports 99 passing tests and 1 environment-dependent symlink test skipped; `npm audit --omit=dev` reports zero vulnerabilities. These are local integration results, not upstream merge, cross-platform CI, host runtime verification or production acceptance.
+Updated 2026-11-10 after local integration on `main`. The automated suite reports 118 passing tests and one environment-dependent symlink test skipped; `npm audit --omit=dev` reports zero vulnerabilities. These are not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
 
-Runtime evidence added during this integration: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). This is a silent typography sample only; it does not satisfy the narrated production target.
+Runtime evidence: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). The Three.js demo also passes browser render and independent FFprobe checks, and delivery packaging tests exercise local FFmpeg media. These are narrow technical samples, not narrated production acceptance.
 
 The rendered MP4 was also scanned and checksum-verified into the asset registry, attached to a derived Canonical Video IR, converted into an editorial assembly, and exported to FCPXML with its provenance sidecar. The assembly correctly retained an unapproved-rights warning. The interchange has not been imported/read back in Premiere.
 
 | Milestone | Current evidence status | Remaining acceptance evidence |
 |---|---|---|
 | 0.5–0.9 | Integrated locally; unit/CLI coverage passes | Fresh combined CI on supported platforms; run real asset → derivative → editorial → interchange chain |
-| 1.0 | FCPXML exporter, provenance sidecar and safety tests implemented | Golden multi-track/overlap fixtures; import and readback comparison in licensed Premiere |
+| 1.0 | FCPXML exporter, provenance sidecar, multi-track overlap/rational-time golden assertions, and fail-closed safety tests implemented; CLI requires `--allow-unsupported` for intentionally incomplete XML | Live import and readback comparison in licensed Premiere; publish a version compatibility record from that evidence |
 | 1.1 | Provider-neutral MCP stages and optional OpenRouter Responses API CLI adapter with free-model default and structured output implemented; MCP tools verified without a model key; offline tests pass | Complete host-harness idea-to-IR acceptance and revision lineage; source-grounded web research remains explicit opt-in because search can cost extra; standalone live-model testing is optional |
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
-| 1.3 | FFmpeg finalization, audio mix/caption conversion and output inspection foundations exist | Full narrated master with sync, fades/ducking/stems, all target profiles and verified final media evidence |
+| 1.3 | FFmpeg finalization, simple offset/gain audio mixing, caption conversion and output inspection foundations exist | Full narrated master with sync, fades/ducking/stems, all target profiles and verified final media evidence |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |
 | 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
-| 1.6 | Three.js dependency/configuration foundation present | Implement deterministic adapter and verify a real scene render |
+| 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |
 | 1.7 | Structured render QA, advisory critic and bounded repair planning implemented | Defect-to-patch execution, affected render, retest and multimodal acceptance evidence |
-| 1.8 | Delivery package and receipt implementation present | Complete narrated production package; integrity/reproducibility and all required artifact checks |
+| 1.8 | Master/profile transcodes, captions, source and portable IR, referenced-asset packaging, human report and SHA-256 integrity verification implemented; local FFmpeg integration cases pass, including traversal/tamper rejection | Narrated production package; editorial manifest/source projects, production-ready render evidence and reproducible rebuild comparison |
 | 1.9 | Installer, process safety, auth/approval and host integration foundations present | Fresh Windows/macOS/Linux install, upgrade/uninstall, host matrix, recovery and security acceptance |
 
 No milestone is marked production-accepted by this integration. A passing automated test suite does not replace actual renderer/editor execution or the five end-to-end acceptance projects.
 
-**Status discipline:** Update this table only when evidence is attached. CI success is not runtime verification; runtime verification is not production acceptance.
+**Status discipline:** Update this table only when evidence is attached. CI success is not runtime verification; runtime verification is not production acceptance. The current environment has no Blender or Adobe desktop applications, so their runtime exit gates remain open.

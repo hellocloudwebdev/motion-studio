@@ -27,3 +27,23 @@ test('CLI exports FCPXML and a provenance sidecar', async () => {
     assert.equal(saved.clips[0].clipId, 'clip');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('CLI blocks unsupported interchange content unless the operator explicitly opts in', async () => {
+  const root = await mkdtemp(path.join(await realpath(tmpdir()), 'motion-studio-premiere-unsupported-'));
+  try {
+    const media = path.join(root, 'hero.mp4'), assemblyPath = path.join(root, 'assembly.json');
+    const output = path.join(root, 'sequence.fcpxml'), manifest = path.join(root, 'handoff.json');
+    await writeFile(media, 'test media');
+    const checksum = createHash('sha256').update('test media').digest('hex');
+    const assembly = { assemblyVersion: '1.0.0', project: { id: 'cli', name: 'CLI', frameRate: { numerator: 30, denominator: 1 } }, sequence: { name: 'CLI sequence', durationFrames: 60 }, scenes: [], clips: [
+      { clipId: 'clip', sceneId: 'scene', name: 'Clip', kind: 'video', track: 'V1', startFrame: 0, endFrame: 30, durationFrames: 30, sourceInFrame: 0, sourceUri: pathToFileURL(media).href, sourceSha256: checksum, rightsStatus: 'approved', media: true },
+      { clipId: 'title', sceneId: 'scene', name: 'Title', kind: 'text', track: 'G1', startFrame: 0, endFrame: 30, durationFrames: 30, sourceInFrame: 0, media: false }
+    ] };
+    await writeFile(assemblyPath, JSON.stringify(assembly));
+    const blocked = spawnSync(process.execPath, [cli, 'premiere', 'export', assemblyPath, '--output', output, '--manifest', manifest], { encoding: 'utf8' });
+    assert.equal(blocked.status, 2, blocked.stderr || blocked.stdout);
+    const allowed = spawnSync(process.execPath, [cli, 'premiere', 'export', assemblyPath, '--output', output, '--manifest', manifest, '--allow-unsupported'], { encoding: 'utf8' });
+    assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
+    assert.equal(JSON.parse(await readFile(manifest, 'utf8')).unsupportedClips[0].clipId, 'title');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
