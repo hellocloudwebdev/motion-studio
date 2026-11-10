@@ -1,34 +1,52 @@
-import { cp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateProject } from '../../core/src/index.mjs';
+import { validateProject, estimateTextFit } from '../../core/src/index.mjs';
+import { renderChartSvg } from './charts.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GSAP = path.resolve(__dirname, '../../../node_modules/gsap/dist/gsap.min.js');
 const safeId = value => String(value).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'layer';
 const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 const cssString = value => String(value ?? '').replaceAll('\\', '\\\\').replaceAll('"', '\\"').replace(/[\r\n;]/g, ' ');
+const safeCssColor = (value, fallback = 'transparent') => {
+  const candidate = String(value ?? '').trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(candidate)) return candidate;
+  if (/^(transparent|black|white|red|green|blue|yellow|orange|purple|gray|grey|silver|navy|teal|maroon)$/i.test(candidate)) return candidate;
+  return /^(rgba?|hsla?)\([0-9.% ,+-]+\)$/i.test(candidate) ? candidate : fallback;
+};
 const seconds = (frames, frameRate) => Number((frames * frameRate.denominator / frameRate.numerator).toFixed(6));
 const isExternalUri = value => /^https?:\/\//i.test(value || '');
 
-function cssFor(layer, fontFamily, index = 0) {
+function cssFor(layer, fontFamily) {
   const style = layer.style || {};
   const x = Number(layer.transform?.x ?? layer.layout?.x ?? 0);
   const y = Number(layer.transform?.y ?? layer.layout?.y ?? 0);
   const width = Number(layer.transform?.width ?? layer.layout?.width ?? 800);
   const height = Number(layer.transform?.height ?? layer.layout?.height ?? 180);
   const styles = [
-    'position:absolute', 'box-sizing:border-box', 'z-index:' + Number(layer.zIndex ?? layer.trackIndex ?? index),
+    'position:absolute', 'box-sizing:border-box',
     'left:' + x + 'px', 'top:' + y + 'px',
     'width:' + width + 'px', 'height:' + height + 'px',
     'opacity:' + Number(style.opacity ?? 1),
-    'color:' + (style.color || '#ffffff'),
-    'background:' + (style.backgroundColor || 'transparent'),
-    'border-radius:' + (style.borderRadius ?? 0) + 'px',
-    'padding:' + (style.padding ?? 0) + 'px',
+    'color:' + safeCssColor(style.color, '#ffffff'),
+    'background:' + safeCssColor(style.backgroundColor, 'transparent'),
+    'border-radius:' + Math.max(0, Number(style.borderRadius ?? 0)) + 'px',
+    'padding:' + Math.max(0, Number(style.padding ?? 0)) + 'px',
     'display:flex', 'align-items:' + (style.verticalAlign === 'middle' ? 'center' : 'flex-start'),
     'justify-content:' + (style.textAlign === 'center' ? 'center' : style.textAlign === 'right' ? 'flex-end' : 'flex-start')
   ];
+  const rotation = Number(layer.transform?.rotation ?? 0);
+  const scale = Number(layer.transform?.scale ?? 1);
+  if (Number.isFinite(rotation) && rotation !== 0) styles.push('transform:rotate(' + rotation + 'deg) scale(' + (Number.isFinite(scale) ? scale : 1) + ')');
+  else if (Number.isFinite(scale) && scale !== 1) styles.push('transform:scale(' + scale + ')');
+  if (typeof style.border === 'string' && /^\d+(?:\.\d+)?px solid #[0-9a-f]{3,8}$/i.test(style.border.trim())) styles.push('border:' + style.border.trim());
+  if (typeof style.boxShadow === 'string' && /^-?[\d.]+px\s+-?[\d.]+px\s+[\d.]+px\s+#[0-9a-f]{3,8}$/i.test(style.boxShadow.trim())) styles.push('box-shadow:' + style.boxShadow.trim());
+  if (style.gradient && Array.isArray(style.gradient.colors) && style.gradient.colors.length >= 2) {
+    const colors = style.gradient.colors.slice(0, 4).map(color => safeCssColor(color, '#000000'));
+    const angle = Number.isFinite(Number(style.gradient.angle)) ? Number(style.gradient.angle) : 135;
+    styles.push('background:linear-gradient(' + angle + 'deg,' + colors.join(',') + ')');
+  }
   if (layer.kind === 'text') {
     const typo = layer.typography || {};
     styles.push('font-family:"' + cssString(typo.family || fontFamily || 'Arial') + '"');
@@ -48,12 +66,14 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
   const durationFrames = Number(layer.durationFrames ?? Math.max(1, scene.durationFrames - localStartFrame));
   const motion = layer.motion?.preset || 'fade';
   const buildAttrs = startFrame => ' id="' + layerId + '" class="clip ms-layer ms-' + esc(layer.kind) + '"' +
-    (layer.allowOcclusion === true ? ' data-layout-allow-occlusion=""' : '') +
     ' data-start="' + seconds(startFrame, frameRate) + '"' +
     ' data-duration="' + seconds(durationFrames, frameRate) + '"' +
     ' data-track-index="' + Number(layer.trackIndex ?? index) + '"' +
-    ' data-motion="' + esc(motion) + '"';
-  const style = ' style="' + esc(cssFor(layer, fontFamily, index)) + '"';
+    ' data-motion="' + esc(motion) + '"' +
+    ' data-motion-duration="' + seconds(Number(layer.motion?.durationFrames ?? 20), frameRate) + '"' +
+    ' data-motion-delay="' + seconds(Number(layer.motion?.delayFrames ?? 0), frameRate) + '"' +
+    ' data-motion-ease="' + esc(layer.motion?.easing || 'power3.out') + '"';
+  const style = ' style="' + esc(cssFor(layer, fontFamily)) + '"';
   const content = layer.content?.text ?? layer.content ?? layer.text ?? '';
   let local = '', global = '';
   if (layer.kind === 'text') {
@@ -72,6 +92,11 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
     const volume = Number(layer.volume ?? 1);
     local = '<audio' + buildAttrs(localStartFrame) + ' src="' + esc(assetUri) + '" preload="auto" data-volume="' + volume + '"></audio>';
     global = '<audio' + buildAttrs(globalStartFrame + localStartFrame) + ' src="' + esc(assetUri) + '" preload="auto" data-volume="' + volume + '"></audio>';
+  } else if (layer.kind === 'chart') {
+    const svg = renderChartSvg(layer.content, { color: layer.style?.color || layer.style?.fill });
+    const chartStyle = ' style="' + esc(cssFor(layer, fontFamily) + ';display:block') + '"';
+    local = '<div' + buildAttrs(localStartFrame) + chartStyle + '>' + svg + '</div>';
+    global = '<div' + buildAttrs(globalStartFrame + localStartFrame) + chartStyle + '>' + svg + '</div>';
   } else if (placeholder) {
     const label = '[ASSET REQUIRED: ' + (layer.assetId || layer.kind) + ']';
     const placeholderStyle = ' style="position:absolute;left:40px;top:40px;padding:24px;background:#7f1d1d;color:#fff;font:700 28px Arial;width:calc(100% - 128px)"';
@@ -88,13 +113,20 @@ function documentHtml({ compositionId, title, width, height, duration, elements,
     ' const duration=' + Number(duration) + ';\n' +
     ' const tl=gsap.timeline({paused:true});\n' +
     ' document.querySelectorAll(".ms-layer").forEach(function(el){\n' +
-    '   const start=Number(el.dataset.start||0);\n' +
+    '   const start=Number(el.dataset.start||0)+Number(el.dataset.motionDelay||0);\n' +
     '   const motion=el.dataset.motion||"fade";\n' +
-    '   if(motion==="fade-up"||motion==="slide-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration:0.65,ease:"power3.out"},start);}\n' +
-    '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration:0.6,ease:"power3.out"},start);}\n' +
-    '   else {tl.fromTo(el,{opacity:0},{opacity:1,duration:0.25,ease:"power1.out"},start);}\n' +
-    ' });\n' +
-    ' const endMarker={value:0};\n' +
+    '   const duration=Math.max(0.001,Number(el.dataset.motionDuration||0.667));\n' +
+    '   const allowed=["none","power1.out","power2.out","power3.out","power4.out","back.out(1.7)","sine.out","circ.out"];\n' +
+    '   const requested=el.dataset.motionEase||"power3.out";\n' +
+    '   const ease=allowed.includes(requested)?requested:"power3.out";\n' +
+    '   if(motion==="none"){tl.set(el,{opacity:1},start);}\n' +
+    '   else if(motion==="fade-up"||motion==="slide-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration,ease},start);}\n' +
+    '   else if(motion==="slide-left"){tl.fromTo(el,{opacity:0,x:48},{opacity:1,x:0,duration,ease},start);}\n' +
+    '   else if(motion==="slide-right"){tl.fromTo(el,{opacity:0,x:-48},{opacity:1,x:0,duration,ease},start);}\n' +
+    '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration,ease},start);}\n' +
+    '   else if(motion==="rotate"){tl.fromTo(el,{opacity:0,rotation:-8},{opacity:1,rotation:0,duration,ease},start);}\n' +
+    '   else {tl.fromTo(el,{opacity:0},{opacity:1,duration,ease},start);}\n' +
+    ' });\n' +    ' const endMarker={value:0};\n' +
     ' tl.to(endMarker,{value:1,duration:duration,ease:"none"},0);\n' +
     ' window.__timelines=window.__timelines||{};\n' +
     ' window.__timelines[compositionId]=tl;\n' +
@@ -116,11 +148,9 @@ export async function compileHyperFramesProject(project, options = {}) {
   const assets = new Map((project.assets || []).map(asset => [asset.id, asset]));
   const copiedAssets = new Map();
   const warnings = [];
-  const sceneSourceDir = path.join(outputDir, 'scene-sources');
   await mkdir(path.join(outputDir, 'assets'), { recursive: true });
   await mkdir(path.join(outputDir, 'snapshots'), { recursive: true });
   await mkdir(path.join(outputDir, 'renders'), { recursive: true });
-  await mkdir(sceneSourceDir, { recursive: true });
 
   async function resolveAsset(assetId) {
     if (!assetId) return null;
@@ -160,15 +190,7 @@ export async function compileHyperFramesProject(project, options = {}) {
   let cumulativeFrame = 0;
   const frameRate = project.project.frameRate;
   const displayFont = project.brand?.fonts?.display || project.brand?.fonts?.body || 'Arial';
-  // Remove the exact legacy scene source files written at the engine root by
-  // earlier compiler versions. HyperFrames only permits one root composition;
-  // keeping stale managed entrypoints here makes a valid rebuild fail lint.
-  for (const scene of project.scenes || []) {
-    await rm(path.join(outputDir, safeId(scene.id) + '.html'), { force: true });
-  }
   for (const scene of selectedScenes) {
-    const sceneStartFrame = Number.isInteger(scene.startFrame) ? scene.startFrame : cumulativeFrame;
-    const sceneEndFrame = sceneStartFrame + scene.durationFrames;
     const sceneMarkup = [];
     for (let index = 0; index < (scene.layers || []).length; index += 1) {
       const layer = scene.layers[index];
@@ -177,12 +199,40 @@ export async function compileHyperFramesProject(project, options = {}) {
         warnings.push({ code: 'NON_HYPERFRAMES_LAYER', sceneId: scene.id, layerId: layer.id, engine: hintedEngine, message: 'Layer is routed to another engine and is excluded from this HTML renderer.' });
         continue;
       }
-      if (!['text', 'shape', 'image', 'video', 'audio'].includes(layer.kind)) {
+      if (!['text', 'shape', 'image', 'video', 'audio', 'chart'].includes(layer.kind)) {
         warnings.push({ code: 'UNSUPPORTED_LAYER_KIND', sceneId: scene.id, layerId: layer.id, kind: layer.kind, message: 'This layer kind is not yet emitted by the HyperFrames adapter.' });
         continue;
       }
       const localStartFrame = Number(layer.startFrame ?? 0);
-      const globalStartFrame = sceneStartFrame;
+      const globalStartFrame = cumulativeFrame;
+      if (layer.kind === 'text') {
+        const textValue = String(layer.content?.text ?? layer.content ?? layer.text ?? '');
+        const typo = layer.typography || {};
+        const boxWidth = Number(layer.transform?.width ?? layer.layout?.width ?? 800);
+        const boxHeight = Number(layer.transform?.height ?? layer.layout?.height ?? 180);
+        const fontSize = Number(typo.sizePx || 48);
+        const fit = estimateTextFit({
+          text: textValue,
+          fontSizePx: fontSize,
+          boxWidthPx: boxWidth,
+          boxHeightPx: boxHeight,
+          lineHeight: Number(typo.lineHeight || 1.08),
+          maxLines: Number(typo.maxLines || Infinity)
+        });
+        if (!fit.fits) {
+          const warning = { code: 'TEXT_OVERFLOW_ESTIMATED', sceneId: scene.id, layerId: layer.id, fontFamily: typo.family || displayFont, ...fit };
+          warnings.push(warning);
+          if (options.strictTypography === true) throw new Error('Text overflow estimated for layer ' + layer.id + ' in scene ' + scene.id + '.');
+        }
+        const safePercent = Number(project.project.canvas.safeAreaPercent ?? 5);
+        const marginX = project.project.canvas.width * safePercent / 100;
+        const marginY = project.project.canvas.height * safePercent / 100;
+        const x = Number(layer.transform?.x ?? layer.layout?.x ?? 0);
+        const y = Number(layer.transform?.y ?? layer.layout?.y ?? 0);
+        if (x < marginX || y < marginY || x + boxWidth > project.project.canvas.width - marginX || y + boxHeight > project.project.canvas.height - marginY) {
+          warnings.push({ code: 'TEXT_OUTSIDE_SAFE_AREA', sceneId: scene.id, layerId: layer.id, safeAreaPercent: safePercent, bounds: { x, y, width: boxWidth, height: boxHeight } });
+        }
+      }
       const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
       const needsAsset = ['image', 'video', 'audio'].includes(layer.kind) && !assetUri;
       if (needsAsset && options.allowMissingAssetsAsPlaceholders === false) throw new Error('Required media asset is unavailable for layer ' + layer.id + ' in scene ' + scene.id + '.');
@@ -197,15 +247,13 @@ export async function compileHyperFramesProject(project, options = {}) {
       compositionId, title: scene.name, width: project.project.canvas.width, height: project.project.canvas.height,
       duration: sceneDuration, elements: sceneMarkup, background: project.brand?.colors?.background || '#101010'
     });
-    const sceneSource = path.join('scene-sources', sceneId + '.html').replaceAll('\\', '/');
-    await writeFile(path.join(outputDir, sceneSource), sceneDoc, 'utf8');
-    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: sceneStartFrame, html: sceneSource });
-    cumulativeFrame = Math.max(cumulativeFrame, sceneEndFrame);
+    await writeFile(path.join(outputDir, sceneId + '.html'), sceneDoc, 'utf8');
+    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: sceneId + '.html' });
+    cumulativeFrame += scene.durationFrames;
   }
 
   await cp(DEFAULT_GSAP, path.join(outputDir, 'assets', 'gsap.min.js'));
-  const rootDurationFrames = Math.max(cumulativeFrame, Number(project.project.totalDurationFrames) || 0);
-  const rootDuration = seconds(rootDurationFrames, frameRate);
+  const rootDuration = seconds(cumulativeFrame, frameRate);
   const rootCompositionId = 'motion-studio-root';
   const rootDoc = documentHtml({
     compositionId: rootCompositionId, title: project.project.name, width: project.project.canvas.width, height: project.project.canvas.height,
@@ -220,7 +268,7 @@ export async function compileHyperFramesProject(project, options = {}) {
     rootCompositionId,
     frameRate,
     canvas: project.project.canvas,
-    totalDurationFrames: rootDurationFrames,
+    totalDurationFrames: cumulativeFrame,
     durationSeconds: rootDuration,
     entrypoint: 'index.html',
     scenes: sceneEntries,

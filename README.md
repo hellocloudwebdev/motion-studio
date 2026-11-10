@@ -1,8 +1,8 @@
 # Motion Studio
 
-**Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, QA and bounded repair.
+**Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
 
-> **Current branch: 0.3.0-alpha.1.** This milestone adds the first executable IR-to-HyperFrames compiler and MP4 render/inspection pipeline, plus local MCP clients and installer configuration for the upstream After Effects and Premiere Pro MCP servers. Live Adobe-host verification still requires the user's licensed desktop applications.
+> **Current milestone: 1.0.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning; 1.0 adds FCPXML interchange export with provenance.
 
 ## Install on a new PC
 
@@ -18,9 +18,9 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP, Three.js, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.30.0`, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
+The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP, Three.js, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.29.0`, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
 
-The installer detects Adobe Creative Cloud, After Effects and Premiere Pro. Adobe desktop apps are licensed: the user must sign into Creative Cloud and install/activate them. Motion Studio opens Adobe's official installation workflow and verifies the apps afterward; it does not automate login or licensing.
+Adobe desktop apps are licensed: the user must sign into Creative Cloud and install/activate them. Motion Studio opens Adobe's official installation workflow and verifies the apps afterward; it does not automate login or licensing.
 
 After Effects and Premiere have separate local stdio MCP servers. Onboarding uses read-only / inspect-only authority. Premiere 25.6+ can use the pinned authenticated UXP connector; older hosts can use CEP compatibility. The Premiere UXP token is stored in a user-only secret file and read by the local MCP launcher.
 
@@ -37,7 +37,7 @@ See [Installation](docs/INSTALLATION.md), [Adobe policy](docs/INSTALLER-ADOBE-PO
 | Procedural/WebGL 3D | Three.js |
 | Media processing, encoding and inspection | FFmpeg / FFprobe |
 
-## Try the local render and delivery path
+## Try the renderer and QA
 
 ```bash
 npm install
@@ -46,29 +46,93 @@ npm run validate:example
 npm run route:example
 npm run compile:example
 node apps/cli/src/index.mjs render templates/startup-ad/project.json --quality draft --workers 1
-node apps/cli/src/index.mjs deliver templates/startup-ad/project.json projects/opendoor-startup-ad/renders/opendoor-startup-ad-draft.mp4
 ```
 
-The renderer compiles the IR, runs HyperFrames lint/runtime/layout checks, renders with one worker, probes the MP4 and stores scene-sampled frame evidence. The delivery command transcodes each declared profile, probes outputs, creates a thumbnail, packages source/provenance/assets/captions and writes a receipt. It returns a nonzero status while production evidence is incomplete. The startup-ad sample routes a Blender scene and references missing image/footage, so its render is deliberately not production-ready. For a clean local acceptance path, use `templates/kinetic-type/project.json`:
+The renderer creates a HyperFrames project, renders an MP4, probes the result with FFprobe and writes sampled frame evidence plus a render receipt. Replace sample placeholder assets with licensed/user-owned media before delivery.
+
+## Milestone 0.7: asset intelligence and media intake
+
+Index a media folder, detect duplicates and record exact file checksums:
 
 ```bash
-node apps/cli/src/index.mjs render templates/kinetic-type/project.json --quality draft --workers 1
-node apps/cli/src/index.mjs deliver templates/kinetic-type/project.json projects/kinetic-type-demo/renders/kinetic-type-demo-draft.mp4
+motion-studio assets scan ./media --output ./asset-registry.json
+motion-studio assets verify ./asset-registry.json
+motion-studio assets probe ./media/clip.mp4
+motion-studio assets approve-rights ./asset-registry.json --asset-id <asset-id> --actor "Producer" --license "Licensed stock" --usage "Online advertising"
+motion-studio assets attach ./project.json --registry ./asset-registry.json --output ./project-with-assets.json
 ```
 
-That fixture is a silent typography demo, not a narrated production.
+Asset scans are read-only and stream SHA-256 hashing for large files. New media defaults to `needs-review`; an approval record is a producer's audit assertion, not legal clearance. Verification detects changed/missing bytes but does not validate license terms. See [Asset library](docs/ASSET-LIBRARY.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
+
+## Milestone 1.0: Premiere interchange export
+
+Export a validated editorial manifest to FCPXML plus a provenance sidecar:
+
+```bash
+motion-studio premiere export assembly.json --asset-root ./media --output sequence.fcpxml --manifest premiere-handoff.json
+```
+
+Relative media paths are resolved only under the explicit asset root. The exporter preserves rational frame timing, source in-points, track lanes, source checksums and rights-review state. It fails closed on unresolved files and unsupported URI schemes. This writes an interchange file; it does not launch Premiere, import the sequence or perform edits. See [Premiere interchange](docs/PREMIERE-INTERCHANGE.md) and [Milestone 1.0](docs/MILESTONE-1.0-IMPLEMENTATION-PLAN.md).
+
+## Milestone 0.9: editorial assembly planning
+
+Generate a deterministic sequence manifest from Canonical Video IR:
+
+```bash
+motion-studio editorial plan project.json --output assembly.json
+motion-studio editorial validate assembly.json
+```
+
+The planner lays scenes sequentially in integer frames, places layers on deterministic overlap-aware video/audio/graphics tracks, and carries source URI, checksum and rights-review metadata into the manifest. It flags unresolved media and unreviewed rights. This is a planning handoff only; it does not create or modify Premiere projects. See [Editorial assembly](docs/EDITORIAL-ASSEMBLY.md) and [Milestone 0.9](docs/MILESTONE-0.9-IMPLEMENTATION-PLAN.md).
+
+## Milestone 0.8: media derivatives and preview artifacts
+
+Create local proxies and review assets without modifying source media:
+
+```bash
+motion-studio media derive ./media/clip.mp4 --output-dir ./media/derived
+motion-studio media derive ./media/music.wav --output-dir ./media/derived
+motion-studio media derive ./media/still.png --output-dir ./media/derived
+```
+
+Video creates an H.264/AAC proxy and representative thumbnail, audio creates a waveform PNG, and raster images create a bounded JPEG preview. Every output is hashed in a provenance manifest; existing outputs are not overwritten unless `--overwrite` is supplied. These files are previews, not delivery masters. See [Media derivatives](docs/MEDIA-DERIVATIVES.md) and [Milestone 0.8](docs/MILESTONE-0.8-IMPLEMENTATION-PLAN.md).
+
+## Milestone 0.6: host preflight and approval gates
+
+Create a JSON file containing actual local host-check evidence, then run:
+
+```bash
+motion-studio preflight templates/startup-ad/project.json --host-checks host-checks.json
+```
+
+Example:
+```json
+{
+  "hyperframes": { "available": true },
+  "blender": { "available": true },
+  "afterEffects": { "serverConnected": true, "contextAvailable": true },
+  "premiere": { "serverConnected": true, "hostVerified": true },
+  "ffmpeg": { "available": true }
+}
+```
+
+Preflight fails closed if any routed engine, Premiere assembly host or FFmpeg delivery tool lacks positive evidence. Do not mark a host available unless the check actually succeeded.
+
+Edit-enabled Adobe MCP calls require a short-lived approval bound to the project, run, app, tool name and exact arguments. Production-run transitions into Premiere assembly and final export require matching approvals and verified host readiness. Approval records are audit/governance records, not cryptographic identity proof.
+
+See [Milestone 0.5](docs/MILESTONE-0.5-IMPLEMENTATION-PLAN.md), [Milestone 0.6](docs/MILESTONE-0.6-IMPLEMENTATION-PLAN.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
 
 ## Architecture
 
-- **Canonical Video IR** defines production intent, timing, typography, assets, motion and delivery contracts.
+- **Canonical Video IR** defines production intent, timing, typography, assets, motion, QA, provenance and delivery contracts.
 - **Agents and skills** own specialist production responsibilities and reusable procedures.
-- **Orchestrator** manages dependencies, leases and bounded repair loops.
+- **Orchestrator** manages dependencies, leases, host preflight, approval gates and bounded repair loops.
 - **Engine router** chooses per-layer renderers.
 - **Render manager** compiles and renders HyperFrames compositions and verifies output artifacts.
-- **Adobe MCP client** connects to upstream AE and Premiere servers over local stdio.
+- **Adobe MCP client** connects to upstream AE and Premiere servers over local stdio with read-only defaults and exact-operation approval gates.
 - **QA and repair** inspect actual output evidence, create defects and request scoped rebuilds.
 - **Learning** proposes versioned workflow/skill improvements; it cannot silently change code or permissions.
 
-## Important capability boundary
+## Capability boundary
 
-This is a 0.3 alpha, not yet a production-ready one-click film studio. The HyperFrames compiler, local draft rendering, FFmpeg finishing and package generation are implemented. A primitive-based Blender frame-sequence adapter exists but has not run on a Blender host. Actual After Effects/Premiere edits require licensed apps and live host validation. Three.js rendering, natural-language production generation, Premiere interchange/sequence automation, AI QA/repair and cross-platform release evidence remain unimplemented. See [roadmap status](docs/IMPLEMENTATION-STATUS-1.0.md).
+This is an alpha, not a production-ready one-click film studio. CI verifies synthetic media and deterministic orchestration logic. Real After Effects/Premiere connections, edit behavior, comp creation, sequence assembly and final exports still require live validation on a workstation with licensed Adobe applications. Milestone 0.6 does not claim to perform a full end-to-end Adobe edit/export automatically.
