@@ -50,6 +50,16 @@ node apps/cli/src/index.mjs render templates/startup-ad/project.json --quality d
 
 The renderer creates a HyperFrames project, renders an MP4, probes the result with FFprobe and writes sampled frame evidence plus a render receipt. Replace sample placeholder assets with licensed/user-owned media before delivery.
 
+## Natural-language production planning
+
+Configure `OPENROUTER_API_KEY` in a local environment (never as a CLI argument or committed file), then run:
+
+```bash
+node apps/cli/src/index.mjs plan "Explain how community solar works" --duration 45 --audience "first-time renters" --output projects/community-solar
+```
+
+The default model is OpenRouter's `openrouter/free` router. The command produces a validated Canonical Video IR and a creative-plan JSON; it does not render, generate narration audio, or accept the production. Research uses OpenRouter web search only when enabled with `--allow-web-search`. Search may incur charges separate from free-model inference, so leave it off unless that cost is approved. See [OpenRouter provider setup](docs/OPENROUTER-CREATIVE-PIPELINE.md).
+
 ## Milestone 0.7: asset intelligence and media intake
 
 Index a media folder, detect duplicates and record exact file checksums:

@@ -254,7 +254,7 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 |---|---|---|
 | 0.5–0.9 | Integrated locally; unit/CLI coverage passes | Fresh combined CI on supported platforms; run real asset → derivative → editorial → interchange chain |
 | 1.0 | FCPXML exporter, provenance sidecar and safety tests implemented | Golden multi-track/overlap fixtures; import and readback comparison in licensed Premiere |
-| 1.1 | Provider-neutral intake, research evidence, script/storyboard/design artifacts and IR compilation implemented | Complete an approved idea-to-IR production with real research/provider evidence and revision lineage |
+| 1.1 | Provider-neutral stages plus OpenRouter Responses API adapter, free-model default, structured output and CLI/MCP entry points implemented; offline tests pass | Live free-model idea-to-IR acceptance after a replacement local key is configured; source-grounded research requires explicit web-search opt-in; add revision lineage |
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
 | 1.3 | FFmpeg finalization, audio mix/caption conversion and output inspection foundations exist | Full narrated master with sync, fades/ducking/stems, all target profiles and verified final media evidence |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |

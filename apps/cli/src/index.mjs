@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale, persistQaRecord } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
@@ -11,6 +11,7 @@ import { generateMediaDerivatives } from '../../../packages/media-derivatives/sr
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
+import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -129,6 +130,41 @@ if (command === 'assets') {
   const manifestPath = option('--manifest', '');
   if (manifestPath) await writeFile(path.resolve(manifestPath), JSON.stringify(result, null, 2) + '\n');
   print(result);
+} else if (command === 'plan') {
+  const optionValues = new Set(['--duration', '--audience', '--purpose', '--language', '--platform', '--aspect-ratio', '--model', '--output', '--references-json', '--assets-json', '--brand-json']);
+  const ideaParts = [];
+  let skipValue = false;
+  for (const value of [file, ...args]) {
+    if (!value) continue;
+    if (skipValue) { skipValue = false; continue; }
+    if (value.startsWith('--')) { if (optionValues.has(value)) skipValue = true; continue; }
+    ideaParts.push(value);
+  }
+  const idea = ideaParts.join(' ').trim();
+  if (!idea) throw new Error('Usage: motion-studio plan "<video idea>" [--duration 45] [--audience <text>] [--purpose <text>] [--language English] [--platform youtube] [--aspect-ratio 16:9] [--output <directory>] [--allow-web-search]');
+  const options = {
+    durationSeconds: option('--duration', undefined) === undefined ? undefined : Number(option('--duration', undefined)),
+    audience: option('--audience', undefined), purpose: option('--purpose', undefined),
+    language: option('--language', undefined), platform: option('--platform', undefined), aspectRatio: option('--aspect-ratio', undefined)
+  };
+  const referencesFile = option('--references-json', '');
+  const assetsFile = option('--assets-json', '');
+  const brandFile = option('--brand-json', '');
+  if (referencesFile) options.references = await load(referencesFile);
+  if (assetsFile) options.suppliedAssets = await load(assetsFile);
+  if (brandFile) options.brand = await load(brandFile);
+  const provider = createOpenRouterProvider({ model: option('--model', process.env.MOTION_STUDIO_MODEL), enableWebSearch: flags().has('--allow-web-search') });
+  const production = await generateProduction(provider, { idea, options });
+  if (production.status === 'needs-input') { print(production); process.exitCode = 3; }
+  else {
+    const outputDir = path.resolve(option('--output', path.join(process.cwd(), 'projects', production.project.project.id)));
+    await mkdir(outputDir, { recursive: true });
+    const projectFile = path.join(outputDir, 'project.json'), planFile = path.join(outputDir, 'production-plan.json');
+    const plan = { ...production }; delete plan.project;
+    await writeFile(projectFile, JSON.stringify(production.project, null, 2) + '\n', { flag: 'wx' });
+    await writeFile(planFile, JSON.stringify(plan, null, 2) + '\n', { flag: 'wx' });
+    print({ status: production.status, projectFile, planFile, validation: production.validation, acceptance: production.acceptance });
+  }
 } else if (command === 'qa-approve') {
   if (!file) throw new Error('Usage: motion-studio qa-approve <project-with-qa.json> --actor <name> [--note <text>] [--output <path>]');
   const project = await load(file);
@@ -223,5 +259,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\\nCommands: assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
