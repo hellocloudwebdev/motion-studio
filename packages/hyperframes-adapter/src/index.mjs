@@ -132,7 +132,7 @@ function documentHtml({ compositionId, title, width, height, duration, elements,
     ' window.__timelines[compositionId]=tl;\n' +
     '})();\n</script>';
   return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(title) + '</title>\n' +
-    '<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:' + esc(background) + '} [data-composition-id]{position:relative;overflow:hidden;width:100%;height:100%;background:' + esc(background) + '} .ms-layer{will-change:transform,opacity} img,video{display:block}</style>\n</head>\n<body>\n' +
+    '<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:' + esc(background) + '} [data-composition-id]{position:relative;overflow:hidden;width:' + Number(width) + 'px;height:' + Number(height) + 'px;background:' + esc(background) + '} .ms-layer{will-change:transform,opacity} img,video{display:block}</style>\n</head>\n<body>\n' +
     '<div id="' + esc(compositionId) + '" data-composition-id="' + esc(compositionId) + '" data-start="0" data-duration="' + Number(duration) + '" data-width="' + Number(width) + '" data-height="' + Number(height) + '">\n' +
     elements.join('\n') + '\n</div>\n' + script + '\n</body>\n</html>\n';
 }

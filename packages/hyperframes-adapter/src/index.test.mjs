@@ -27,6 +27,7 @@ test('compiles IR scene into HyperFrames HTML with exact composition and timelin
     const html = await readFile(path.join(dir, 'scenes', 'scene-1.html'), 'utf8');
     assert.deepEqual(result.manifest.scenes[0].html, 'scenes/scene-1.html');
     assert.equal((await readFile(path.join(dir, 'index.html'), 'utf8')).match(/data-composition-id=/g)?.length, 1);
+    assert.match(await readFile(path.join(dir, 'index.html'), 'utf8'), /\[data-composition-id\]\{position:relative;overflow:hidden;width:1920px;height:1080px/);
     assert.match(html, /data-composition-id="scene-scene-1"/);
     assert.match(html, /window\.__timelines\[compositionId\]=tl/);
     assert.match(html, /&lt;Hello &amp; world&gt;/);
