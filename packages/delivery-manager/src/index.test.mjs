@@ -34,15 +34,21 @@ test('packages only referenced assets, rewrites a portable IR and verifies packa
       { id: 'still', kind: 'image', uri: 'still.png', sha256: createHash('sha256').update(assetBytes).digest('hex'), rightsStatus: 'user-owned' },
       { id: 'unused', kind: 'image', uri: 'missing.png', rightsStatus: 'unknown' }
     ];
-    const input = project(assets), projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    const input = project(assets), projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4'), qaFrame = path.join(root, 'qa.png');
     await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
     await makeVideo(sourceVideo);
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', sourceVideo, '-frames:v', '1', '-update', '1', qaFrame]);
     const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-    const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: packageRoot, renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha } });
+    const assembly = { assemblyVersion: '1.0.0', project: input.project, sequence: { durationFrames: 60 }, scenes: [], clips: [] };
+    const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: packageRoot, renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, frameEvidence: [{ path: qaFrame, decoded: true, bytes: 1, atSeconds: 0.5 }], qa: { passed: true, defects: [] } }, editorialAssembly: assembly, operationHistory: [{ stage: 'render', status: 'passed' }] });
     assert.equal(result.acceptance.passed, true);
     assert.equal(result.assetManifest ? JSON.parse(await readFile(result.assetManifest, 'utf8')).assets.length : 0, 1);
     const portable = JSON.parse(await readFile(result.portableProject.path, 'utf8'));
     assert.match(portable.assets[0].uri, /^assets\/still-/);
+    assert.equal(JSON.parse(await readFile(result.evidence.editorialAssembly, 'utf8')).assemblyVersion, '1.0.0');
+    assert.equal(JSON.parse(await readFile(result.evidence.operationHistory, 'utf8'))[0].status, 'passed');
+    assert.ok(JSON.parse(await readFile(result.evidence.softwareVersions, 'utf8')).node);
+    assert.ok(result.evidence.qaFrames);
     assert.equal((await verifyDeliveryPackage(packageRoot)).passed, true);
     await writeFile(path.join(packageRoot, 'assets', path.basename(portable.assets[0].uri)), 'tampered');
     const tampered = await verifyDeliveryPackage(packageRoot);

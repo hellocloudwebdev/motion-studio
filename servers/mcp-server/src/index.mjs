@@ -180,7 +180,7 @@ server.tool('video.package_delivery', 'Create and independently verify delivery 
   const renderFile = path.join(paths.renders, (project.project.id || projectId) + '-' + quality + '.mp4');
   let renderManifest = null;
   try { renderManifest = JSON.parse(await readFile(renderFile + '.render.json', 'utf8')); } catch {}
-  const receipt = await buildDeliveryPackage({ project, projectFile: paths.source, sourceVideo: renderFile, projectRoot: paths.root, outputRoot: paths.delivery, renderManifest, audioInputs: await audioInputsFromProject(project, paths.source) });
+  const receipt = await buildDeliveryPackage({ project, projectFile: paths.source, sourceVideo: renderFile, projectRoot: paths.root, outputRoot: paths.delivery, renderManifest, editorialAssembly: createEditorialAssembly(project), operationHistory: project.qa?.repairHistory || [], audioInputs: await audioInputsFromProject(project, paths.source) });
   return { content: [{ type: 'text', text: JSON.stringify(receipt, null, 2) }], isError: !receipt.acceptance.passed };
 });
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));

@@ -163,7 +163,7 @@ Never promote a capability to runtime-verified or production-accepted based only
 - [x] Generate master and requested platform variants for supported FFmpeg container/codec profiles.
 - [ ] Include captions/subtitle files, Canonical IR, editorial manifest, required source projects and only the assets actually used. Captions, source/portable IR and referenced local assets are included; editorial manifest and conditional engine project references remain open.
 - [ ] Include AE/Premiere/Blender project references only when actually created.
-- [ ] Include asset/provenance manifests, source hashes, rights-review records, render manifest, QA report/defect history, sampled frames, export receipts, software/engine versions and settings.
+- [x] Include asset/provenance manifests, source hashes, rights-review records, render manifest, QA report/defect history, available sampled frames, operation history, software versions and settings in the delivery package. Cross-project engine source files remain conditionally included when available.
 - [x] Generate human-readable `DELIVERY-REPORT.md`.
 - [x] Verify package file integrity with a SHA-256 manifest and independent verifier. Reproducible rebuild comparison remains open.
 
@@ -265,7 +265,7 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 | 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
 | 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |
 | 1.7 | Structured render QA, advisory critic and bounded repair planning implemented | Defect-to-patch execution, affected render, retest and multimodal acceptance evidence |
-| 1.8 | Master/profile transcodes, captions, source and portable IR, referenced-asset packaging, human report and SHA-256 integrity verification implemented; local FFmpeg integration cases pass, including traversal/tamper rejection | Narrated production package; editorial manifest/source projects, production-ready render evidence and reproducible rebuild comparison |
+| 1.8 | Master/profile transcodes, captions, source and portable IR, referenced-asset packaging, editorial/render/QA/operation/software evidence, available QA frames, human report and SHA-256 integrity verification implemented; local FFmpeg integration cases pass, including traversal/tamper rejection | Narrated production package; engine source project references, production-ready render evidence and reproducible rebuild comparison |
 | 1.9 | Installer and host process safety foundation; local runtime now requires a >=32-byte bearer token and uses constant-time comparisons, covered by loopback HTTP integration tests | Secure OS-backed token storage, fresh Windows/macOS/Linux install, upgrade/uninstall, host matrix, recovery and security acceptance |
 
 No milestone is marked production-accepted by this integration. A passing automated test suite does not replace actual renderer/editor execution or the five end-to-end acceptance projects.

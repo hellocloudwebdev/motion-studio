@@ -212,7 +212,8 @@ if (command === 'assets') {
     const target = paths(project, file);
     let renderManifest = null;
     try { renderManifest = JSON.parse(await readFile(path.resolve(sourceVideo) + '.render.json', 'utf8')); } catch {}
-    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, audioInputs: await audioInputsFromProject(project, file) });
+    const assembly = createEditorialAssembly(project);
+    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, editorialAssembly: assembly, operationHistory: project.qa?.repairHistory || [], audioInputs: await audioInputsFromProject(project, file) });
     print(delivery);
     if (!delivery.acceptance.passed) process.exitCode = 2;
   } else if (command === 'compile' || command === 'render') {

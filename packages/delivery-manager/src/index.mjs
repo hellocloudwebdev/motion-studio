@@ -55,7 +55,7 @@ async function resolveAssetFile(sourceProjectDir, uri) {
   return resolved;
 }
 
-export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, audioInputs = [], signal } = {}) {
+export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], signal } = {}) {
   if (!project?.project?.id || !project?.delivery?.targets?.length) throw new Error('A valid project and at least one output profile are required.');
   const source = path.resolve(sourceVideo), root = path.resolve(projectRoot);
   let packageRoot = path.resolve(outputRoot || path.join(root, 'deliverables'));
@@ -125,6 +125,48 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   await writeFile(portableProjectPath, portableProjectBytes);
   const manifestPath = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'asset-manifest.json'));
   await writeFile(manifestPath, JSON.stringify({ projectId: project.project.id, assets: assetManifest }, null, 2) + '\n');
+  const evidenceRoot = path.join(packageRoot, 'evidence');
+  await mkdir(evidenceRoot, { recursive: true });
+  await assertNoSymlinkPath(packageRoot, evidenceRoot);
+  const evidenceFiles = [];
+  async function saveEvidence(name, value) {
+    if (value === null || value === undefined) return null;
+    const file = await assertNoSymlinkPath(packageRoot, path.join(evidenceRoot, name));
+    const bytes = Buffer.from(JSON.stringify(value, null, 2) + '\n');
+    await writeFile(file, bytes);
+    evidenceFiles.push(file);
+    return file;
+  }
+  const renderEvidencePath = await saveEvidence('render-manifest.json', renderManifest);
+  const qaEvidencePath = await saveEvidence('qa-report.json', renderManifest?.qa || project.qa || null);
+  const editorialEvidencePath = await saveEvidence('editorial-assembly.json', editorialAssembly);
+  const operationHistoryPath = await saveEvidence('operation-history.json', operationHistory);
+  const frameEvidence = Array.isArray(renderManifest?.frameEvidence) ? renderManifest.frameEvidence : [];
+  const qaFramesDirectory = path.join(evidenceRoot, 'qa-frames');
+  if (frameEvidence.length) {
+    await mkdir(qaFramesDirectory, { recursive: true });
+    await assertNoSymlinkPath(packageRoot, qaFramesDirectory);
+    const allowedRoots = [path.resolve(root), path.resolve(path.dirname(source))];
+    for (const [index, frame] of frameEvidence.entries()) {
+      if (typeof frame?.path !== 'string') continue;
+      const sourceFrame = path.resolve(frame.path);
+      if (!allowedRoots.some(allowed => contained(allowed, sourceFrame))) throw new Error('QA frame evidence path escapes the render workspace.');
+      const realFrame = await realpath(sourceFrame);
+      if (!allowedRoots.some(allowed => contained(allowed, realFrame))) throw new Error('Resolved QA frame evidence escapes the render workspace.');
+      const frameBytes = await readFile(realFrame);
+      if (!frameBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('QA frame evidence is not a PNG: ' + sourceFrame);
+      const frameFile = path.join(qaFramesDirectory, 'frame-' + String(index + 1).padStart(3, '0') + '.png');
+      await writeFile(frameFile, frameBytes);
+      evidenceFiles.push(frameFile);
+    }
+  }
+  const softwareVersions = {
+    node: process.version,
+    hyperframes: renderManifest?.hyperframesVersion || null,
+    ffmpeg: await runMediaCommand('ffmpeg', ['-version'], { signal }).then(result => result.stdout.split(/\r?\n/)[0]).catch(() => null),
+    ffprobe: await runMediaCommand('ffprobe', ['-version'], { signal }).then(result => result.stdout.split(/\r?\n/)[0]).catch(() => null)
+  };
+  const softwareEvidencePath = await saveEvidence('software-versions.json', softwareVersions);
   const rightsCleared = assetManifest.every(asset => ['cleared', 'user-owned'].includes(asset.rightsStatus) || asset.kind === 'generated');
   const assetsPackaged = assetManifest.every(asset => asset.included);
   const canonicalIrSha256 = createHash('sha256').update(JSON.stringify(project)).digest('hex');
@@ -139,7 +181,8 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     captions: captionFiles, sourceProject: { path: projectCopy, sha256: hashFile(sourceProjectBytes), canonicalIrSha256 },
     portableProject: { path: portableProjectPath, sha256: hashFile(portableProjectBytes) },
     assetManifest: manifestPath, provenance: project.provenance || { sources: [], software: [], decisions: [] },
-    renderManifest: renderManifest || null, qaReport: project.qa || null,
+    evidence: { renderManifest: renderEvidencePath, qaReport: qaEvidencePath, editorialAssembly: editorialEvidencePath, operationHistory: operationHistoryPath, softwareVersions: softwareEvidencePath, qaFrames: frameEvidence.length ? path.relative(packageRoot, qaFramesDirectory).split(path.sep).join('/') : null },
+    renderManifest: renderManifest || null, qaReport: renderManifest?.qa || project.qa || null,
     limitations: assetManifest.filter(asset => asset.included === false).map(asset => ({ assetId: asset.id, reason: asset.unresolvedReason || 'Referenced asset could not be packaged.' }))
   };
   const humanReport = [
@@ -155,7 +198,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   ].join('\n') + '\n';
   const reportPath = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'DELIVERY-REPORT.md'));
   await writeFile(reportPath, humanReport);
-  const integrityFiles = [...variants.map(variant => variant.output), thumbnail, ...captionFiles, ...assetManifest.filter(asset => asset.included && asset.packagePath).map(asset => path.join(packageRoot, asset.packagePath)), projectCopy, portableProjectPath, manifestPath, reportPath];
+  const integrityFiles = [...variants.map(variant => variant.output), thumbnail, ...captionFiles, ...assetManifest.filter(asset => asset.included && asset.packagePath).map(asset => path.join(packageRoot, asset.packagePath)), projectCopy, portableProjectPath, manifestPath, ...evidenceFiles, reportPath];
   const integrity = { schemaVersion: '1.0', projectId: project.project.id, files: [] };
   for (const file of integrityFiles) {
     const bytes = await readFile(file);
