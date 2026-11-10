@@ -13,6 +13,7 @@ Connect the creative roles through explicit, provider-neutral contracts. A natur
 - [x] Canonical Video IR compiler: resolved audience/duration/aspect ratio, rational frame-rate validation, storyboard frame alignment, brand tokens, assets, delivery target and provenance.
 - [x] Compiler runs the existing Canonical Video IR project validator before returning a project.
 - [x] CLI: `create`, `validate`, `workflow`, `validate-artifacts`, `compile`.
+- [x] Persist each CLI compilation as an immutable planning/Canonical IR revision with SHA-256 lineage; record approvals against the exact revision's Canonical IR hash.
 - [x] MCP tools: `video.create_production_brief`, `video.validate_production_brief`, `video.plan_creative_workflow`, `video.validate_planning_artifacts`, `video.compile_planning_artifacts`.
 - [x] Unit and CLI integration tests for intake, evidence validation, frame-accurate compilation, custom dimensions, rational frame rates and invalid-input failure.
 
@@ -36,6 +37,11 @@ npm run intake -- validate-artifacts planning.json
 Compile approved planning artifacts into Canonical Video IR:
 ```bash
 npm run intake -- compile planning.json --output canonical-video-ir.json
+```
+
+Compilation also writes `canonical-video-ir.json.journal.json` by default; override with `--journal`. It stores the full local planning bundle and compiled IR for every revision with stable hashes. Record an explicit approval against one exact revision:
+```bash
+npm run intake -- approve-revision canonical-video-ir.json.journal.json 1 --actor "Producer Name" --note "Approved for rendering"
 ```
 
 The planning input file for `validate-artifacts` and `compile` has this shape:
@@ -68,7 +74,7 @@ The current implementation provides provider-neutral contracts, validators, comp
 - [ ] Add script timing analysis using language-aware speaking-rate estimates and scene-level narration alignment.
 - [ ] Generate storyboards from script beats and enforce complete asset/audio cue coverage.
 - [ ] Validate installed fonts and glyph coverage on the render host before rendering.
-- [ ] Persist brief/artifact revisions, approvals and artifact hashes in the run journal.
+- [x] Persist brief/artifact/IR revisions, approvals and content hashes in the local run journal. Cross-host orchestration run IDs and merge/conflict workflow remain open.
 - [ ] Add five acceptance-project fixtures and a full idea → agents → IR → render → QA → delivery run.
 - [ ] Demonstrate actual HyperFrames render and final delivery from a compiled planning bundle.
 

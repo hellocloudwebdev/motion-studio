@@ -44,6 +44,7 @@ test('intake CLI compiles validated planning artifacts into Canonical Video IR',
   try {
     const input = path.join(dir, 'planning.json');
     const output = path.join(dir, 'project.json');
+    const journal = output + '.journal.json';
     const planning = {
       brief: {
         schemaVersion: '1.0.0', id: 'brief-cli', createdAt: '2026-11-08T00:00:00.000Z',
@@ -57,11 +58,19 @@ test('intake CLI compiles validated planning artifacts into Canonical Video IR',
       designSystem: { colors: { background: '#000000', foreground: '#ffffff' }, fonts: [{ family: 'Inter' }] }
     };
     await writeFile(input, JSON.stringify(planning));
-    const result = spawnSync(process.execPath, [cli, 'compile', input, '--output', output], { encoding: 'utf8', shell: false });
+    const result = spawnSync(process.execPath, [cli, 'compile', input, '--output', output, '--journal', journal], { encoding: 'utf8', shell: false });
     assert.equal(result.status, 0, result.stderr);
     const project = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(project.schemaVersion, '1.0.0');
     assert.equal(project.scenes[0].layers[0].content.text, 'Make better work');
+    const record = JSON.parse(await readFile(journal, 'utf8'));
+    assert.equal(record.revisions.length, 1);
+    assert.ok(record.revisions[0].canonicalIrSha256);
+    const approved = spawnSync(process.execPath, [cli, 'approve-revision', journal, '1', '--actor', 'producer', '--note', 'Reviewed'], { encoding: 'utf8', shell: false });
+    assert.equal(approved.status, 0, approved.stderr);
+    const updatedJournal = JSON.parse(await readFile(journal, 'utf8'));
+    assert.equal(updatedJournal.approvals[0].revision, 1);
+    assert.equal(updatedJournal.approvals[0].canonicalIrSha256, record.revisions[0].canonicalIrSha256);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
