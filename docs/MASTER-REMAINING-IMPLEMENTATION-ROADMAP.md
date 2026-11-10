@@ -125,13 +125,15 @@ Never promote a capability to runtime-verified or production-accepted based only
 
 ## Milestone 1.6 — Three.js procedural 3D renderer
 
-- [ ] Define IR-to-Three.js mapping; scene, camera and lighting systems.
-- [ ] Geometry/material generation, shaders, procedural graphics, animation timelines and particles.
-- [ ] Integrate GSAP where useful.
-- [ ] Render deterministic frames through the approved browser workflow and capture image sequences.
-- [ ] Validate alpha, dimensions, timing and metadata; integrate with common pipeline.
+- [x] Define IR-to-Three.js mapping; scene, camera and lighting systems (camera and default lighting; see [THREEJS-ADAPTER.md](THREEJS-ADAPTER.md)).
+- [x] Geometry/material generation and procedural graphics for the supported primitive subset. Custom shaders and particles remain open.
+- [x] Integrate GSAP where useful.
+- [x] Render deterministic frame-seekable scenes through the HyperFrames browser workflow and capture frame evidence.
+- [x] Validate opaque output dimensions, timing and metadata; emit a hash-bearing receipt. Alpha output remains open.
 
 **Deliverable:** `@motion-studio/threejs-adapter`, compiler, shader/preset library, browser render integration and tests.
+
+**Status:** Core adapter and the local 3-second runtime fixture are implemented and runtime verified on 2026-11-10 (HyperFrames lint/check/snapshot/render passed; FFprobe verified 1280×720, 30 fps, 90 frames, H.264; rendered frame visually inspected). Model imports, custom shaders, particles, alpha/image-sequence output, and mixed-scene editorial inclusion remain open.
 
 **Exit gate:** An IR-defined procedural 3D scene renders frame-accurately and appears in a final video.
 

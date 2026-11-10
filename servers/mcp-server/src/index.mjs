@@ -1,9 +1,15 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
 import { evaluateHostReadiness, authorizeProductionStage } from '../../../packages/orchestrator/src/host-readiness.mjs';
+import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
+import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
+import { renderBlenderScene } from '../../../packages/blender-adapter/src/index.mjs';
+import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
@@ -13,6 +19,25 @@ import { createProductionBrief, buildCreativeWorkflow, validateProductionBrief, 
 const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
 const engineList = z.array(z.enum(['hyperframes', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
+function projectPaths(id) {
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new Error('projectId must contain only letters, numbers, underscores or hyphens.');
+  const projectsRoot = path.resolve(process.cwd(), 'projects'), root = path.resolve(projectsRoot, id);
+  const relative = path.relative(projectsRoot, root);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Project path escaped the projects directory.');
+  return { root, source: path.join(root, 'project.json'), engine: path.join(root, 'engines', 'hyperframes'), renders: path.join(root, 'renders'), delivery: path.join(root, 'deliverables') };
+}
+function audioInputs(project, projectFile) {
+  const assets = new Map((project.assets || []).map(asset => [asset.id, asset]));
+  const cues = [...(project.audio?.tracks || []), ...(project.scenes || []).flatMap(scene => scene.audioCues || [])];
+  return cues.map((cue, index) => {
+    const asset = assets.get(cue.assetId);
+    if (!asset || asset.kind !== 'audio' || typeof asset.uri !== 'string' || /^[a-z][a-z0-9+.-]*:\/\//i.test(asset.uri)) throw new Error('Audio cue ' + index + ' must reference a local audio asset.');
+    const sourceRoot = path.dirname(projectFile), file = path.resolve(sourceRoot, asset.uri), relative = path.relative(sourceRoot, file);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Audio asset path escapes the project directory.');
+    const start = Number(cue.offsetFrames ?? cue.startFrame ?? 0);
+    return { path: file, kind: cue.kind || cue.role || 'audio', offsetSeconds: start * project.project.frameRate.denominator / project.project.frameRate.numerator, volume: cue.volume ?? 1 };
+  });
+}
 
 server.tool('video.create_project_template', 'Return a starter Canonical Video IR project. Fill the creative brief and assets before production.', {
   name: z.string().min(1), width: z.number().int().positive().default(1920), height: z.number().int().positive().default(1080), fps: z.number().positive().default(30), durationSeconds: z.number().positive().default(30)
@@ -116,5 +141,50 @@ server.tool('video.generate_media_derivatives', 'Generate local video proxies, t
 }, async ({ sourcePath, outputDirectory, ...options }) => ({
   content: [{ type: 'text', text: JSON.stringify(await generateMediaDerivatives(sourcePath, outputDirectory, options), null, 2) }]
 }));
+server.tool('video.render_project', 'Persist a validated Canonical Video IR inside the local projects directory, then compile, lint, check, render and verify it with HyperFrames. One worker is fixed by policy.', {
+  project: projectSchema, quality: z.enum(['draft', 'standard', 'high']).default('draft')
+}, async ({ project, quality }) => {
+  const validation = validateProject(project);
+  if (!validation.valid) return { isError: true, content: [{ type: 'text', text: JSON.stringify(validation, null, 2) }] };
+  const paths = projectPaths(project.project.id);
+  await mkdir(paths.root, { recursive: true });
+  try {
+    const existing = JSON.parse(await readFile(paths.source, 'utf8'));
+    if (JSON.stringify(existing) !== JSON.stringify(project)) throw new Error('A different project with this id already exists. Save a higher revision before rendering.');
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await writeFile(paths.source, JSON.stringify(project, null, 2) + '\n', { flag: 'wx' }).catch(async error => { if (error.code !== 'EEXIST') throw error; });
+  const result = await renderHyperFramesProject(project, { projectRoot: paths.root, engineRoot: paths.engine, outputRoot: paths.renders, installRoot: process.cwd(), sourceRoot: paths.root, quality, workers: 1 });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: !result.verified };
+});
+server.tool('video.render_blender_scene', 'Render an explicitly authored Blender scene from stored Canonical Video IR into a verified frame sequence.', {
+  projectId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), sceneId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/)
+}, async ({ projectId, sceneId }) => {
+  const paths = projectPaths(projectId), project = JSON.parse(await readFile(paths.source, 'utf8'));
+  const validation = validateProject(project);
+  if (!validation.valid) return { isError: true, content: [{ type: 'text', text: JSON.stringify(validation, null, 2) }] };
+  const scene = project.scenes.find(item => item.id === sceneId);
+  if (!scene) throw new Error('Unknown scene id: ' + sceneId);
+  const result = await renderBlenderScene(project, scene, { projectRoot: paths.root });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: !result.verified };
+});
+server.tool('video.render_threejs_scene', 'Render an explicitly authored Three.js scene from stored Canonical Video IR. Unsupported layer types and model assets fail closed.', {
+  projectId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), sceneId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), quality: z.enum(['draft', 'standard', 'high']).default('draft')
+}, async ({ projectId, sceneId, quality }) => {
+  const paths = projectPaths(projectId), project = JSON.parse(await readFile(paths.source, 'utf8'));
+  const validation = validateProject(project);
+  if (!validation.valid) return { isError: true, content: [{ type: 'text', text: JSON.stringify(validation, null, 2) }] };
+  const result = await renderThreeJsScene(project, sceneId, { projectRoot: paths.root, outputRoot: paths.renders, installRoot: process.cwd(), quality, timeoutMs: 600000 });
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: !result.verified };
+});
+server.tool('video.package_delivery', 'Create and independently verify delivery variants for a rendered local project.', {
+  projectId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), quality: z.enum(['draft', 'standard', 'high']).default('draft')
+}, async ({ projectId, quality }) => {
+  const paths = projectPaths(projectId), project = JSON.parse(await readFile(paths.source, 'utf8'));
+  const renderFile = path.join(paths.renders, (project.project.id || projectId) + '-' + quality + '.mp4');
+  let renderManifest = null;
+  try { renderManifest = JSON.parse(await readFile(renderFile + '.render.json', 'utf8')); } catch {}
+  const receipt = await buildDeliveryPackage({ project, projectFile: paths.source, sourceVideo: renderFile, projectRoot: paths.root, outputRoot: paths.delivery, renderManifest, audioInputs: audioInputs(project, paths.source) });
+  return { content: [{ type: 'text', text: JSON.stringify(receipt, null, 2) }], isError: !receipt.acceptance.passed };
+});
 server.tool('video.calculate_type_scale', 'Calculate a responsive starting typography scale for a canvas.', { width: z.number().int().positive(), height: z.number().int().positive() }, async ({ width, height }) => ({ content: [{ type: 'text', text: JSON.stringify(calculateTypeScale({ width, height }), null, 2) }] }));
 await server.connect(new StdioServerTransport());

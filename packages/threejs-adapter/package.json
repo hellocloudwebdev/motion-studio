@@ -1,0 +1,7 @@
+{
+  "name": "@motion-studio/threejs-adapter",
+  "version": "1.6.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.mjs"
+}

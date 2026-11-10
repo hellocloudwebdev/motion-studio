@@ -12,6 +12,7 @@ import { createEditorialAssembly, validateEditorialAssembly } from '../../../pac
 import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
+import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -130,6 +131,16 @@ if (command === 'assets') {
   const manifestPath = option('--manifest', '');
   if (manifestPath) await writeFile(path.resolve(manifestPath), JSON.stringify(result, null, 2) + '\n');
   print(result);
+} else if (command === 'render-threejs') {
+  const sceneId = args.find(value => !value.startsWith('--'));
+  if (!file || !sceneId) throw new Error('Usage: motion-studio render-threejs <project.json> <scene-id> [--quality draft|standard|high] [--project-root <workspace-directory>]');
+  const project = await load(file);
+  const projectRoot = path.resolve(option('--project-root', path.dirname(path.resolve(file))));
+  const relativeProjectRoot = path.relative(path.resolve(process.cwd()), projectRoot);
+  if (!relativeProjectRoot || relativeProjectRoot.startsWith('..') || path.isAbsolute(relativeProjectRoot)) throw new Error('--project-root must be a child directory of the current workspace.');
+  const receipt = await renderThreeJsScene(project, sceneId, { projectRoot, installRoot: process.cwd(), quality: option('--quality', 'draft'), timeoutMs: Number(option('--timeout-ms', '600000')) });
+  print(receipt);
+  if (!receipt.verified) process.exitCode = 2;
 } else if (command === 'plan') {
   const optionValues = new Set(['--duration', '--audience', '--purpose', '--language', '--platform', '--aspect-ratio', '--model', '--output', '--references-json', '--assets-json', '--brand-json']);
   const ideaParts = [];
@@ -259,5 +270,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "threejs-demo",
+    "name": "Procedural 3D Motion",
+    "objective": "Demonstrate a deterministic Three.js scene rendered from Canonical Video IR.",
+    "frameRate": { "numerator": 30, "denominator": 1 },
+    "canvas": { "width": 1280, "height": 720, "pixelAspectRatio": 1, "safeAreaPercent": 5 },
+    "totalDurationFrames": 90,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "A faceted mint-green icosahedron rotating inside a warm amber ring.",
+    "audience": "Motion Studio users",
+    "message": "Three.js scenes are authored in the canonical IR and rendered as verified scene artifacts."
+  },
+  "brand": { "colors": { "background": "#0c1424", "accent": "#73e7c1", "text": "#ffffff" } },
+  "assets": [],
+  "scenes": [{
+    "id": "scene-001",
+    "name": "Procedural objects",
+    "durationFrames": 90,
+    "intent": "Show two procedural objects with deterministic rotation.",
+    "camera": { "position": { "x": 0, "y": 0, "z": 5.5 }, "lookAt": { "x": 0, "y": 0, "z": 0 }, "fov": 42 },
+    "layers": [
+      {
+        "id": "icosahedron",
+        "kind": "3d",
+        "engineHint": "threejs",
+        "content": {
+          "primitive": "icosahedron",
+          "material": { "color": "#73e7c1" },
+          "position": { "x": 0, "y": 0, "z": 0 },
+          "scale": { "x": 1.8, "y": 1.8, "z": 1.8 },
+          "keyframes": [
+            { "frame": 0, "rotation": { "x": 0.1, "y": 0, "z": 0.05 } },
+            { "frame": 89, "rotation": { "x": 0.45, "y": 6.283, "z": 0.05 } }
+          ]
+        }
+      },
+      {
+        "id": "torus",
+        "kind": "3d",
+        "engineHint": "threejs",
+        "content": {
+          "primitive": "torus",
+          "material": { "color": "#ffb861" },
+          "position": { "x": 0, "y": 0, "z": -0.15 },
+          "scale": { "x": 2.9, "y": 2.9, "z": 2.9 },
+          "keyframes": [
+            { "frame": 0, "rotation": { "x": 1.2, "y": 0, "z": 0 } },
+            { "frame": 89, "rotation": { "x": 1.2, "y": 0, "z": 6.283 } }
+          ]
+        }
+      }
+    ]
+  }],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [{
+      "id": "master-16x9", "format": "mp4", "width": 1280, "height": 720,
+      "frameRate": { "numerator": 30, "denominator": 1 }, "videoCodec": "libx264", "audioCodec": "aac",
+      "colorSpace": "Rec.709", "alpha": false, "audioRequired": false
+    }]
+  }
+}

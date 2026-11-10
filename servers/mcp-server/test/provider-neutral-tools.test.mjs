@@ -15,6 +15,10 @@ test('MCP planning and compilation tools run without a model API credential', as
     assert.ok(names.has('video.create_production_brief'));
     assert.ok(names.has('video.validate_planning_artifacts'));
     assert.ok(names.has('video.compile_planning_artifacts'));
+    assert.ok(names.has('video.render_project'));
+    assert.ok(names.has('video.render_blender_scene'));
+    assert.ok(names.has('video.render_threejs_scene'));
+    assert.ok(names.has('video.package_delivery'));
     assert.ok(!names.has('video.generate_production'));
   } finally {
     await client.close();
