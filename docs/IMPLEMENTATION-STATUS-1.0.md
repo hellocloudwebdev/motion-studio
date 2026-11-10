@@ -4,7 +4,7 @@ This status describes code in this checkout and evidence available on the curren
 
 | Milestone | Status | Remaining exit criteria |
 |---|---|---|
-| 1.0 Foundation | Partial | The IR timing checks, source hashing, render checks and package lock are present. FCPXML/editorial packages and golden interchange fixtures are absent. No Premiere import/readback receipt. |
+| 1.0 Foundation | Partial | Canonical IR timing, source hashing, render checks, editorial assembly, multi-track FCPXML export and golden interchange fixtures are implemented and covered locally. Licensed Premiere import/readback acceptance remains. |
 | 1.1 Creative pipeline | Partial | Provider-backed planning and validated IR generation exist, and the MCP bridge remains provider-neutral. Full autonomous creative review and production acceptance remain. |
 | 1.2 HyperFrames renderer | Partial | Text/shape/media compilation and a verified 60-second draft run locally. The example contains unresolved media and Blender-routed content; broader motion, reusable components, caching, and production visual review remain. |
 | 1.3 FFmpeg finishing | Partial | Verified local offline TTS now generates project-isolated speech assets; narration segments are measured, placed on the IR audio track and captioned. A generated 18-second sample snapshots correctly, but HyperFrames layout sweep reports a zero-size composition root and prevents export. Audio/creative QA, loudness mastering, caption review, music/SFX and accepted narrated packaging remain. |
