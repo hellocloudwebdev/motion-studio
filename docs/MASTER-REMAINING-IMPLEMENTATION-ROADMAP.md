@@ -156,6 +156,8 @@ Never promote a capability to runtime-verified or production-accepted based only
 - [ ] Reconcile retry policy: default maximum two automatic cycles vs configurable maximum three in 0.5. Choose one documented production policy before expanding retries.
 - [ ] Visual-critic output is advisory and cannot override deterministic gates.
 
+Render-evidence QA defects now carry repair ownership and, for failed sampled-frame decodes, a one-frame integer range plus the evidence path/time. Scene/layer localization for other kinds of visual/audio findings and executable patch/retest loops remain open.
+
 **Exit gate:** Injected defects are detected/localized; permitted repairs rerender and pass retests, otherwise the issue is explicitly escalated.
 
 ## Milestone 1.8 — Complete delivery and production packaging

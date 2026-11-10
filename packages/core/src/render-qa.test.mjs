@@ -17,10 +17,15 @@ test("accepts complete verified render evidence", () => {
 });
 
 test("fails closed when output checks or sampled frames fail", () => {
-  const result = evaluateRenderEvidence({ ...good, checks: { dimensionsMatch: false }, frameEvidence: [{ decoded: false, bytes: 0 }] });
+  const result = evaluateRenderEvidence({ ...good, fpsRational: { numerator: 30000, denominator: 1001 }, checks: { dimensionsMatch: false }, frameEvidence: [{ decoded: false, bytes: 0, atSeconds: 1.001, path: "qa/frame.png", sceneId: "scene-2" }] });
   assert.equal(result.passed, false);
   assert.ok(result.defects.some(item => item.code === "CHECK_FAILED_DIMENSIONSMATCH"));
   assert.ok(result.defects.some(item => item.code === "FRAME_DECODE_FAILED_1"));
+  const frameDefect = result.defects.find(item => item.code === "FRAME_DECODE_FAILED_1");
+  assert.deepEqual(frameDefect.timeRangeFrames, { startFrame: 30, endFrame: 31 });
+  assert.equal(frameDefect.sceneId, "scene-2");
+  assert.equal(frameDefect.repairOwner, "render-engine");
+  assert.equal(frameDefect.evidence.path, "qa/frame.png");
 });
 
 test("creates scene-scoped repair actions and enforces retry ceiling", () => {

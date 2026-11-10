@@ -1,7 +1,7 @@
 const severityRank = { critical: 0, high: 1, medium: 2, low: 3 };
 
-function defect(code, severity, description, repairOwner = "technical-qa", sceneId = null) {
-  return { defectId: "render-" + code.toLowerCase().replace(/[^a-z0-9]+/g, "-"), category: "render-evidence", severity, code, description, repairOwner, sceneId, retestRequired: true };
+function defect(code, severity, description, repairOwner = "technical-qa", sceneId = null, evidence = null, timeRangeFrames = null) {
+  return { defectId: "render-" + code.toLowerCase().replace(/[^a-z0-9]+/g, "-"), category: "render-evidence", severity, code, description, repairOwner, sceneId, timeRangeFrames, evidence, retestRequired: true };
 }
 
 export function evaluateRenderEvidence(manifest) {
@@ -20,10 +20,16 @@ export function evaluateRenderEvidence(manifest) {
   const frames = Array.isArray(manifest.frameEvidence) ? manifest.frameEvidence : [];
   if (!frames.length) defects.push(defect("FRAME_EVIDENCE_MISSING", "high", "No decoded frame evidence was recorded."));
   frames.forEach((frame, index) => {
-    if (frame?.decoded !== true || !(Number(frame.bytes) > 0)) defects.push(defect("FRAME_DECODE_FAILED_" + (index + 1), "high", "Sampled frame " + (index + 1) + " could not be decoded."));
+    if (frame?.decoded !== true || !(Number(frame.bytes) > 0)) {
+      const rateNumerator = Number(manifest.fpsRational?.numerator), rateDenominator = Number(manifest.fpsRational?.denominator);
+      const fps = rateNumerator > 0 && rateDenominator > 0 ? rateNumerator / rateDenominator : Number(manifest.fps || 0);
+      const atSeconds = Number(frame?.atSeconds);
+      const frameIndex = fps > 0 && Number.isFinite(atSeconds) ? Math.round(atSeconds * fps) : null;
+      defects.push(defect("FRAME_DECODE_FAILED_" + (index + 1), "high", "Sampled frame " + (index + 1) + " could not be decoded.", "render-engine", frame?.sceneId || null, frame?.path ? { type: "frame", path: frame.path, atSeconds } : { type: "frame-sample", atSeconds }, frameIndex === null ? null : { startFrame: frameIndex, endFrame: frameIndex + 1 }));
+    }
   });
   for (const warning of Array.isArray(manifest.blockingWarnings) ? manifest.blockingWarnings : []) {
-    defects.push(defect("BLOCKING_" + String(warning.code || "WARNING"), "high", warning.message || "A blocking compiler warning remains.", "engine-router", warning.sceneId || null));
+    defects.push(defect("BLOCKING_" + String(warning.code || "WARNING"), "high", warning.message || "A blocking compiler warning remains.", warning.repairOwner || "engine-router", warning.sceneId || null, warning.evidence || null, warning.timeRangeFrames || null));
   }
   const summary = Object.fromEntries(["critical", "high", "medium", "low"].map(level => [level, defects.filter(item => item.severity === level).length]));
   summary.total = defects.length;
