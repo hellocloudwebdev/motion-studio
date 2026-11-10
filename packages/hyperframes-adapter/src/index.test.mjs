@@ -24,7 +24,9 @@ test('compiles IR scene into HyperFrames HTML with exact composition and timelin
     const result = await compileHyperFramesProject(project, { outputDir: dir, sourceRoot: process.cwd() });
     assert.equal(result.manifest.scenes.length, 1);
     assert.equal(result.manifest.totalDurationFrames, 90);
-    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    const html = await readFile(path.join(dir, 'scenes', 'scene-1.html'), 'utf8');
+    assert.deepEqual(result.manifest.scenes[0].html, 'scenes/scene-1.html');
+    assert.equal((await readFile(path.join(dir, 'index.html'), 'utf8')).match(/data-composition-id=/g)?.length, 1);
     assert.match(html, /data-composition-id="scene-scene-1"/);
     assert.match(html, /window\.__timelines\[compositionId\]=tl/);
     assert.match(html, /&lt;Hello &amp; world&gt;/);
@@ -54,7 +56,7 @@ test('compiles chart layers to inline SVG and uses frame-based motion timing', a
       }
     ];
     const result = await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
-    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    const html = await readFile(path.join(dir, 'scenes', 'scene-1.html'), 'utf8');
     assert.equal(result.warnings.length, 0);
     assert.match(html, /<svg/);
     assert.match(html, /Revenue/);
@@ -74,7 +76,7 @@ test('sanitizes untrusted color and style values before emitting inline CSS', as
       style: { color: 'red;position:fixed', backgroundColor: 'url(javascript:alert(1))', border: '1px solid #ffffff' }
     }];
     await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
-    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    const html = await readFile(path.join(dir, 'scenes', 'scene-1.html'), 'utf8');
     assert.doesNotMatch(html, /javascript:/);
     assert.doesNotMatch(html, /red;position:fixed/);
     assert.match(html, /color:\s*#ffffff/);

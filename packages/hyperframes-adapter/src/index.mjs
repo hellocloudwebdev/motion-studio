@@ -1,4 +1,4 @@
-import { cp, mkdir, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProject, estimateTextFit } from '../../core/src/index.mjs';
@@ -107,8 +107,8 @@ function layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, fra
   return { local, global };
 }
 
-function documentHtml({ compositionId, title, width, height, duration, elements, background = '#101010' }) {
-  const script = '<script src="./assets/gsap.min.js"></script>\n<script>\n(function(){\n' +
+function documentHtml({ compositionId, title, width, height, duration, elements, background = '#101010', assetPrefix = './assets' }) {
+  const script = '<script src="' + esc(assetPrefix) + '/gsap.min.js"></script>\n<script>\n(function(){\n' +
     ' const compositionId=' + JSON.stringify(compositionId) + ';\n' +
     ' const duration=' + Number(duration) + ';\n' +
     ' const tl=gsap.timeline({paused:true});\n' +
@@ -141,6 +141,8 @@ export async function compileHyperFramesProject(project, options = {}) {
   const validation = validateProject(project);
   if (!validation.valid) throw new Error('Cannot compile invalid Video IR: ' + JSON.stringify(validation.issues));
   const outputDir = path.resolve(options.outputDir || path.join(process.cwd(), 'engines', 'hyperframes'));
+  const existingHtml = await readdir(outputDir).catch(error => error.code === 'ENOENT' ? [] : Promise.reject(error));
+  for (const file of existingHtml) if (file.endsWith('.html') && file !== 'caption-skin.html') await rm(path.join(outputDir, file), { force: true });
   const sourceRoot = path.resolve(options.sourceRoot || process.cwd());
   const requestedScenes = options.sceneIds ? new Set(options.sceneIds) : null;
   const selectedScenes = (project.scenes || []).filter(scene => !requestedScenes || requestedScenes.has(scene.id));
@@ -149,6 +151,9 @@ export async function compileHyperFramesProject(project, options = {}) {
   const copiedAssets = new Map();
   const warnings = [];
   await mkdir(path.join(outputDir, 'assets'), { recursive: true });
+  await mkdir(path.join(outputDir, 'scenes'), { recursive: true });
+  const existingScenes = await readdir(path.join(outputDir, 'scenes'));
+  for (const file of existingScenes) if (file.endsWith('.html')) await rm(path.join(outputDir, 'scenes', file), { force: true });
   await mkdir(path.join(outputDir, 'snapshots'), { recursive: true });
   await mkdir(path.join(outputDir, 'renders'), { recursive: true });
 
@@ -245,10 +250,10 @@ export async function compileHyperFramesProject(project, options = {}) {
     const compositionId = 'scene-' + sceneId;
     const sceneDoc = documentHtml({
       compositionId, title: scene.name, width: project.project.canvas.width, height: project.project.canvas.height,
-      duration: sceneDuration, elements: sceneMarkup, background: project.brand?.colors?.background || '#101010'
+      duration: sceneDuration, elements: sceneMarkup.map(markup => markup.replaceAll('./assets/', '../assets/')), background: project.brand?.colors?.background || '#101010', assetPrefix: '../assets'
     });
-    await writeFile(path.join(outputDir, sceneId + '.html'), sceneDoc, 'utf8');
-    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: sceneId + '.html' });
+    await writeFile(path.join(outputDir, 'scenes', sceneId + '.html'), sceneDoc, 'utf8');
+    sceneEntries.push({ id: scene.id, name: scene.name, compositionId, durationFrames: scene.durationFrames, startFrame: cumulativeFrame, html: 'scenes/' + sceneId + '.html' });
     cumulativeFrame += scene.durationFrames;
   }
 

@@ -246,6 +246,8 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 Updated 2026-11-10 after local integration of the 0.5–1.2 dependency stack. The automated suite reports 99 passing tests and 1 environment-dependent symlink test skipped; `npm audit --omit=dev` reports zero vulnerabilities. These are local integration results, not upstream merge, cross-platform CI, host runtime verification or production acceptance.
 
+Runtime evidence added during this integration: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). This is a silent typography sample only; it does not satisfy the narrated production target.
+
 | Milestone | Current evidence status | Remaining acceptance evidence |
 |---|---|---|
 | 0.5–0.9 | Integrated locally; unit/CLI coverage passes | Fresh combined CI on supported platforms; run real asset → derivative → editorial → interchange chain |
