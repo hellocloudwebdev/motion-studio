@@ -68,6 +68,26 @@ test('compiles chart layers to inline SVG and uses frame-based motion timing', a
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test('compiles bounded float motion across a scene duration for visible slow movement', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-float-'));
+  try {
+    const input = structuredClone(project);
+    input.scenes[0].layers = [{
+      id: 'floating-title', kind: 'text', engineHint: 'hyperframes',
+      content: { text: 'A slow, deliberate reveal' },
+      typography: { family: 'Inter', sizePx: 100 },
+      transform: { x: 200, y: 240, width: 1200, height: 180 },
+      motion: { preset: 'float', durationFrames: 24 }
+    }];
+    await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    const html = await readFile(path.join(dir, 'index.html'), 'utf8');
+    assert.match(html, /motion==="float"/);
+    assert.match(html, /ease:"sine\.inOut",yoyo:true,repeat:driftIterations-1/);
+    assert.match(html, /if\(driftIterations>0\)/);
+    assert.match(html, /clipDuration=Math\.max\(duration,Number\(el\.dataset\.duration\|\|duration\)\)/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test('sanitizes untrusted color and style values before emitting inline CSS', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-css-'));
   try {

@@ -121,6 +121,14 @@ function documentHtml({ compositionId, title, width, height, duration, elements,
     '   const ease=allowed.includes(requested)?requested:"power3.out";\n' +
     '   if(motion==="none"){tl.set(el,{opacity:1},start);}\n' +
     '   else if(motion==="fade-up"||motion==="slide-up"){tl.fromTo(el,{opacity:0,y:40},{opacity:1,y:0,duration,ease},start);}\n' +
+    '   else if(motion==="float"){\n' +
+    '     const clipDuration=Math.max(duration,Number(el.dataset.duration||duration));\n' +
+    '     const remainingDuration=Math.max(0,clipDuration-duration);\n' +
+    '     const driftDuration=remainingDuration>0?Math.min(1.2,Math.max(0.05,remainingDuration/4)):0;\n' +
+    '     const driftIterations=driftDuration>0?Math.max(1,Math.floor(remainingDuration/driftDuration)):0;\n' +
+    '     tl.fromTo(el,{opacity:0,y:4},{opacity:1,y:0,duration,ease},start);\n' +
+    '     if(driftIterations>0){tl.to(el,{y:-18,duration:driftDuration,ease:"sine.inOut",yoyo:true,repeat:driftIterations-1},start+duration);}\n' +
+    '   }\n' +
     '   else if(motion==="slide-left"){tl.fromTo(el,{opacity:0,x:48},{opacity:1,x:0,duration,ease},start);}\n' +
     '   else if(motion==="slide-right"){tl.fromTo(el,{opacity:0,x:-48},{opacity:1,x:0,duration,ease},start);}\n' +
     '   else if(motion==="zoom"){tl.fromTo(el,{opacity:0,scale:0.85},{opacity:1,scale:1,duration,ease},start);}\n' +

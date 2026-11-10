@@ -32,6 +32,13 @@ Never promote a capability to runtime-verified or production-accepted based only
 - An 18-second three-scene narrated fixture was generated and its HyperFrames snapshots visually show the intended scenes. HyperFrames' pre-render check reports a zero-size composition root (`sweep_static`), so the render manager correctly stopped before MP4 export. This is not narrated render acceptance.
 - Latest automated suite at this update: 127 passed, 0 failed, 1 skipped. Three.js runtime acceptance is available locally; Blender and licensed Adobe workstation acceptance remain external gates.
 
+### Progress evidence update — 2026-11-11
+
+- Added the explicit, bounded `float` motion preset for IR-selected scene motion and sized compositions from the canonical canvas. The narrated fixture now passes all nine HyperFrames seek/layout samples; the check remains enabled.
+- Rendered an 18-second 1280×720, 30 fps H.264 scene master with no black/frozen-frame or sampled perceptual-duplicate findings. FFmpeg then mixed the generated narration into a verified H.264/AAC delivery variant and generated SRT/VTT; package integrity verified 19 files.
+- Delivery acceptance remains correctly pending because the generated system voice has `rightsStatus: unknown`. Audio review also found a 2.77-second silence interval between narration cues; this needs an intentional edit or approved sound bed and human review. No music/SFX rights or creative approval is recorded.
+- Latest automated suite: 128 passed, 0 failed, 1 skipped; `npm audit --omit=dev` reports zero vulnerabilities.
+
 ## Detailed execution plan mapped to the four architecture phases
 
 This section turns the attached Z Code architecture recommendation into sequenced, reviewable work. The existing milestone checklists below remain the technical detail. A work package is complete only when its listed evidence is checked in or attached to the release record. "Implemented" and "runtime verified" are separate states.
@@ -46,6 +53,8 @@ This section turns the attached Z Code architecture recommendation into sequence
 - Fix the generated composition/seek contract or upstream-compatible integration. Do not suppress `sweep_static` or mark a failed check green.
 - Add a regression fixture with multiple scene boundaries and at least one cue beginning in each scene. Verify arbitrary-time seeks and nonzero root bounds at every sampled time.
 - **Exit evidence:** compile, lint, runtime/layout check, snapshots and FFmpeg render succeed; FFprobe matches IR canvas, rational FPS, frame duration and audio requirement; decoded QA frames are nonempty; the accepted check report contains no error.
+
+**P1.1 status (2026-11-11):** The original false-positive `sweep_static` on the narrated fixture is cleared locally with the `float` scene-motion preset and explicit IR canvas dimensions. All nine HyperFrames seek/layout samples now pass on HyperFrames 0.8.86. The 18-second video render, deterministic visual render QA, audio mix, SRT/VTT generation, FFprobe profile checks and package integrity checks pass. Producer acceptance remains pending: the generated narration asset is rights-unknown, the sample has a measured 2.77-second narration gap, and music/SFX and human speech review are absent.
 
 **P1.2 — Complete the narrated audio and caption path**
 - Retain offline SAPI/`say`/`espeak` as optional local speech backends; make provider choice, voice, locale, speaking rate and provenance explicit when supported by the host.
@@ -140,7 +149,7 @@ This section turns the attached Z Code architecture recommendation into sequence
 |---|---|---|
 | Startup/product advertisement | Foundation pieces exist; no current end-to-end accepted project | Complete P1.4 and package verified output/evidence |
 | Kinetic typography | A short technical sample was rendered and packaged; narration-driven acceptance is not established | Add approved narration/captions/transitions, run safe-area and timing QA, record acceptance |
-| Narrated explainer | Local TTS and captions generated; scene snapshots inspected; export blocked by `sweep_static` | Close P1.1–P1.3 and verify final audio/video/package |
+| Narrated explainer | 18-second video rendered and visually/technically verified; audio-mixed MP4 and SRT/VTT package verify; scene-movement gate passes | Review rights for system voice, improve/approve narration pauses, add licensed music/SFX, human speech/creative review, then accept delivery |
 | Data visualization | Chart layer support exists; full production acceptance not established | Add sourced data, evidence/provenance, visual hierarchy and verified final render |
 | Mixed 2D/3D | Three.js runtime fixture passes; Blender runtime unavailable; no accepted mixed delivery | Complete P2.1–P2.3 on a supported Blender host |
 
@@ -376,7 +385,7 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 ## Current tracker
 
-Updated 2026-11-10 after local integration on `main`. The latest recorded automated suite reports 127 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
+Updated 2026-11-11 after local integration on `main`. The latest recorded automated suite reports 128 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
 
 Runtime evidence: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). The Three.js demo also passes browser render and independent FFprobe checks, and delivery packaging tests exercise local FFmpeg media. These are narrow technical samples, not narrated production acceptance.
 
@@ -388,7 +397,7 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 | 1.0 | FCPXML exporter, provenance sidecar, multi-track overlap/rational-time golden assertions, and fail-closed safety tests implemented; CLI requires `--allow-unsupported` for intentionally incomplete XML | Live import and readback comparison in licensed Premiere; publish a version compatibility record from that evidence |
 | 1.1 | Provider-neutral MCP stages, optional OpenRouter CLI adapter, and immutable planning/IR revision journal with exact-hash approvals implemented | Complete host-harness idea-to-IR render/QA/delivery acceptance; source-grounded web research remains explicit opt-in because search can cost extra; cross-host run orchestration remains open |
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
-| 1.3 | FFmpeg audio mixing integration verifies a real H.264/AAC master; offline TTS creates project-scoped speech assets, measured narration cues and captions, independently verified by FFprobe | Fix the narrated multi-scene HyperFrames layout-check failure; speech intelligibility/loudness QA, reviewed caption sync, stem exports, music/SFX rights and complete narrated acceptance package |
+| 1.3 | FFmpeg audio mixing integration verifies a real H.264/AAC master; offline TTS creates project-scoped speech assets, measured narration cues and captions; the 18-second narrated sample's render and package are independently verified | Speech intelligibility/loudness and silence review, reviewed caption sync, stem exports, licensed music/SFX, voice rights, and complete narrated production acceptance |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |
 | 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
 | 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |

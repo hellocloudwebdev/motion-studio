@@ -6,7 +6,7 @@ Make HyperFrames + GSAP the deterministic primary 2D renderer for Motion Studio,
 ## Implemented in the first 1.2 slice
 - [x] Apply transforms (rotation and scale) from Canonical Video IR to layer CSS.
 - [x] Support frame-based motion duration and delay, plus an allowlisted GSAP easing set.
-- [x] Add motion presets: fade, fade-up/slide-up, slide-left, slide-right, zoom, rotate and none.
+- [x] Add motion presets: fade, fade-up/slide-up, slide-left, slide-right, zoom, rotate, bounded scene-duration float, and none.
 - [x] Add deterministic inline SVG bar and line charts from structured IR data.
 - [x] Escape chart labels/titles and restrict chart color tokens.
 - [x] Restrict CSS color, border and shadow values before writing inline style attributes.
