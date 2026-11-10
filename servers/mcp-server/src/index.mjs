@@ -9,7 +9,6 @@ import { generateMediaDerivatives } from '../../../packages/media-derivatives/sr
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
 import { createProductionBrief, buildCreativeWorkflow, validateProductionBrief, validatePlanningArtifacts, compilePlanningArtifacts } from '../../../packages/production-planning/src/index.mjs';
-import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 
 const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
@@ -41,16 +40,6 @@ server.tool('video.compile_planning_artifacts', 'Compile approved planning artif
   planning: projectSchema
 }, async ({ planning }) => {
   const result = compilePlanningArtifacts(planning);
-  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-});
-server.tool('video.generate_production', 'Generate a research-aware creative plan and Canonical Video IR through OpenRouter. Defaults to the free-model router. Online research requires explicit per-call approval because search may incur separate charges.', {
-  idea: z.string().min(1).max(5000),
-  options: z.record(z.string(), z.unknown()).optional(),
-  model: z.string().min(1).optional(),
-  allowWebSearch: z.boolean().optional()
-}, async ({ idea, options, model, allowWebSearch }) => {
-  const provider = createOpenRouterProvider({ model, enableWebSearch: allowWebSearch === true });
-  const result = await generateProduction(provider, { idea, options: options || {} });
   return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
 });
 server.tool('video.validate_project', 'Validate Canonical Video IR structure.', { project: projectSchema }, async ({ project }) => ({ content: [{ type: 'text', text: JSON.stringify(validateProject(project), null, 2) }] }));

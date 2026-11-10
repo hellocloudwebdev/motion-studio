@@ -58,7 +58,7 @@ Configure `OPENROUTER_API_KEY` in a local environment (never as a CLI argument o
 node apps/cli/src/index.mjs plan "Explain how community solar works" --duration 45 --audience "first-time renters" --output projects/community-solar
 ```
 
-The default model is OpenRouter's `openrouter/free` router. The command produces a validated Canonical Video IR and a creative-plan JSON; it does not render, generate narration audio, or accept the production. Research uses OpenRouter web search only when enabled with `--allow-web-search`. Search may incur charges separate from free-model inference, so leave it off unless that cost is approved. See [OpenRouter provider setup](docs/OPENROUTER-CREATIVE-PIPELINE.md).
+The default model is OpenRouter's `openrouter/free` router. The command is an optional standalone path: it produces a validated Canonical Video IR and a creative-plan JSON, but does not render, generate narration audio, or accept the production. When Motion Studio is used as an MCP bridge under a host harness, the harness supplies model reasoning and calls provider-neutral planning/compilation tools; no Motion Studio model key is needed. Research uses OpenRouter web search only when enabled with `--allow-web-search`. Search may incur charges separate from free-model inference, so leave it off unless that cost is approved. See [OpenRouter provider setup](docs/OPENROUTER-CREATIVE-PIPELINE.md).
 
 ## Milestone 0.7: asset intelligence and media intake
 

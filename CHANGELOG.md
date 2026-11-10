@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Harness-first creative pipeline
+- Kept provider-neutral MCP planning and IR compilation independent of model credentials.
+- Retained OpenRouter as an optional standalone CLI provider, defaulting to its free-model router; web search remains explicit opt-in.
+- Added a no-key MCP tool-list integration test.
+
 ## 1.0.0-alpha.1 — Premiere interchange and governed sequence handoff
 - Started FCPXML 1.10 export from validated editorial assembly manifests.
 - Preserved rational frame timing, track lanes, source checksums and rights-review metadata in an interchange sidecar.

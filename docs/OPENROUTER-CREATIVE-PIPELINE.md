@@ -1,6 +1,6 @@
 # OpenRouter creative pipeline
 
-Motion Studio can use OpenRouter to turn an idea into a research brief, creative direction, script, storyboard, design system and validated Canonical Video IR. This is a planning and IR-generation stage; it does not synthesize narration audio, run Adobe, render or declare a production accepted.
+OpenRouter is an optional standalone provider for turning an idea into a research brief, creative direction, script, storyboard, design system and validated Canonical Video IR. It is not required when Motion Studio is hosted by an LLM harness: the harness can use Motion Studio's provider-neutral MCP planning tools and submit approved artifacts for validation/compilation. The MCP bridge does not make model API calls or require a model key. This planning stage does not synthesize narration audio, run Adobe, render or declare a production accepted.
 
 ## Credentials
 
