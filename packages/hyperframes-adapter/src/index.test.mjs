@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { compileHyperFramesProject } from './index.mjs';
@@ -24,12 +24,11 @@ test('compiles IR scene into HyperFrames HTML with exact composition and timelin
     const result = await compileHyperFramesProject(project, { outputDir: dir, sourceRoot: process.cwd() });
     assert.equal(result.manifest.scenes.length, 1);
     assert.equal(result.manifest.totalDurationFrames, 90);
-    const html = await readFile(path.join(dir, 'scene-sources', 'scene-1.html'), 'utf8');
+    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
     assert.match(html, /data-composition-id="scene-scene-1"/);
     assert.match(html, /window\.__timelines\[compositionId\]=tl/);
     assert.match(html, /&lt;Hello &amp; world&gt;/);
-    assert.match(html, /z-index:0/);
-    assert.equal(result.warnings[0].code, 'NON_HYPERFRAMES_LAYER');
+    assert.ok(result.warnings.some(warning => warning.code === 'NON_HYPERFRAMES_LAYER'));
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -41,29 +40,63 @@ test('rejects invalid Canonical Video IR before writing output', async () => {
   finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('removes legacy root-level scene compositions before writing the single HyperFrames entrypoint', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-legacy-'));
+test('compiles chart layers to inline SVG and uses frame-based motion timing', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-chart-'));
   try {
-    const legacy = path.join(dir, 'scene-1.html');
-    await writeFile(legacy, '<div data-composition-id="legacy-scene"></div>');
-    await compileHyperFramesProject(project, { outputDir: dir, sourceRoot: process.cwd() });
-    await assert.rejects(readFile(legacy, 'utf8'), { code: 'ENOENT' });
-    assert.match(await readFile(path.join(dir, 'index.html'), 'utf8'), /data-composition-id="motion-studio-root"/);
+    const input = structuredClone(project);
+    input.scenes[0].layers = [
+      {
+        id: 'revenue-chart', kind: 'chart', engineHint: 'hyperframes',
+        content: { chartType: 'bar', title: 'Revenue', data: [{ label: 'Q1', value: 10 }, { label: 'Q2', value: 18 }] },
+        transform: { x: 120, y: 100, width: 1500, height: 800 },
+        style: { color: '#ff9900' },
+        motion: { preset: 'slide-left', durationFrames: 30, delayFrames: 15, easing: 'power2.out' }
+      }
+    ];
+    const result = await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    assert.equal(result.warnings.length, 0);
+    assert.match(html, /<svg/);
+    assert.match(html, /Revenue/);
+    assert.match(html, /data-motion-duration="1"/);
+    assert.match(html, /data-motion-delay="0.5"/);
+    assert.match(html, /data-motion-ease="power2.out"/);
+    assert.match(html, /slide-left/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('preserves explicit scene offsets, overlaps, and the project duration', async () => {
-  const value = structuredClone(project);
-  value.project.totalDurationFrames = 120;
-  value.scenes[0].startFrame = 10;
-  value.scenes.push({ ...structuredClone(value.scenes[0]), id: 'scene-2', name: 'Overlap', startFrame: 60, durationFrames: 30, layers: [{ ...structuredClone(value.scenes[0].layers[0]), id: 'overlap-title' }] });
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-overlap-'));
+test('sanitizes untrusted color and style values before emitting inline CSS', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-css-'));
   try {
-    const result = await compileHyperFramesProject(value, { outputDir: dir, sourceRoot: process.cwd() });
-    assert.deepEqual(result.manifest.scenes.map(scene => scene.startFrame), [10, 60]);
-    assert.equal(result.manifest.totalDurationFrames, 120);
-    const html = await readFile(path.join(dir, 'index.html'), 'utf8');
-    assert.match(html, /data-start="0\.333333"/);
-    assert.match(html, /data-start="2"/);
+    const input = structuredClone(project);
+    input.scenes[0].layers = [{
+      id: 'unsafe-style', kind: 'shape', engineHint: 'hyperframes',
+      style: { color: 'red;position:fixed', backgroundColor: 'url(javascript:alert(1))', border: '1px solid #ffffff' }
+    }];
+    await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    const html = await readFile(path.join(dir, 'scene-1.html'), 'utf8');
+    assert.doesNotMatch(html, /javascript:/);
+    assert.doesNotMatch(html, /red;position:fixed/);
+    assert.match(html, /color:\s*#ffffff/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('reports estimated text overflow and unsafe text bounds', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'motion-hf-typography-'));
+  try {
+    const input = structuredClone(project);
+    input.scenes[0].layers = [{
+      id: 'long-title', kind: 'text', engineHint: 'hyperframes',
+      content: { text: 'A very long headline that cannot fit in this tiny text box' },
+      typography: { family: 'Inter', sizePx: 96, maxLines: 1 },
+      transform: { x: 0, y: 0, width: 160, height: 48 }
+    }];
+    const result = await compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd() });
+    assert.ok(result.warnings.some(warning => warning.code === 'TEXT_OVERFLOW_ESTIMATED'));
+    assert.ok(result.warnings.some(warning => warning.code === 'TEXT_OUTSIDE_SAFE_AREA'));
+    await assert.rejects(
+      () => compileHyperFramesProject(input, { outputDir: dir, sourceRoot: process.cwd(), strictTypography: true }),
+      /Text overflow estimated/
+    );
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

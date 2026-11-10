@@ -16,6 +16,20 @@ export function validateProject(project) {
     if (!canvas || !Number.isInteger(canvas.width) || canvas.width <= 0 || !Number.isInteger(canvas.height) || canvas.height <= 0) issues.push(issue('INVALID_CANVAS', '$.project.canvas', 'Canvas width and height must be positive integers.'));
     if (!Number.isInteger(p.totalDurationFrames) || p.totalDurationFrames <= 0) issues.push(issue('INVALID_TOTAL_DURATION', '$.project.totalDurationFrames', 'totalDurationFrames must be a positive integer.'));
   }
+  if (project.assets !== undefined && !Array.isArray(project.assets)) issues.push(issue('ASSETS_NOT_ARRAY', '$.assets', 'assets must be an array when provided.'));
+  else if (Array.isArray(project.assets)) {
+    const assetIds = new Set();
+    project.assets.forEach((asset, index) => {
+      const ap = '$.assets[' + index + ']';
+      if (!asset || typeof asset !== 'object' || typeof asset.id !== 'string' || !asset.id.trim()) issues.push(issue('ASSET_ID_REQUIRED', ap + '.id', 'Each asset needs a non-empty id.'));
+      else if (assetIds.has(asset.id)) issues.push(issue('DUPLICATE_ASSET_ID', ap + '.id', 'Duplicate asset id: ' + asset.id + '.'));
+      else assetIds.add(asset.id);
+      if (asset && asset.sha256 !== undefined && !/^[a-f0-9]{64}$/i.test(asset.sha256)) issues.push(issue('INVALID_ASSET_CHECKSUM', ap + '.sha256', 'Asset SHA-256 must contain 64 hexadecimal characters.'));
+    });
+    for (const [sceneIndex, scene] of (project.scenes || []).entries()) for (const [layerIndex, layer] of (scene.layers || []).entries()) {
+      if (layer?.assetId && !assetIds.has(layer.assetId)) issues.push(issue('ASSET_REFERENCE_UNRESOLVED', '$.scenes[' + sceneIndex + '].layers[' + layerIndex + '].assetId', 'Layer references an asset that is not attached to this project: ' + layer.assetId + '.', 'warning'));
+    }
+  }
   const c = project.creative;
   if (!c || typeof c !== 'object') issues.push(issue('CREATIVE_BRIEF_MISSING', '$.creative', 'Creative brief is required.'));
   else for (const key of ['concept', 'audience', 'message']) if (typeof c[key] !== 'string' || !c[key].trim()) issues.push(issue('REQUIRED_FIELD', `$.creative.${key}`, `${key} must be a non-empty string.`));

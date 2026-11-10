@@ -1,0 +1,6 @@
+{
+  "name": "@motion-studio/production-planning",
+  "version": "1.1.0-alpha.1",
+  "type": "module",
+  "exports": { ".": "./src/index.mjs" }
+}

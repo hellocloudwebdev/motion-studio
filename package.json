@@ -1,8 +1,8 @@
 {
   "name": "motion-studio",
-  "version": "0.3.0-alpha.1",
+  "version": "1.0.0-alpha.1",
   "private": true,
-  "description": "Engine-independent AI video production system with HyperFrames rendering and local Adobe MCP bridges.",
+  "description": "Engine-independent AI video production system with governed Premiere interchange.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -15,6 +15,7 @@
   "scripts": {
     "test": "node --test",
     "studio": "node apps/cli/src/index.mjs",
+    "intake": "node apps/cli/src/intake.mjs",
     "mcp": "node servers/mcp-server/src/index.mjs",
     "runtime": "node apps/local-runtime/src/server.mjs",
     "validate:example": "node apps/cli/src/index.mjs validate templates/startup-ad/project.json",

@@ -7,7 +7,8 @@ The Canonical Video IR is the versioned, engine-independent source of truth for 
 - `project`: ID, objective, frame rate, canvas, duration, color space and revision.
 - `creative`: concept, audience and message.
 - `brand`: identity tokens, colors, fonts and logo constraints.
-- `assets`: media, fonts, audio, provenance and license metadata.
+- `assets`: media, fonts, audio, provenance and license metadata. Indexed records may include `id`, `kind`, `uri`, `mimeType`, `sha256`, `byteSize` and `metadata` with source, creator, tags and rights-review status. SHA-256 identifies exact bytes; it is not a trust or license assertion.
+- Layer `assetId` values should reference an attached asset. Unresolved references are warnings while placeholder workflows are in use; duplicate asset IDs and malformed checksums are validation errors.
 - `scenes`: intent, integer frame duration and composable layers.
 - `delivery`: output profiles and codec/color/alpha requirements.
 - `qa`: defects, repair history and approvals.
