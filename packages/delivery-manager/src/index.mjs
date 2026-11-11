@@ -1,7 +1,7 @@
 import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { finalizeMedia, renderCaptions, runMediaCommand } from '../../ffmpeg/src/index.mjs';
+import { finalizeMedia, renderCaptions, runMediaCommand, validateCaptionTimeline } from '../../ffmpeg/src/index.mjs';
 import { analyzeRenderedMedia } from '../../render-manager/src/media-analysis.mjs';
 
 function hashFile(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
@@ -83,6 +83,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   if (thumbnailStat.size === 0) throw new Error('FFmpeg produced an empty delivery thumbnail.');
   const captions = project.captions || project.script?.captions || [];
   const captionFiles = [];
+  const captionValidation = validateCaptionTimeline(captions, project.project.frameRate, project.project.totalDurationFrames);
   if (captions.length) {
     for (const format of ['srt', 'vtt']) {
       const file = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'captions.' + format));
@@ -181,7 +182,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     status: productionAccepted ? 'accepted' : 'packaged-awaiting-production-evidence',
     acceptance: { passed: productionAccepted, reason: productionAccepted ? null : !renderManifest?.productionReady ? 'A verified production-ready render manifest is required for acceptance.' : !renderSourceMatches ? 'Render evidence does not match the packaged Canonical Video IR.' : !mediaAnalysisPassed ? 'A delivery variant failed final media analysis.' : !rightsCleared ? 'Asset rights must be cleared or user-owned before acceptance.' : !assetsPackaged ? 'Every project asset must be included in the package or generated locally.' : 'Render evidence is incomplete.' },
     variants, thumbnail,
-    captions: captionFiles, sourceProject: { path: projectCopy, sha256: hashFile(sourceProjectBytes), canonicalIrSha256 },
+    captions: captionFiles, captionValidation, sourceProject: { path: projectCopy, sha256: hashFile(sourceProjectBytes), canonicalIrSha256 },
     portableProject: { path: portableProjectPath, sha256: hashFile(portableProjectBytes) },
     assetManifest: manifestPath, provenance: project.provenance || { sources: [], software: [], decisions: [] },
     evidence: { renderManifest: renderEvidencePath, qaReport: qaEvidencePath, editorialAssembly: editorialEvidencePath, operationHistory: operationHistoryPath, softwareVersions: softwareEvidencePath, qaFrames: frameEvidence.length ? path.relative(packageRoot, qaFramesDirectory).split(path.sep).join('/') : null },
@@ -197,6 +198,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     `- Variants: ${variants.length}`,
     `- Referenced assets packaged: ${assetManifest.filter(asset => asset.included).length}/${assetManifest.length}`,
     `- Captions: ${captionFiles.length ? captionFiles.map(file => path.basename(file)).join(', ') : 'none'}`,
+    `- Caption validation: passed (${captionValidation.cueCount} cues; frame bounds, UTF-8 and millisecond timing)`,
     '', 'See `delivery-receipt.json`, `integrity-manifest.json`, and the evidence files for detailed verification.'
   ].join('\n') + '\n';
   const reportPath = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'DELIVERY-REPORT.md'));

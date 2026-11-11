@@ -159,10 +159,9 @@ function timestamp(seconds, decimalSeparator) {
 }
 
 export function renderCaptions(cues, frameRate, format = 'srt') {
-  if (!Array.isArray(cues) || !Number.isInteger(frameRate?.numerator) || !Number.isInteger(frameRate?.denominator) || frameRate.numerator <= 0 || frameRate.denominator <= 0) throw new Error('Caption cues and rational frameRate are required.');
+  validateCaptionTimeline(cues, frameRate);
   const fps = frameRate.numerator / frameRate.denominator;
   const ordered = [...cues].sort((a, b) => a.startFrame - b.startFrame);
-  for (const cue of ordered) if (!Number.isInteger(cue.startFrame) || !Number.isInteger(cue.endFrame) || cue.startFrame < 0 || cue.endFrame <= cue.startFrame || typeof cue.text !== 'string' || !cue.text.trim()) throw new Error('Each caption requires non-empty text and a valid integer frame range.');
   const sep = format === 'srt' ? ',' : '.';
   const blocks = ordered.map((cue, index) => {
     const start = timestamp(cue.startFrame / fps, sep), end = timestamp(cue.endFrame / fps, sep);
@@ -171,4 +170,25 @@ export function renderCaptions(cues, frameRate, format = 'srt') {
   if (format === 'vtt') return 'WEBVTT\n\n' + blocks.join('\n\n') + (blocks.length ? '\n' : '');
   if (format !== 'srt') throw new Error('Caption format must be srt or vtt.');
   return blocks.join('\n\n') + (blocks.length ? '\n' : '');
+}
+
+export function validateCaptionTimeline(cues, frameRate, totalDurationFrames) {
+  if (!Array.isArray(cues) || !Number.isInteger(frameRate?.numerator) || !Number.isInteger(frameRate?.denominator) || frameRate.numerator <= 0 || frameRate.denominator <= 0) throw new Error('Caption cues and rational frameRate are required.');
+  if (totalDurationFrames !== undefined && (!Number.isInteger(totalDurationFrames) || totalDurationFrames <= 0)) throw new Error('Caption validation requires a positive integer project duration in frames.');
+  const ordered = [...cues].sort((a, b) => a.startFrame - b.startFrame);
+  let previousStart = -1;
+  const fps = frameRate.numerator / frameRate.denominator;
+  for (const [index, cue] of ordered.entries()) {
+    if (!Number.isInteger(cue.startFrame) || !Number.isInteger(cue.endFrame) || cue.startFrame < 0 || cue.endFrame <= cue.startFrame || typeof cue.text !== 'string' || !cue.text.trim()) throw new Error('Caption ' + (index + 1) + ' requires non-empty text and a valid integer frame range.');
+    if (cue.startFrame < previousStart) throw new Error('Caption cues must be ordered monotonically by start frame.');
+    if (totalDurationFrames !== undefined && cue.endFrame > totalDurationFrames) throw new Error('Caption ' + (index + 1) + ' extends beyond the project duration.');
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(cue.text)) throw new Error('Caption ' + (index + 1) + ' contains invalid UTF-8 text or unsupported control characters.');
+    for (const frame of [cue.startFrame, cue.endFrame]) {
+      const milliseconds = Math.round(frame / fps * 1000);
+      const roundTripFrame = Math.round(milliseconds / 1000 * fps);
+      if (Math.abs(roundTripFrame - frame) > 0.5) throw new Error('Caption ' + (index + 1) + ' timing cannot be represented at millisecond caption precision.');
+    }
+    previousStart = cue.startFrame;
+  }
+  return { valid: true, cueCount: ordered.length, frameRate: { ...frameRate }, totalDurationFrames: totalDurationFrames ?? null, timingPrecision: 'milliseconds' };
 }
