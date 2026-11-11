@@ -28,6 +28,24 @@ export function parseMediaAnalysisLogs({ black = "", freeze = "", silence = "" }
   };
 }
 
+export function parseLoudnessLog(text) {
+  const match = String(text || "").match(/\{\s*"input_i"[\s\S]*?\}/);
+  if (!match) return null;
+  try {
+    const data = JSON.parse(match[0]);
+    const number = value => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    return {
+      integratedLufs: number(data.input_i),
+      truePeakDbtp: number(data.input_tp),
+      loudnessRangeLu: number(data.input_lra),
+      thresholdLufs: number(data.input_thresh)
+    };
+  } catch { return null; }
+}
+
 export function parseTesseractTsv(tsv, { width, height, safeAreaPercent = 5, minConfidence = 35 } = {}) {
   const lines = String(tsv || "").trim().split(/\r?\n/);
   if (lines.length < 2) return { words: [], findings: [] };
@@ -85,6 +103,9 @@ export async function analyzeRenderedMedia({ input, media, frameEvidence = [], o
     freezeDurationSeconds: Number(options.freezeDurationSeconds ?? 2),
     silenceDurationSeconds: Number(options.silenceDurationSeconds ?? 2.5),
     silenceNoiseDb: Number(options.silenceNoiseDb ?? -50),
+    loudnessMinLuFs: Number(options.loudnessMinLuFs ?? -24),
+    loudnessMaxLuFs: Number(options.loudnessMaxLuFs ?? -12),
+    truePeakMaxDbtp: Number(options.truePeakMaxDbtp ?? -1),
     perceptualThreshold: Number(options.perceptualThreshold ?? 1.25),
     perceptualMaxStaticSeconds: Number(options.perceptualMaxStaticSeconds ?? 3),
     safeAreaPercent: Number(options.safeAreaPercent ?? 5)
@@ -95,10 +116,14 @@ export async function analyzeRenderedMedia({ input, media, frameEvidence = [], o
   const blackEvents = eventsFromLog(black.stderr, "black_start", "black_end", "black_duration");
   const freezeEvents = eventsFromLog(freeze.stderr, "freeze_start", "freeze_end", "freeze_duration");
   let silenceEvents = [];
+  let audioLoudness = null;
   if (media?.hasAudio) {
     const silence = await runAudioFilter(input, "silencedetect=noise=" + thresholds.silenceNoiseDb + "dB:d=" + thresholds.silenceDurationSeconds, signal);
     if (silence.code !== 0) throw new Error("FFmpeg audio-silence analysis failed: " + silence.stderr.slice(-2000));
     silenceEvents = eventsFromLog(silence.stderr, "silence_start", "silence_end", "silence_duration");
+    const loudness = await runAudioFilter(input, "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json", signal);
+    if (loudness.code !== 0) throw new Error("FFmpeg audio loudness analysis failed: " + loudness.stderr.slice(-2000));
+    audioLoudness = parseLoudnessLog(loudness.stderr);
   }
 
   const sampleFps = Math.max(0.25, Math.min(2, Number(options.perceptualSampleFps ?? 1)));
@@ -115,6 +140,9 @@ export async function analyzeRenderedMedia({ input, media, frameEvidence = [], o
   }
   for (const event of freezeEvents) findings.push({ code: "FROZEN_FRAME_SEGMENT", severity: options.strictFreeze || (event.duration ?? 0) >= thresholds.freezeDurationSeconds * 2 ? "high" : "medium", event, message: "FFmpeg detected a frozen-frame segment; verify whether a static hold is intentional." });
   for (const event of silenceEvents) findings.push({ code: "AUDIO_SILENCE_SEGMENT", severity: options.requireContinuousAudio ? "high" : "medium", event, message: "An audio-silence segment exceeded the configured threshold." });
+  if (audioLoudness?.integratedLufs != null && audioLoudness.integratedLufs < thresholds.loudnessMinLuFs) findings.push({ code: "AUDIO_PROGRAM_TOO_QUIET", severity: options.strictLoudness ? "high" : "medium", value: audioLoudness.integratedLufs, threshold: thresholds.loudnessMinLuFs, message: "Integrated program loudness is below the configured delivery range." });
+  if (audioLoudness?.integratedLufs != null && audioLoudness.integratedLufs > thresholds.loudnessMaxLuFs) findings.push({ code: "AUDIO_PROGRAM_TOO_LOUD", severity: options.strictLoudness ? "high" : "medium", value: audioLoudness.integratedLufs, threshold: thresholds.loudnessMaxLuFs, message: "Integrated program loudness is above the configured delivery range." });
+  if (audioLoudness?.truePeakDbtp != null && audioLoudness.truePeakDbtp > thresholds.truePeakMaxDbtp) findings.push({ code: "AUDIO_TRUE_PEAK_EXCEEDED", severity: audioLoudness.truePeakDbtp > 0 ? "high" : "medium", value: audioLoudness.truePeakDbtp, threshold: thresholds.truePeakMaxDbtp, message: "Measured true peak exceeds the configured delivery ceiling." });
   if (options.requireContinuousAudio && !media?.hasAudio) findings.push({ code: "AUDIO_STREAM_MISSING", severity: "high", message: "Continuous audio was required but the rendered file has no audio stream." });
   if (perceptual.nearDuplicateRunDetected) findings.push({ code: "PERCEPTUAL_DUPLICATE_FRAMES", severity: "medium", event: { maxNearDuplicateRunFrames: perceptual.maxNearDuplicateRunFrames }, message: "Downsampled consecutive frames are perceptually near-identical for longer than the configured static-frame threshold." });
 
@@ -148,7 +176,7 @@ export async function analyzeRenderedMedia({ input, media, frameEvidence = [], o
   const blocking = findings.some(item => item.severity === "critical" || item.severity === "high");
   return {
     version: 1, thresholds,
-    detectors: { black: { exitCode: black.code, events: blackEvents }, freeze: { exitCode: freeze.code, events: freezeEvents }, silence: { skipped: !media?.hasAudio, events: silenceEvents }, perceptual, ocr },
+    detectors: { black: { exitCode: black.code, events: blackEvents }, freeze: { exitCode: freeze.code, events: freezeEvents }, silence: { skipped: !media?.hasAudio, events: silenceEvents }, loudness: { skipped: !media?.hasAudio, measurements: audioLoudness }, perceptual, ocr },
     findings, passed: !blocking, analyzedAt: new Date().toISOString()
   };
 }

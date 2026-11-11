@@ -66,7 +66,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Measure generated speech; align it to scene/frame ranges; reject overflow and preserve authorized cue offsets when projects are regenerated.
 - Generate SRT and WebVTT from approved caption text and final integer-frame timing; validate monotonic cues, duration, UTF-8 and round-trip timing.
 - Attach approved music/SFX assets only after source, license and usage scope are recorded. Exercise gain, fades and narration ducking in a final render.
-- Add loudness, clipping, silence and speech/music synchronization reports. Keep human review visible where intelligibility or rights cannot be decided deterministically.
+- Record integrated loudness and true-peak measurements from the final audio stream, alongside silence findings; flag configurable delivery-limit violations. Keep human review visible for clipping/distortion detail, speech/music synchronization, intelligibility and rights.
 - **Exit evidence:** the narrated acceptance project has audible, intelligible speech; captions match reviewed words and timing; FFprobe and audio QA pass; unapproved rights remain a blocking or explicit review state.
 
 **P1.3 — Close bounded visual/audio repair and delivery**
@@ -390,7 +390,7 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 ## Current tracker
 
-Updated 2026-11-11 after local integration on `main`. The latest recorded automated suite reports 129 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
+Updated 2026-11-11 after local integration on `main`. The latest automated suite reports 131 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. Final audio analysis now records FFmpeg integrated LUFS, loudness range and true peak, and emits structured findings for configured loudness/peak-limit violations. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
 
 Runtime evidence: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). The Three.js demo also passes browser render and independent FFprobe checks, and delivery packaging tests exercise local FFmpeg media. These are narrow technical samples, not narrated production acceptance.
 
@@ -402,7 +402,7 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 | 1.0 | FCPXML exporter, provenance sidecar, multi-track overlap/rational-time golden assertions, and fail-closed safety tests implemented; CLI requires `--allow-unsupported` for intentionally incomplete XML | Live import and readback comparison in licensed Premiere; publish a version compatibility record from that evidence |
 | 1.1 | Provider-neutral MCP stages, optional OpenRouter CLI adapter, and immutable planning/IR revision journal with exact-hash approvals implemented | Complete host-harness idea-to-IR render/QA/delivery acceptance; source-grounded web research remains explicit opt-in because search can cost extra; cross-host run orchestration remains open |
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
-| 1.3 | FFmpeg audio mixing integration verifies a real H.264/AAC master; offline TTS creates project-scoped speech assets, measured narration cues and captions; the 18-second narrated sample's render and package are independently verified | Speech intelligibility/loudness and silence review, reviewed caption sync, stem exports, licensed music/SFX, voice rights, and complete narrated production acceptance |
+| 1.3 | FFmpeg audio mixing integration verifies a real H.264/AAC master; offline TTS creates project-scoped speech assets, measured narration cues and captions; final audio QA records integrated loudness, loudness range and true peak with structured limit findings; the 18-second narrated sample's render and package are independently verified | Human speech intelligibility and mix review, reviewed caption sync, clipping/distortion review, stem exports, licensed music/SFX, voice rights, and complete narrated production acceptance |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |
 | 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
 | 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |

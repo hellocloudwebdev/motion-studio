@@ -7,7 +7,7 @@ This status describes code in this checkout and evidence available on the curren
 | 1.0 Foundation | Partial | Canonical IR timing, source hashing, render checks, editorial assembly, multi-track FCPXML export and golden interchange fixtures are implemented and covered locally. Licensed Premiere import/readback acceptance remains. |
 | 1.1 Creative pipeline | Partial | Provider-backed planning and validated IR generation exist, and the MCP bridge remains provider-neutral. Full autonomous creative review and production acceptance remain. |
 | 1.2 HyperFrames renderer | Partial | Text/shape/media compilation and a verified 60-second draft run locally. The example contains unresolved media and Blender-routed content; broader motion, reusable components, caching, and production visual review remain. |
-| 1.3 FFmpeg finishing | Partial | Offline TTS trims trailing silence while preserving speech pauses; script segments can request integer-frame lead-ins. An 18-second narrated sample passes HyperFrames layout/render QA, final audio mixing/analysis, SRT/VTT generation, FFprobe profile checks and package-integrity verification. Acceptance remains open for voice rights, licensed music/SFX, loudness/intelligibility review and creative approval. |
+| 1.3 FFmpeg finishing | Partial | Offline TTS trims trailing silence while preserving speech pauses; script segments can request integer-frame lead-ins. Final media QA measures integrated loudness, loudness range and true peak and reports configured limit violations. An 18-second narrated sample passes HyperFrames layout/render QA, final audio mixing/analysis, SRT/VTT generation, FFprobe profile checks and package-integrity verification. Human intelligibility/mix review, voice rights, licensed music/SFX, caption review and creative approval remain. |
 | 1.4 Adobe integration | Foundation only | Safe, read-only launch policies exist. AE composition operations, Premiere timeline edits/interchange, Media Encoder queue management, and live readback are not implemented or verified. |
 | 1.5 Blender | Partial | An IR-to-Blender adapter emits EEVEE PNG frame sequences for explicitly declared primitives, materials and integer-frame keyframes; it verifies frame count and FFprobe dimensions. Blender is not installed here, so no rendered Blender receipt or mixed 2D/3D delivery is available. |
 | 1.6 Three.js | Implemented | The scene adapter and deterministic browser frame renderer are implemented with local runtime fixtures. Broader mixed 2D/3D creative acceptance remains. |
@@ -17,7 +17,7 @@ This status describes code in this checkout and evidence available on the curren
 
 ## Current local evidence
 
-- Current checkout: `npm test` reports 129 passing, zero failing and one skipped; offline speech generation was executed and its WAV was independently verified with FFprobe.
+- Current checkout: `npm test` reports 131 passing, zero failing and one skipped; offline speech generation was executed and its WAV was independently verified with FFprobe.
 - `npm audit --omit=dev`: zero reported vulnerabilities.
 - HyperFrames 0.8.86 rendered a 60-second, 1920×1080, 30 fps H.264 draft. HyperFrames lint, runtime and layout checks passed; FFprobe and sampled frame decoding passed.
 - A self-contained 4-second kinetic-typography fixture rendered and packaged end-to-end; its H.264 master, 1280×720 at 30 fps, passed FFprobe, and the package receipt was accepted. It is intentionally silent and does not satisfy narrated-video completion.

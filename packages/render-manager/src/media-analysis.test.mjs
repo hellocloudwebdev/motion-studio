@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { parseMediaAnalysisLogs, parseTesseractTsv, comparePerceptualFrames, analyzeRenderedMedia } from "./media-analysis.mjs";
+import { parseMediaAnalysisLogs, parseLoudnessLog, parseTesseractTsv, comparePerceptualFrames, analyzeRenderedMedia } from "./media-analysis.mjs";
 
 test("parses FFmpeg black, freeze and silence events", () => {
   const result = parseMediaAnalysisLogs({
@@ -15,6 +15,12 @@ test("parses FFmpeg black, freeze and silence events", () => {
   assert.equal(result.black[0].duration, 1);
   assert.equal(result.freeze[0].start, 4);
   assert.equal(result.silence[0].duration, 3);
+});
+
+test("parses FFmpeg loudness and true-peak measurements", () => {
+  const result = parseLoudnessLog('input_i : -20.49 LUFS\n{\n  "input_i" : "-20.49",\n  "input_tp" : "-0.43",\n  "input_lra" : "4.40",\n  "input_thresh" : "-30.88"\n}');
+  assert.deepEqual(result, { integratedLufs: -20.49, truePeakDbtp: -0.43, loudnessRangeLu: 4.4, thresholdLufs: -30.88 });
+  assert.equal(parseLoudnessLog("no measurements"), null);
 });
 
 test("flags OCR text outside configured safe area and preserves subtitle words", () => {
@@ -55,5 +61,21 @@ test("real MP4 fixture detects an interior black segment and audio silence when 
     });
     assert.ok(result.findings.some(item => item.code === "BLACK_FRAME_SEGMENT" && item.severity === "high"));
     assert.ok(result.findings.some(item => item.code === "AUDIO_SILENCE_SEGMENT"));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("real audio analysis records loudness and flags an over-ceiling true peak", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "motion-studio-loudness-"));
+  const input = path.join(root, "tone.mp4");
+  const args = ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=white:s=160x90:r=10:d=3", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3", "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", input];
+  const child = spawn("ffmpeg", args, { shell: false, stdio: "ignore" });
+  const code = await new Promise(resolve => { child.once("error", () => resolve(-1)); child.once("close", resolve); });
+  if (code !== 0) { await rm(root, { recursive: true, force: true }); t.skip("FFmpeg/libx264 is unavailable on this runner."); return; }
+  try {
+    const result = await analyzeRenderedMedia({ input, media: { hasAudio: true, durationSeconds: 3, width: 160, height: 90 }, options: { ocr: false, freezeDurationSeconds: 4, silenceDurationSeconds: 4, perceptualMaxStaticSeconds: 4, truePeakMaxDbtp: -40 } });
+    const measured = result.detectors.loudness.measurements;
+    assert.ok(Number.isFinite(measured.integratedLufs));
+    assert.ok(Number.isFinite(measured.truePeakDbtp));
+    assert.ok(result.findings.some(item => item.code === "AUDIO_TRUE_PEAK_EXCEEDED"));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
