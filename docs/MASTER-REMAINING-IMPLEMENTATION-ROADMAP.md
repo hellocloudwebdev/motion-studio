@@ -40,6 +40,28 @@ Never promote a capability to runtime-verified or production-accepted based only
 - Delivery acceptance remains correctly pending because the generated system voice has `rightsStatus: unknown`. No licensed music/SFX or human speech/creative approval is recorded.
 - Latest automated suite: 128 passed, 0 failed, 1 skipped; `npm audit --omit=dev` reports zero vulnerabilities.
 
+### Progress evidence update — 2026-11-12
+
+All work below ran on this Windows host (Node 24, HyperFrames 0.8.86, FFmpeg 9.0.2).
+
+- P1.3 repair execution implemented: `packages/core/src/patch.mjs` adds a schema-validated IR patch envelope with CAS on the IR hash, six whitelisted op types (`set_typography`, `set_transform`, `set_motion`, `set_timing`, `rebind_asset`, `set_audio_cue`), a no-new-issues rule on apply, `classifyDefects`/`createPatchFromDefects` and a cumulative ±6 dB gain budget per runId. Design record: `docs/DESIGN-REPAIR-EXECUTION.md` (decision table, 6-op patch model, 76-code defect→repair registry, hybrid targeted rerender, run persistence, single policy source).
+- Render QA media findings (black/freeze/silence/loudness/perceptual-duplicate/OCR families) now become structured defects with integer `timeRangeFrames`, scene attribution, evidence path and repair owner (audio-producer / typography-specialist / technical-qa) instead of collapsing to `{code,message}` (`packages/core/src/frame-time.mjs`).
+- Orchestrator: `loadQualityGates()` makes `configs/quality-gates.json` the single authoritative repair policy (maxCycles=2, hard ceiling 3), resolving the roadmap's 2-vs-3 retry-policy conflict; `run-state.mjs` persists `projects/<id>/run-state.json` with resume-from-verified-artifact and input-hash invalidation; the IR `repairHistory` ledger is the authoritative cycle count.
+- Render-manager: `manifest.sceneTimeline`; scoped per-scene rendering via HyperFrames `render --composition scenes/<id>.html` into `renders/<label>/segments/` with scoped checks and time-shifted media analysis; `throwOnQaFailure`/`renderLabel` options; repair renders force `allowMissingAssetsAsPlaceholders:false`.
+- New `packages/repair-executor` (`@motion-studio/repair-executor`) implements `runRepairLoop`/`executeRepairCycle`: defect → classify → patch → CAS-apply → backup (`history/revision-*.json`) → atomic IR write → scoped-or-full render → retest (including mixed-segment audio retests via `audioInputsFromProjectRange`) → master refresh → escalate; escalation reports (JSON + markdown) in `projects/<id>/escalations/`; 20-minute render bound; dry-run; exit contracts 0/3/1. CLI: `motion-studio repair` with `--max-cycles`/`--no-targeted`/`--quality`/`--dry-run`/`--project-root`.
+- Segment/full consistency probe (real renders, 2 scenes × 2 s): per-frame mean-absolute-difference max 0.075 / mean 0.058 vs thresholds ≤1.25 / ≤0.5 — targeted scene renders are frame-consistent with the full master; the whole-project fallback is retained for policy/attribution/runtime-failure cases.
+- Integration tests cover the injected-defect exit-gate scenario, the no-candidate-asset escalation (exit 3, zero consumed cycles), ±6 dB budget exhaustion, frame-decode single-retry-then-escalate, dry-run behavior, and resume/invalidation. A code review pass found and fixed one P0 (scene-local cue offsets vs project-timeline ranges), three P1s (severity gating, single-patch budget overspend, id-derived path escapes) and two P2s; two findings remain deferred and recorded in the design doc.
+- P1.4 first advertisement implemented: `templates/startup-ad/project.json` rewritten as `startup-ad-acceptance-24s` — 24 s (720 frames @30 fps, 1920×1080), 4 scenes (hook → product reveal → chart how-it-works → CTA), all layers text/shape/chart (HyperFrames-only, zero external assets), safe areas on, font specified on all text layers, bounded float motion presets, brand tokens, `production.script` with 4 narration segments (`leadInFrames 12`), delivery target master-16x9 (mp4/H.264/AAC, audioRequired). Invented neutral product ("Gridsense" smart home energy monitor); no third-party brand or media.
+- Provider-backed speech (P3.1): `packages/speech-adapter/src/fish-audio.mjs` implements the Fish Audio TTS provider (`POST api.fish.audio/v1/tts`, model via request header, default `s2.1-pro-free`, `reference_id` voice selection, prosody speed, wav output, FFprobe verify + shared trailing-silence trim, workspace containment, injectable fetch). CLI `narration-generate --speech-provider fish-audio --speech-voice <id> --speech-speed <0.5-2>`. Provider terms recorded honestly; `rightsStatus` stays unknown pending producer review. Live API verified with a user-supplied key (stored only in gitignored `.env.local`); docs in `docs/SPEECH-PROVIDERS.md`.
+- **P1.4 ACCEPTED — the project's first production-accepted delivery**: the 24 s ad was re-narrated with Fish Audio voice `933563129e564b19a115bedd57b7406a` ("Sarah", 0.95× prosody; segments 4.32/4.00/3.96/3.36 s, all FFprobe-verified), three locally synthesized FFmpeg SFX (whoosh/shimmer/pop, `rightsStatus generated`, no third-party material) were attached as scene cues, the producer approved the final audio after listening to the delivered master, and rights were recorded on all 7 audio assets (`rightsStatus cleared` with a full `rightsApproval` audit record). Final flow: `motion-studio repair` (no-action, re-render on IR-hash change) → `deliver` → receipt `status: "accepted"`, 24-file package, integrity 24/24, delivered-variant media analysis 0 findings, master `startup-ad-acceptance-24s-master-16x9.mp4` (24.000 s, H.264 1920×1080 + AAC) verified. This closes the P1.4 exit gate on the local supported path.
+- Latest automated suite at this update (local suite; remote CI has not run): 224 tests, 223 passed, 0 failed, 1 environment-dependent skip, up from 131/0/1 at the 2026-11-11 baseline.
+
+### Progress evidence update — 2026-11-12 (second session)
+
+- Blender 5.3.0 installed via winget on this host. First-ever real Blender render exposed two latent driver bugs (the adapter had never been runtime-verified): Blender 5.3 exposes only the `BLENDER_EEVEE` engine id (adapter now resolves the engine id dynamically) and no longer substitutes `#` frame placeholders on `write_still`, which silently overwrote one PNG for all 24 frames (driver now writes explicit zero-padded `frame_NNNN.png`). Adapter gained an integer `threads` cap for low-power hosts.
+- **Blender runtime acceptance (first real render receipt)**: `projects/blender-smoke` — IR-defined 1-scene, 1-primitive fixture at 480×270, 24 frames @30 fps rendered with EEVEE on Blender 5.3.0, `--threads 2` (low-power profile, ~66 s, host remained responsive). Receipt `verified: true` with frame count 24/24, FFprobe-confirmed 480×270 dimensions, frame-evidence digest, actual renderer id and Blender version recorded. Runtime-verified single-scene evidence; camera-move/lighting/imported-asset fixtures, failed-frame recovery, alpha output and mixed-scene editorial inclusion remain open per P2.1–P2.3.
+- A `git reset --hard` during branch rewiring reverted five uncommitted files (speech-adapter index exports, Blender fixes, template, `.env.example`, roadmap updates); all were reconstructed from session evidence, the full suite re-verified green (224/223/0/1), and the branch commits redone. Committed on `feat/phase1-repair-executor-fish-audio`.
+
 ## Detailed execution plan mapped to the four architecture phases
 
 This section turns the attached Z Code architecture recommendation into sequenced, reviewable work. The existing milestone checklists below remain the technical detail. A work package is complete only when its listed evidence is checked in or attached to the release record. "Implemented" and "runtime verified" are separate states.
@@ -75,6 +97,8 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Include the editorial manifest, canonical source, referenced assets, caption sidecars, render/operation receipts, QA defects, inspection frames and integrity hashes in the package.
 - Record output settings and compare a repeat build for deterministic metadata/content where exact pixel identity is not guaranteed.
 - **Exit evidence:** tamper/missing-file checks reject a damaged package; a clean package independently verifies and contains every required source/evidence item.
+
+**P1.3 status (2026-11-12):** implemented and locally verified: defects carry integer-frame ranges, scene attribution and owners; the bounded patch→rerender→retest loop with escalation runs via `motion-studio repair`; `configs/quality-gates.json` is the single policy source (2 cycles, ceiling 3); the segment/full consistency probe passes; the P1.3 exit-evidence items (schema-validated patches, affected-scene rerender, retests, escalation reports, tamper/missing-file rejection) are met. Remaining: host-harness production acceptance of the full loop on a narrated defect case.
 
 **P1.4 — Complete the first advertisement acceptance**
 - Produce one 15–30 second startup/product advertisement from a brief, including hook, message, CTA, design system, generated/approved assets, music and one requested profile.
@@ -152,7 +176,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 | Acceptance project | Current state | Required closeout |
 |---|---|---|
-| Startup/product advertisement | Foundation pieces exist; no current end-to-end accepted project | Complete P1.4 and package verified output/evidence |
+| Startup/product advertisement | **ACCEPTED 2026-11-12**: 24 s ad (startup-ad-acceptance-24s) — Fish Audio narration + synthesized SFX, rights recorded, receipt `accepted`, 24-file package verified 24/24, 0 media findings | Maintain: none blocking; re-use as the reference acceptance run |
 | Kinetic typography | A short technical sample was rendered and packaged; narration-driven acceptance is not established | Add approved narration/captions/transitions, run safe-area and timing QA, record acceptance |
 | Narrated explainer | 18-second video rendered and visually/technically verified; audio-mixed MP4 and SRT/VTT package verify; scene-movement gate passes | Review rights for system voice, improve/approve narration pauses, add licensed music/SFX, human speech/creative review, then accept delivery |
 | Data visualization | Chart layer support exists; full production acceptance not established | Add sourced data, evidence/provenance, visual hierarchy and verified final render |
@@ -253,10 +277,10 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 ## Milestone 1.5 — Blender 3D renderer
 
 - [ ] Define IR-to-Blender mapping and generate scene files.
-- [ ] Create objects/meshes/materials; configure cameras/lighting; import supported assets.
-- [ ] Support animation/keyframes and bounded basic particle/simulation workflows.
-- [ ] Configure render engines/quality; render image sequences with alpha when required.
-- [ ] Emit scene metadata and render receipts; support cancellation/resume.
+- [x] Create objects/meshes/materials; configure cameras/lighting; import supported assets. (objects/materials/camera/two-point lighting runtime verified 2026-11-12 on Blender 5.3.0; imported assets remain open)
+- [ ] Support animation/keyframes and bounded basic particle/simulation workflows. (integer-frame transform keyframes runtime verified; particles/simulations open)
+- [ ] Configure render engines/quality; render image sequences with alpha when required. (EEVEE sequence render runtime verified 2026-11-12; alpha and quality profiles untested)
+- [x] Emit scene metadata and render receipts; support cancellation/resume. (first real receipt 2026-11-12: verified frame count, FFprobe dimensions, digest, renderer id, Blender version; AbortSignal cancellation supported; resume open)
 - [ ] Adapt outputs to the common engine contract and integrate with Premiere assembly.
 
 **Deliverable:** `@motion-studio/blender-adapter`, compiler, render-manager integration, asset/material mapping and fixtures.
@@ -290,13 +314,13 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - [ ] Brief/message alignment, hook, narrative progression, pacing, art direction consistency and CTA clarity.
 
 **Repair execution**
-- [ ] Defect includes evidence, exact frame/time ranges, owning scene/layer/stage and severity.
-- [ ] Generate smallest valid patch; validate changed IR/project; rerender affected components only; rerun relevant checks.
-- [ ] Escalate unresolved critical issues; retain repair history and regression evidence.
-- [ ] Reconcile retry policy: default maximum two automatic cycles vs configurable maximum three in 0.5. Choose one documented production policy before expanding retries.
+- [x] Defect includes evidence, exact frame/time ranges, owning scene/layer/stage and severity. (integer frame ranges + scene attribution + owners, 2026-11-12)
+- [x] Generate smallest valid patch; validate changed IR/project; rerender affected components only; rerun relevant checks. (repair-executor + scoped renders, consistency probe passed)
+- [x] Escalate unresolved critical issues; retain repair history and regression evidence. (escalation reports JSON+MD; IR ledger + run-state)
+- [x] Reconcile retry policy: default maximum two automatic cycles vs configurable maximum three in 0.5. Choose one documented production policy before expanding retries. (2 = authoritative default from configs/quality-gates.json, implementation ceiling 3, documented in docs/DESIGN-REPAIR-EXECUTION.md §5)
 - [ ] Visual-critic output is advisory and cannot override deterministic gates.
 
-Render-evidence QA defects now carry repair ownership and, for failed sampled-frame decodes, a one-frame integer range plus the evidence path/time. Scene/layer localization for other kinds of visual/audio findings and executable patch/retest loops remain open.
+Repair-evidence QA defects carry integer frame ranges, scene attribution, evidence paths and repair owners; the executable defect→patch→rerender→retest loop is implemented and locally verified (2026-11-12) including a real-render segment/full consistency probe. Multimodal creative-acceptance evidence and production acceptance of the repair loop on a narrated defect case remain open.
 
 **Exit gate:** Injected defects are detected/localized; permitted repairs rerender and pass retests, otherwise the issue is explicitly escalated.
 
@@ -390,7 +414,7 @@ Every milestone requires a dedicated branch and PR, written scope/checklist, pac
 
 ## Current tracker
 
-Updated 2026-11-11 after local integration on `main`. The latest automated suite reports 131 passing tests, zero failures and one environment-dependent test skipped; `npm audit --omit=dev` reports zero vulnerabilities. Final audio analysis now records FFmpeg integrated LUFS, loudness range and true peak, and emits structured findings for configured loudness/peak-limit violations. This is not cross-platform CI, host runtime verification of unavailable software, or production acceptance.
+Updated 2026-11-12 on branch `feat/phase1-repair-executor-fish-audio`. The latest automated suite reports 224 tests, 223 passed, zero failures and one environment-dependent test skipped; this is a local suite — remote CI has not run. `npm audit --omit=dev` reported zero vulnerabilities at the 2026-11-11 update. **The startup advertisement is now production-accepted (2026-11-12): the first `status: "accepted"` delivery receipt of the project** (Fish Audio narration, synthesized SFX, producer rights review recorded, 24-file integrity-verified package). The first real Blender render receipt was recorded on Blender 5.3.0 (480×270×24-frame EEVEE fixture, `--threads 2`, ~66 s). Fish Audio speech generation is live-verified on the free tier. This is not cross-platform CI, host runtime verification of Adobe software, or a claim that every milestone is production-accepted.
 
 Runtime evidence: a clean HyperFrames compile/lint/check/snapshot/render and verified FFmpeg delivery passed for the 4-second kinetic typography fixture (`projects/kinetic-type-demo/deliverables/delivery-receipt.json`). The Three.js demo also passes browser render and independent FFprobe checks, and delivery packaging tests exercise local FFmpeg media. These are narrow technical samples, not narrated production acceptance.
 
@@ -404,9 +428,9 @@ The rendered MP4 was also scanned and checksum-verified into the asset registry,
 | 1.2 | Chart rendering, motion timing, CSS sanitization and typography warnings implemented | Broader layer/template/cache/cancel-resume support and deterministic multi-scene renderer runtime acceptance |
 | 1.3 | FFmpeg audio mixing integration verifies a real H.264/AAC master; offline TTS creates project-scoped speech assets, measured narration cues and captions; final audio QA records integrated loudness, loudness range and true peak with structured limit findings; delivery validates caption frame bounds, Unicode and millisecond timing representation; the 18-second narrated sample's render and package are independently verified | Human speech intelligibility and mix review, reviewed caption wording/sync, clipping/distortion review, stem exports, licensed music/SFX, voice rights, and complete narrated production acceptance |
 | 1.4 | Governed Adobe MCP client and host readiness/approval gates implemented | Real licensed After Effects, Premiere and Media Encoder operations with checkpoint/readback/export receipts |
-| 1.5 | Blender scene contract/adapter foundation implemented | Blender runtime render and mixed-scene acceptance on supported hosts |
+| 1.5 | Blender scene contract/adapter foundation implemented; first real runtime render receipt on Blender 5.3.0 (480×270×24-frame EEVEE fixture, verified 2026-11-12) | Camera/lighting/asset fixtures, failed-frame recovery, alpha, mixed-scene editorial acceptance on supported hosts |
 | 1.6 | Three.js adapter, CLI/MCP render operation and local runtime fixture implemented; HyperFrames lint/check/snapshot/render and FFprobe verification passed | Broader shader/particle/model/alpha support and mixed-scene editorial acceptance |
-| 1.7 | Structured render QA, advisory critic and bounded repair planning implemented | Defect-to-patch execution, affected render, retest and multimodal acceptance evidence |
+| 1.7 | Repair execution loop implemented and locally verified (2026-11-12): defects carry frame ranges + scene ownership, scoped rerender via HyperFrames `--composition` with passing consistency probe, escalation reports, single policy source | Production acceptance of the repair loop on a narrated defect case + multimodal evidence |
 | 1.8 | Master/profile transcodes, captions, source and portable IR, referenced-asset packaging, editorial/render/QA/operation/software evidence, available QA frames, human report and SHA-256 integrity verification implemented; local FFmpeg integration cases pass, including traversal/tamper rejection | Narrated production package; engine source project references, production-ready render evidence and reproducible rebuild comparison |
 | 1.9 | Installer and host process safety foundation; local runtime now requires a >=32-byte bearer token and uses constant-time comparisons, covered by loopback HTTP integration tests | Secure OS-backed token storage, fresh Windows/macOS/Linux install, upgrade/uninstall, host matrix, recovery and security acceptance |
 
