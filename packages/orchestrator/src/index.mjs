@@ -1,5 +1,8 @@
 import { authorizeProductionStage } from './host-readiness.mjs';
 
+export { loadQualityGates } from './quality-gates.mjs';
+export { defaultRunState, loadRunState, saveRunState, runStatePath, invalidateOnInputChange, computeRepairCyclesFromLedger } from './run-state.mjs';
+
 const TRANSITIONS = {
   draft: new Set(['planned', 'cancelled']), planned: new Set(['rendering', 'cancelled', 'failed']),
   rendering: new Set(['qa', 'failed']), qa: new Set(['repair', 'assembling', 'failed']),

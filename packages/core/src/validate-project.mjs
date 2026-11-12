@@ -1,5 +1,9 @@
 const ENGINE_HINTS = new Set(['after-effects', 'hyperframes', 'blender', 'threejs', 'ffmpeg', 'auto']);
 const LAYER_KINDS = new Set(['text', 'shape', 'image', 'video', '3d', 'camera', 'effect', 'audio', 'chart', 'particle', 'composite', 'other']);
+// project.id and scene.id name filesystem workspaces and render artifacts, so
+// they are held to the same charset the adapters' safeId sanitization keeps
+// (1-80 characters of [a-zA-Z0-9_-]); anything else could traverse paths.
+const ID_PATTERN = /^[a-zA-Z0-9_-]{1,80}$/;
 const issue = (code, path, message, severity = 'error') => ({ code, path, message, severity });
 
 export function validateProject(project) {
@@ -10,6 +14,7 @@ export function validateProject(project) {
   if (!p || typeof p !== 'object') issues.push(issue('PROJECT_METADATA_MISSING', '$.project', 'Project metadata is required.'));
   else {
     for (const key of ['id', 'name', 'objective']) if (typeof p[key] !== 'string' || !p[key].trim()) issues.push(issue('REQUIRED_FIELD', `$.project.${key}`, `${key} must be a non-empty string.`));
+    if (typeof p.id === 'string' && p.id.trim() && !ID_PATTERN.test(p.id)) issues.push(issue('INVALID_PROJECT_ID', '$.project.id', 'project.id must be 1-80 characters of [a-zA-Z0-9_-] so it can safely name project workspaces and render artifacts.'));
     const fr = p.frameRate;
     if (!fr || !Number.isInteger(fr.numerator) || fr.numerator <= 0 || !Number.isInteger(fr.denominator) || fr.denominator <= 0) issues.push(issue('INVALID_FRAME_RATE', '$.project.frameRate', 'Frame rate must use positive integer numerator and denominator values.'));
     const canvas = p.canvas;
@@ -40,6 +45,7 @@ export function validateProject(project) {
       const sp = `$.scenes[${si}]`;
       if (!scene || typeof scene !== 'object') { issues.push(issue('INVALID_SCENE', sp, 'Scene must be an object.')); return; }
       for (const key of ['id', 'name', 'intent']) if (typeof scene[key] !== 'string' || !scene[key].trim()) issues.push(issue('REQUIRED_FIELD', `${sp}.${key}`, `${key} must be a non-empty string.`));
+      if (typeof scene.id === 'string' && scene.id.trim() && !ID_PATTERN.test(scene.id)) issues.push(issue('INVALID_SCENE_ID', `${sp}.id`, 'scene.id must be 1-80 characters of [a-zA-Z0-9_-] so it can safely name compositions and render artifacts.'));
       if (scene.id) { if (sceneIds.has(scene.id)) issues.push(issue('DUPLICATE_SCENE_ID', `${sp}.id`, `Duplicate scene id: ${scene.id}.`)); sceneIds.add(scene.id); }
       if (!Number.isInteger(scene.durationFrames) || scene.durationFrames <= 0) issues.push(issue('INVALID_SCENE_DURATION', `${sp}.durationFrames`, 'Scene durationFrames must be a positive integer.'));
       else knownSceneFrames += scene.durationFrames;

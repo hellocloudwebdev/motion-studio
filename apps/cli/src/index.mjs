@@ -4,8 +4,10 @@ import path from 'node:path';
 import { validateProject, routeScenes, runProjectQA, calculateTypeScale, persistQaRecord } from '../../../packages/core/src/index.mjs';
 import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/orchestrator/src/index.mjs';
 import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-readiness.mjs';
+import { loadQualityGates } from '../../../packages/orchestrator/src/quality-gates.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
+import { runRepairLoop } from '../../../packages/repair-executor/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
@@ -15,6 +17,7 @@ import { audioInputsFromProject } from '../../../packages/delivery-manager/src/a
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
 import { generateSpeech, narrationSegmentsFromProject, resolveSpeechCommand } from '../../../packages/speech-adapter/src/index.mjs';
+import { generateFishAudioSpeech, resolveFishAudioOptions } from '../../../packages/speech-adapter/src/fish-audio.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
 const print = value => console.log(JSON.stringify(value, null, 2));
@@ -131,7 +134,17 @@ if (command === 'assets') {
   print(receipt);
   if (!receipt.verified) process.exitCode = 2;
 } else if (command === 'narration-generate') {
-  if (!file) throw new Error('Usage: motion-studio narration-generate <project.json> [--project-root <projects/project-id>]');
+  if (!file) throw new Error('Usage: motion-studio narration-generate <project.json> [--project-root <projects/project-id>] [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <fish-audio-voice-id>] [--speech-speed <0.5-2>]');
+  const speechProvider = option('--speech-provider', 'local');
+  if (speechProvider !== 'local' && speechProvider !== 'fish-audio') throw new Error('--speech-provider must be "local" or "fish-audio".');
+  const speechModel = option('--speech-model', undefined);
+  if (speechModel !== undefined && speechProvider !== 'fish-audio') throw new Error('--speech-model only applies when --speech-provider is fish-audio.');
+  const speechVoice = option('--speech-voice', undefined);
+  const speechSpeed = option('--speech-speed', undefined);
+  const speechSpeedNumber = speechSpeed === undefined ? undefined : Number(speechSpeed);
+  if ((speechVoice !== undefined || speechSpeedNumber !== undefined) && speechProvider !== 'fish-audio') throw new Error('--speech-voice and --speech-speed only apply when --speech-provider is fish-audio.');
+  if (speechSpeed !== undefined && (!Number.isFinite(speechSpeedNumber) || speechSpeedNumber < 0.5 || speechSpeedNumber > 2)) throw new Error('--speech-speed must be a number between 0.5 and 2.');
+  const fishOptions = speechProvider === 'fish-audio' ? resolveFishAudioOptions(process.env, { model: speechModel, voiceId: speechVoice }) : null;
   const sourceProject = await load(file);
   const projectId = sourceProject.project?.id;
   if (typeof projectId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(projectId)) throw new Error('Project id must contain only letters, numbers, underscores or hyphens.');
@@ -151,7 +164,7 @@ if (command === 'assets') {
   } catch (error) { if (error.code !== 'ENOENT') throw error; await writeFile(projectFile, JSON.stringify(sourceProject, null, 2) + '\n', { flag: 'wx' }); }
   const project = await load(projectFile);
   const narrationSegments = narrationSegmentsFromProject(project);
-  const speechInfo = resolveSpeechCommand();
+  const speechInfo = speechProvider === 'fish-audio' ? { provider: 'fish-audio', extension: '.wav' } : resolveSpeechCommand();
   const assetIds = [], captions = [], cues = [], receipts = [];
   const secondsPerFrame = project.project.frameRate.denominator / project.project.frameRate.numerator;
   let cursorFrame = 0;
@@ -166,12 +179,15 @@ if (command === 'assets') {
     const startFrame = Math.max(cursorFrame, Math.max(0, sceneStart - leadInFrames));
     const assetId = 'generated-narration-' + String(index + 1).padStart(3, '0');
     const audioFile = path.join(realProjectRoot, 'assets', 'narration', 'segment-' + String(index + 1).padStart(3, '0') + speechInfo.extension);
-    const receipt = await generateSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')) });
+    const receipt = speechProvider === 'fish-audio'
+      ? await generateFishAudioSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')), apiKey: fishOptions.apiKey, model: fishOptions.model, voiceId: fishOptions.voiceId, speed: speechSpeedNumber })
+      : await generateSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')) });
     const durationFrames = Math.max(1, Math.ceil(receipt.audio.durationSeconds / secondsPerFrame));
     const endFrame = startFrame + durationFrames;
     if (endFrame > project.project.totalDurationFrames) throw new Error('Generated narration segment ' + (index + 1) + ' extends beyond the project duration; revise the script or increase the target duration before attaching audio.');
     const relativeUri = path.relative(realProjectRoot, audioFile).split(path.sep).join('/');
-    project.assets = [...(project.assets || []).filter(item => item.id !== assetId), { id: assetId, kind: 'audio', uri: relativeUri, sha256: receipt.sha256, byteSize: receipt.byteSize, source: 'generated-local-speech', rightsStatus: 'unknown', metadata: { generated: true, provider: receipt.provider, sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds, trailingSilenceTrimmedSeconds: receipt.trailingSilenceTrimmed } }];
+    const assetMetadata = { generated: true, provider: receipt.provider, ...(speechProvider === 'fish-audio' ? { model: receipt.model, voiceId: receipt.voiceId, speed: receipt.speed, providerFreeTier: true, terms: receipt.providerTerms.note } : {}), sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds, trailingSilenceTrimmedSeconds: receipt.trailingSilenceTrimmed };
+    project.assets = [...(project.assets || []).filter(item => item.id !== assetId), { id: assetId, kind: 'audio', uri: relativeUri, sha256: receipt.sha256, byteSize: receipt.byteSize, source: speechProvider === 'fish-audio' ? 'fish-audio' : 'generated-local-speech', rightsStatus: 'unknown', metadata: assetMetadata }];
     assetIds.push(assetId); receipts.push(receipt);
     cues.push({ assetId, kind: 'narration', offsetFrames: startFrame, durationFrames, volume: Number(option('--gain', '1')) });
     captions.push({ id: 'narration-caption-' + String(index + 1).padStart(3, '0'), startFrame, endFrame, text: segment.text });
@@ -282,12 +298,15 @@ if (command === 'assets') {
         print({ outputDir: result.outputDir, rootHtml: path.join(result.outputDir, 'index.html'), manifest: result.manifest, warnings: result.warnings });
       } else {
         const quality = option('--quality', 'draft');
+        // Repair-cycle budget defaults to the governed quality gates; the
+        // explicit flag overrides the policy.
+        const qualityGates = await loadQualityGates(path.resolve('configs/quality-gates.json'));
         const result = await renderHyperFramesProject(project, {
           projectRoot: target.projectRoot, engineRoot: option('--engine-dir', target.engineRoot),
           outputRoot: option('--render-dir', target.outputRoot), installRoot: process.cwd(),
           sourceRoot: target.sourceRoot, quality, workers: Number(option('--workers', '1')),
           repairAttempt: Number(option('--repair-attempt', '0')),
-          maxRepairAttempts: Number(option('--max-repair-attempts', '2')),
+          maxRepairAttempts: Number(option('--max-repair-attempts', String(qualityGates.repair.maxCycles))),
           mediaAnalysis: {
             ocr: !flags().has('--no-ocr'), requireOcr: flags().has('--require-ocr'),
             requireContinuousAudio: flags().has('--require-continuous-audio'),
@@ -302,6 +321,41 @@ if (command === 'assets') {
       }
     }
   }
+} else if (command === 'repair') {
+  // Repair loop entry (design §4.2 step 1). No shell spawning: the executor
+  // renders through render-manager's fixed-executable argv paths, workers
+  // always 1 and placeholders always off.
+  if (!file) throw new Error('Usage: motion-studio repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>]');
+  const maxCyclesRaw = option('--max-cycles', undefined);
+  const projectRootOption = option('--project-root', undefined);
+  let projectRootResolved = null;
+  if (projectRootOption) {
+    projectRootResolved = path.resolve(projectRootOption);
+    const relativeProjectRoot = path.relative(path.resolve(process.cwd()), projectRootResolved);
+    if (!relativeProjectRoot || relativeProjectRoot.startsWith('..') || path.isAbsolute(relativeProjectRoot)) throw new Error('--project-root must be a child directory of the current workspace.');
+  }
+  const result = await runRepairLoop({
+    projectFile: path.resolve(file),
+    configPath: path.resolve('configs/quality-gates.json'),
+    maxCyclesOverride: maxCyclesRaw === undefined ? undefined : Number(maxCyclesRaw),
+    quality: option('--quality', 'draft'),
+    dryRun: flags().has('--dry-run'),
+    targetedRerender: flags().has('--no-targeted') ? false : undefined,
+    ...(projectRootResolved ? { projectRoot: projectRootResolved } : {})
+  });
+  print({
+    status: result.status,
+    exitCode: result.exitCode,
+    runId: result.run?.id ?? null,
+    cycles: result.cycles,
+    patch: result.patch ?? null,
+    wouldEscalate: result.wouldEscalate ?? null,
+    escalationReasons: result.escalationReasons ?? [],
+    escalations: result.escalations.map(item => ({ jsonPath: item.jsonPath, markdownPath: item.markdownPath })),
+    renderManifests: result.renderManifests.map(manifest => ({ output: manifest.output, verified: manifest.verified, productionReady: manifest.productionReady, resumed: manifest.resumed === true })),
+    errors: result.errors
+  });
+  process.exitCode = result.exitCode;
 } else if (command === 'type-scale') {
   const width = Number(option('--width', '1920')), height = Number(option('--height', '1080'));
   print(calculateTypeScale({ width, height }));
@@ -315,5 +369,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json>, render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

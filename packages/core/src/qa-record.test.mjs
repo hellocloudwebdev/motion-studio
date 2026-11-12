@@ -18,4 +18,22 @@ test("persists QA run, repair history and approvals without changing creative in
   assert.equal(approved.qa.runs.length, 1);
   assert.equal(approved.qa.approvals[0].approved, true);
   assert.equal(approved.qa.repairHistory.length, 1);
+  assert.equal(approved.qa.repairHistory[0].patch, null);
+  assert.equal(approved.qa.repairHistory[0].retestScope, null);
+});
+
+test("repair history entries pass through the applied patch and retest scope", () => {
+  const project = { schemaVersion: "1.0.0", project: { id: "demo" }, creative: { message: "Keep this" }, scenes: [] };
+  const patch = { runId: "run-1", attempt: 0, maxCycles: 2, basedOnIrSha256: "a".repeat(64), ops: [{ type: "set_typography", target: { sceneId: "s", layerId: "t" }, value: { sizePx: 18 } }] };
+  const next = persistQaRecord(project, {
+    run: { id: "run-1" },
+    qaResult: { passed: false, productionReady: false, summary: { total: 1 }, defects: [] },
+    repairPlan: { attempt: 0, status: "repair-required", actions: [] },
+    patch,
+    retestScope: { sceneIds: ["s"], segments: ["renders/repair-1/segments/s.mp4"] }
+  });
+  const entry = next.qa.repairHistory[0];
+  assert.deepEqual(entry.patch, patch);
+  assert.deepEqual(entry.retestScope, { sceneIds: ["s"], segments: ["renders/repair-1/segments/s.mp4"] });
+  assert.equal(next.creative.message, "Keep this");
 });

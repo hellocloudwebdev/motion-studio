@@ -1,4 +1,4 @@
-export function persistQaRecord(project, { run, qaResult, repairPlan, approval = null } = {}) {
+export function persistQaRecord(project, { run, qaResult, repairPlan, approval = null, patch = null, retestScope = null, frameDecodeFrames = null } = {}) {
   if (!project || typeof project !== "object" || Array.isArray(project)) throw new Error("A Canonical Video IR project object is required.");
   if (!run || typeof run !== "object" || !run.id) throw new Error("A QA run with a stable id is required.");
   const next = structuredClone(project);
@@ -17,7 +17,9 @@ export function persistQaRecord(project, { run, qaResult, repairPlan, approval =
     ...previous, runs, defects: qaResult?.defects || [],
     repairHistory: approval ? (Array.isArray(previous.repairHistory) ? previous.repairHistory : []) : [...(Array.isArray(previous.repairHistory) ? previous.repairHistory : []), {
       runId: run.id, attempt: repairPlan?.attempt ?? 0, status: repairPlan?.status || "no-action",
-      actions: repairPlan?.actions || [], escalation: repairPlan?.escalation || null
+      actions: repairPlan?.actions || [], escalation: repairPlan?.escalation || null,
+      patch: patch || null, retestScope: retestScope || null,
+      ...(frameDecodeFrames === null ? {} : { frameDecodeFrames })
     }],
     approvals: approval ? [...(Array.isArray(previous.approvals) ? previous.approvals : []), {
       runId: run.id, approved: approval.approved === true, actor: approval.actor || "unspecified",

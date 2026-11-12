@@ -8,9 +8,10 @@ import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 const cli = path.join(root, 'apps/cli/src/index.mjs');
 const project = JSON.parse(readFileSync(path.join(root, 'templates/startup-ad/project.json'), 'utf8'));
+// The acceptance template routes every layer to HyperFrames; the production
+// graph always adds Premiere editorial assembly and FFmpeg delivery.
 const checks = {
   hyperframes: { available: true },
-  blender: { available: true },
   premiere: { serverConnected: true, hostVerified: true },
   ffmpeg: { available: true }
 };
@@ -32,9 +33,9 @@ test('CLI preflight succeeds only when all routed and delivery hosts are verifie
 });
 
 test('CLI preflight exits non-zero when an engine host is missing', () => {
-  const { blender, ...incomplete } = checks;
+  const { hyperframes, ...incomplete } = checks;
   const result = runPreflight(incomplete);
   assert.equal(result.status, 3, result.stderr || result.stdout);
   assert.match(result.stdout, /"ready": false/);
-  assert.match(result.stdout, /"blender"/);
+  assert.match(result.stdout, /"hyperframes"/);
 });
