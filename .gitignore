@@ -13,3 +13,6 @@ work/flow-bottle/
 projects/**/cache/
 projects/**/temp/
 .cache/
+
+# Mimosa security-hook local state (machine-local scan cache)
+.mimosa/

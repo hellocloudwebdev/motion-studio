@@ -1,0 +1,378 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "offline-narrated-explainer-18s",
+    "name": "A clear path from idea to action",
+    "objective": "Show how a small shared workflow can make creative work easier to follow.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 6
+    },
+    "totalDurationFrames": 540,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "Make the next step visible.",
+    "audience": "Small creative teams",
+    "message": "A clear shared workflow helps everyone see what happens next.",
+    "visualDirection": "Warm editorial title cards with large readable typography."
+  },
+  "brand": {
+    "colors": {
+      "background": "#101820",
+      "accent": "#73E7C1",
+      "text": "#FFFFFF"
+    },
+    "fonts": {
+      "display": "Arial",
+      "body": "Arial"
+    }
+  },
+  "assets": [
+    {
+      "id": "generated-narration-001",
+      "kind": "audio",
+      "uri": "assets/narration/segment-001.wav",
+      "sha256": "6c6d4794d4827e0a77cabcabbabd9d403b92612a46dd393fa7cfea64a9de17f0",
+      "byteSize": 181464,
+      "source": "generated-local-speech",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "windows-sapi",
+        "sampleRate": 22050,
+        "channels": 1,
+        "durationSeconds": 4.113787
+      }
+    },
+    {
+      "id": "generated-narration-002",
+      "kind": "audio",
+      "uri": "assets/narration/segment-002.wav",
+      "sha256": "5e783723bcf8018fd5fbfaebb05be95445dbee4945bb95c30a05d08e1cf599cd",
+      "byteSize": 208368,
+      "source": "generated-local-speech",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "windows-sapi",
+        "sampleRate": 22050,
+        "channels": 1,
+        "durationSeconds": 4.723855
+      }
+    },
+    {
+      "id": "generated-narration-003",
+      "kind": "audio",
+      "uri": "assets/narration/segment-003.wav",
+      "sha256": "ee4677aff008181d5d3664acc18ee106068974045567603e2e7c80157ffeb37d",
+      "byteSize": 251798,
+      "source": "generated-local-speech",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "windows-sapi",
+        "sampleRate": 22050,
+        "channels": 1,
+        "durationSeconds": 5.708662
+      }
+    }
+  ],
+  "production": {
+    "script": [
+      {
+        "narration": "Big ideas can get lost in scattered notes and busy days."
+      },
+      {
+        "narration": "Give every task a clear home, a next step, and an owner."
+      },
+      {
+        "narration": "Make progress visible. Share the plan. Keep moving together."
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "The idea",
+      "startFrame": 0,
+      "durationFrames": 180,
+      "intent": "Introduce the feeling of scattered work.",
+      "layers": [
+        {
+          "id": "scene-01-background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#101820"
+          }
+        },
+        {
+          "id": "scene-01-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 112,
+            "y": 180,
+            "width": 140,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#73E7C1"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-01-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Start with the idea."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 76,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 112,
+            "y": 248,
+            "width": 1056,
+            "height": 180
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-02",
+      "name": "The next step",
+      "startFrame": 180,
+      "durationFrames": 180,
+      "intent": "Show an organized next action.",
+      "layers": [
+        {
+          "id": "scene-02-background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#182630"
+          }
+        },
+        {
+          "id": "scene-02-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 112,
+            "y": 180,
+            "width": 140,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#73E7C1"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-02-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Make the next step clear."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 70,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 112,
+            "y": 248,
+            "width": 1056,
+            "height": 180
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "Progress together",
+      "startFrame": 360,
+      "durationFrames": 180,
+      "intent": "Close with shared progress and momentum.",
+      "layers": [
+        {
+          "id": "scene-03-background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#73E7C1"
+          }
+        },
+        {
+          "id": "scene-03-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 112,
+            "y": 180,
+            "width": 140,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#101820"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-03-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Keep moving together."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 74,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 112,
+            "y": 248,
+            "width": 1056,
+            "height": 180
+          },
+          "style": {
+            "color": "#101820"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1280,
+        "height": 720,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": true
+      }
+    ]
+  },
+  "audio": {
+    "tracks": [
+      {
+        "assetId": "generated-narration-001",
+        "kind": "narration",
+        "offsetFrames": 0,
+        "durationFrames": 124,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-002",
+        "kind": "narration",
+        "offsetFrames": 180,
+        "durationFrames": 142,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-003",
+        "kind": "narration",
+        "offsetFrames": 360,
+        "durationFrames": 172,
+        "volume": 1
+      }
+    ]
+  },
+  "captions": [
+    {
+      "id": "narration-caption-001",
+      "startFrame": 0,
+      "endFrame": 124,
+      "text": "Big ideas can get lost in scattered notes and busy days."
+    },
+    {
+      "id": "narration-caption-002",
+      "startFrame": 180,
+      "endFrame": 322,
+      "text": "Give every task a clear home, a next step, and an owner."
+    },
+    {
+      "id": "narration-caption-003",
+      "startFrame": 360,
+      "endFrame": 532,
+      "text": "Make progress visible. Share the plan. Keep moving together."
+    }
+  ]
+}

@@ -1,0 +1,284 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "offline-narrated-explainer",
+    "name": "A clear path from idea to action",
+    "objective": "Show how a small shared workflow can make creative work easier to follow.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 6
+    },
+    "totalDurationFrames": 450,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "Make the next step visible.",
+    "audience": "Small creative teams",
+    "message": "A clear shared workflow helps everyone see what happens next.",
+    "visualDirection": "Warm editorial title cards with large readable typography."
+  },
+  "brand": {
+    "colors": {
+      "background": "#101820",
+      "accent": "#73E7C1",
+      "text": "#FFFFFF"
+    },
+    "fonts": {
+      "display": "Arial",
+      "body": "Arial"
+    }
+  },
+  "assets": [],
+  "production": {
+    "script": [
+      {
+        "narration": "Big ideas can get lost in scattered notes and busy days."
+      },
+      {
+        "narration": "Give every task a clear home, a next step, and an owner."
+      },
+      {
+        "narration": "Make progress visible. Share the plan. Keep moving together."
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "The idea",
+      "startFrame": 0,
+      "durationFrames": 150,
+      "intent": "Introduce the feeling of scattered work.",
+      "layers": [
+        {
+          "id": "scene-01-background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#101820"
+          }
+        },
+        {
+          "id": "scene-01-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 112,
+            "y": 180,
+            "width": 140,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#73E7C1"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-01-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Start with the idea."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 76,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 112,
+            "y": 248,
+            "width": 1056,
+            "height": 180
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-02",
+      "name": "The next step",
+      "startFrame": 150,
+      "durationFrames": 150,
+      "intent": "Show an organized next action.",
+      "layers": [
+        {
+          "id": "scene-02-background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#182630"
+          }
+        },
+        {
+          "id": "scene-02-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 112,
+            "y": 180,
+            "width": 140,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#73E7C1"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-02-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Make the next step clear."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 70,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 112,
+            "y": 248,
+            "width": 1056,
+            "height": 180
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "Progress together",
+      "startFrame": 300,
+      "durationFrames": 150,
+      "intent": "Close with shared progress and momentum.",
+      "layers": [
+        {
+          "id": "scene-03-background",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#73E7C1"
+          }
+        },
+        {
+          "id": "scene-03-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 112,
+            "y": 180,
+            "width": 140,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#101820"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-03-title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Keep moving together."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 74,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 112,
+            "y": 248,
+            "width": 1056,
+            "height": 180
+          },
+          "style": {
+            "color": "#101820"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1280,
+        "height": 720,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": true
+      }
+    ]
+  }
+}

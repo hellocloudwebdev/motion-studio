@@ -1,0 +1,1165 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "startup-ad-acceptance-24s",
+    "name": "Gridsense — Startup Product Advertisement",
+    "objective": "Introduce the Gridsense smart home energy monitor and drive preorders with a 24-second hook, reveal, proof and CTA arc.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 5
+    },
+    "totalDurationFrames": 720,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "Most household energy use is invisible. Gridsense makes every watt visible, room by room, so families can trim the peaks that cost them most.",
+    "audience": "Homeowners and renters who want lower power bills without giving up comfort.",
+    "message": "See where your power goes, trim the evening peak, and start saving this week.",
+    "visualDirection": "Confident dark-teal product advertisement with bright energy-green accents, large editorial typography and an animated data reveal."
+  },
+  "brand": {
+    "colors": {
+      "background": "#0E2A3A",
+      "surface": "#14384E",
+      "accent": "#4ADE80",
+      "ink": "#0B2230",
+      "muted": "#A9C6D6",
+      "text": "#FFFFFF"
+    },
+    "fonts": {
+      "display": "Arial",
+      "body": "Arial"
+    }
+  },
+  "assets": [
+    {
+      "id": "generated-narration-001",
+      "kind": "audio",
+      "uri": "assets/narration/segment-001.wav",
+      "sha256": "8ad6a7679bbb251631634c8e92f99e18c6de80667bd026377406b0f43bcd0d89",
+      "byteSize": 381376,
+      "source": "fish-audio",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": "933563129e564b19a115bedd57b7406a",
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 4.323107,
+        "trailingSilenceTrimmedSeconds": 0.2831519999999994,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    },
+    {
+      "id": "generated-narration-002",
+      "kind": "audio",
+      "uri": "assets/narration/segment-002.wav",
+      "sha256": "079f576fde6fb15fd520ea023c4edecb550f4a75eb446ea43afcf3325ae6b1d4",
+      "byteSize": 352602,
+      "source": "fish-audio",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": "933563129e564b19a115bedd57b7406a",
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 3.996871,
+        "trailingSilenceTrimmedSeconds": 0.31610000000000005,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    },
+    {
+      "id": "generated-narration-003",
+      "kind": "audio",
+      "uri": "assets/narration/segment-003.wav",
+      "sha256": "4a1830941e46a9287898ae08aaa656c24198d4f1af7a29a913f5939734307f1e",
+      "byteSize": 349592,
+      "source": "fish-audio",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": "933563129e564b19a115bedd57b7406a",
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 3.962744,
+        "trailingSilenceTrimmedSeconds": 0.30133800000000033,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    },
+    {
+      "id": "generated-narration-004",
+      "kind": "audio",
+      "uri": "assets/narration/segment-004.wav",
+      "sha256": "3703b08a8478bcb3ccc795c5c15ec8734ca109ca1514f4ab43b1533ce790093a",
+      "byteSize": 296146,
+      "source": "fish-audio",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": "933563129e564b19a115bedd57b7406a",
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 3.35678,
+        "trailingSilenceTrimmedSeconds": 0.271814,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    },
+    {
+      "id": "sfx-whoosh",
+      "kind": "audio",
+      "uri": "assets/sfx/whoosh.wav",
+      "sha256": "2ce0d89b8ecd4435d9c987ad8580ee9af8eafccaf2731ebd023e218797723cee",
+      "byteSize": 61818,
+      "source": "ffmpeg-synthesized",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "method": "ffmpeg-lavfi",
+        "description": "Locally synthesized transition effect (no third-party material)",
+        "createdAt": "2026-11-12T17:02:58.221Z",
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    },
+    {
+      "id": "sfx-shimmer",
+      "kind": "audio",
+      "uri": "assets/sfx/shimmer.wav",
+      "sha256": "ec81aa089c78242c4fd57595d97fd4029b1de2d160e36b89741d80d5222eaa27",
+      "byteSize": 79458,
+      "source": "ffmpeg-synthesized",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "method": "ffmpeg-lavfi",
+        "description": "Locally synthesized transition effect (no third-party material)",
+        "createdAt": "2026-11-12T17:02:58.221Z",
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    },
+    {
+      "id": "sfx-pop",
+      "kind": "audio",
+      "uri": "assets/sfx/pop.wav",
+      "sha256": "7819ea7fe8fd39b78f55dc416a0ae03a840def6583641242d2fb7477b0131416",
+      "byteSize": 30948,
+      "source": "ffmpeg-synthesized",
+      "rightsStatus": "cleared",
+      "metadata": {
+        "generated": true,
+        "method": "ffmpeg-lavfi",
+        "description": "Locally synthesized transition effect (no third-party material)",
+        "createdAt": "2026-11-12T17:02:58.222Z",
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration; producer-reviewed (free-tier terms accepted); SFX locally synthesized via FFmpeg (no third-party material)",
+          "usageScope": "Startup advertisement startup-ad-acceptance-24s — Motion Studio acceptance production",
+          "note": "Producer approved final audio (Sarah voice + synthesized SFX) after listening to the delivered master.",
+          "approvedAt": "2026-11-12T17:21:02.438Z"
+        }
+      }
+    }
+  ],
+  "production": {
+    "script": [
+      {
+        "narration": "Your home is spending power right now. Most of it goes unseen.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Meet Gridsense, the energy monitor that shows every watt.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Clip on the sensor. Watch every room. Trim the evening peak.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Start saving this week. Order your Gridsense today.",
+        "leadInFrames": 12
+      }
+    ]
+  },
+  "audio": {
+    "tracks": [
+      {
+        "assetId": "generated-narration-001",
+        "kind": "narration",
+        "offsetFrames": 0,
+        "durationFrames": 130,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-002",
+        "kind": "narration",
+        "offsetFrames": 168,
+        "durationFrames": 120,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-003",
+        "kind": "narration",
+        "offsetFrames": 348,
+        "durationFrames": 119,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-004",
+        "kind": "narration",
+        "offsetFrames": 528,
+        "durationFrames": 101,
+        "volume": 1
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "The hidden cost",
+      "startFrame": 0,
+      "durationFrames": 180,
+      "intent": "Hook: energy is being spent right now and most of it is invisible.",
+      "layers": [
+        {
+          "id": "s1-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#0E2A3A"
+          }
+        },
+        {
+          "id": "s1-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "THE PROBLEM"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 150,
+            "width": 640,
+            "height": 48
+          },
+          "style": {
+            "color": "#4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s1-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 230,
+            "width": 160,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s1-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Your home is spending\npower right now."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 96,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 280,
+            "width": 1200,
+            "height": 240
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s1-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Most of it goes unseen, unmeasured, and unmanaged."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 400,
+            "lineHeight": 1.2,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 580,
+            "width": 940,
+            "height": 150
+          },
+          "style": {
+            "color": "#A9C6D6"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 6
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-02",
+      "name": "Meet Gridsense",
+      "startFrame": 180,
+      "durationFrames": 180,
+      "intent": "Product reveal: a small meter sensor with a live usage readout.",
+      "layers": [
+        {
+          "id": "s2-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#14384E"
+          }
+        },
+        {
+          "id": "s2-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "MEET GRIDSENSE"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 150,
+            "width": 700,
+            "height": 48
+          },
+          "style": {
+            "color": "#4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s2-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 230,
+            "width": 160,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s2-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Every watt,\nmade visible."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 96,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 280,
+            "width": 1060,
+            "height": 240
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s2-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "A small sensor on your meter. A live view of your home."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 400,
+            "lineHeight": 1.2,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 560,
+            "width": 900,
+            "height": 150
+          },
+          "style": {
+            "color": "#A9C6D6"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 6
+          }
+        },
+        {
+          "id": "s2-device",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 1210,
+            "y": 240,
+            "width": 540,
+            "height": 600
+          },
+          "style": {
+            "backgroundColor": "#0B2230",
+            "borderRadius": 28,
+            "border": "3px solid #4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-screen",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 1270,
+            "y": 300,
+            "width": 440,
+            "height": 280
+          },
+          "style": {
+            "backgroundColor": "#0E2A3A",
+            "borderRadius": 16
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-live-value",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "2.4 kW"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 64,
+            "weight": 800,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1270,
+            "y": 330,
+            "width": 440,
+            "height": 90
+          },
+          "style": {
+            "color": "#FFFFFF",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-live-label",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "LIVE USAGE NOW"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 28,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 4,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1270,
+            "y": 430,
+            "width": 440,
+            "height": 44
+          },
+          "style": {
+            "color": "#4ADE80",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-tagline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "No subscription. No electrician."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 30,
+            "weight": 500,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1210,
+            "y": 880,
+            "width": 540,
+            "height": 44
+          },
+          "style": {
+            "color": "#A9C6D6",
+            "textAlign": "center"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ],
+      "audioCues": [
+        {
+          "assetId": "sfx-whoosh",
+          "startFrame": 0,
+          "durationFrames": 21,
+          "fadeInFrames": 3,
+          "fadeOutFrames": 9,
+          "gain": 0.5
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "How it works",
+      "startFrame": 360,
+      "durationFrames": 180,
+      "intent": "Proof: three simple steps next to an animated daily usage chart.",
+      "layers": [
+        {
+          "id": "s3-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#0E2A3A"
+          }
+        },
+        {
+          "id": "s3-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "HOW IT WORKS"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 150,
+            "width": 640,
+            "height": 48
+          },
+          "style": {
+            "color": "#4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s3-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 230,
+            "width": 160,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s3-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "See where\nthe power goes."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 88,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 280,
+            "width": 880,
+            "height": 220
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s3-steps",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "1  Clip the sensor to your meter\n2  Watch live usage by room\n3  Trim the evening peak"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 36,
+            "weight": 500,
+            "lineHeight": 1.35,
+            "alignment": "left",
+            "maxLines": 4,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 560,
+            "width": 840,
+            "height": 300
+          },
+          "style": {
+            "color": "#A9C6D6"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 6
+          }
+        },
+        {
+          "id": "s3-chart",
+          "kind": "chart",
+          "engineHint": "hyperframes",
+          "content": {
+            "chartType": "bar",
+            "title": "Sample day profile (kWh)",
+            "xKey": "label",
+            "yKey": "value",
+            "data": [
+              {
+                "label": "Morning",
+                "value": 2.1
+              },
+              {
+                "label": "Midday",
+                "value": 1.2
+              },
+              {
+                "label": "Evening",
+                "value": 4.6
+              },
+              {
+                "label": "Night",
+                "value": 0.8
+              }
+            ]
+          },
+          "transform": {
+            "x": 1020,
+            "y": 260,
+            "width": 740,
+            "height": 420
+          },
+          "style": {
+            "color": "#4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s3-chart-caption",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Sample day in the Gridsense app"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 26,
+            "weight": 400,
+            "lineHeight": 1.1,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1020,
+            "y": 700,
+            "width": 740,
+            "height": 44
+          },
+          "style": {
+            "color": "#7FA3B8"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        }
+      ],
+      "audioCues": [
+        {
+          "assetId": "sfx-shimmer",
+          "startFrame": 0,
+          "durationFrames": 27,
+          "fadeInFrames": 6,
+          "fadeOutFrames": 12,
+          "gain": 0.4
+        }
+      ]
+    },
+    {
+      "id": "scene-04",
+      "name": "Call to action",
+      "startFrame": 540,
+      "durationFrames": 180,
+      "intent": "Close on the brand accent color with a single clear ordering action.",
+      "layers": [
+        {
+          "id": "s4-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          }
+        },
+        {
+          "id": "s4-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "READY WHEN YOU ARE"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 170,
+            "width": 760,
+            "height": 48
+          },
+          "style": {
+            "color": "#0B2230"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Stop paying for power\nyou never see."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 92,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 260,
+            "width": 1300,
+            "height": 280
+          },
+          "style": {
+            "color": "#0B2230"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "It pays for itself one peak at a time."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 400,
+            "lineHeight": 1.2,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 560,
+            "width": 900,
+            "height": 90
+          },
+          "style": {
+            "color": "#0B2230",
+            "opacity": 0.85
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-button",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 680,
+            "width": 560,
+            "height": 110
+          },
+          "style": {
+            "backgroundColor": "#0B2230",
+            "borderRadius": 55
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-cta-text",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Get Gridsense today"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 800,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 706,
+            "width": 560,
+            "height": 56
+          },
+          "style": {
+            "color": "#FFFFFF",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-fineprint",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Ships free. 30-day money-back guarantee."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 26,
+            "weight": 500,
+            "lineHeight": 1.1,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 840,
+            "width": 900,
+            "height": 44
+          },
+          "style": {
+            "color": "#0B2230",
+            "opacity": 0.8
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        }
+      ],
+      "audioCues": [
+        {
+          "assetId": "sfx-pop",
+          "startFrame": 0,
+          "durationFrames": 12,
+          "fadeInFrames": 1,
+          "fadeOutFrames": 6,
+          "gain": 0.7
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1920,
+        "height": 1080,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": true
+      }
+    ]
+  },
+  "captions": [
+    {
+      "id": "narration-caption-001",
+      "startFrame": 0,
+      "endFrame": 130,
+      "text": "Your home is spending power right now. Most of it goes unseen."
+    },
+    {
+      "id": "narration-caption-002",
+      "startFrame": 168,
+      "endFrame": 288,
+      "text": "Meet Gridsense, the energy monitor that shows every watt."
+    },
+    {
+      "id": "narration-caption-003",
+      "startFrame": 348,
+      "endFrame": 467,
+      "text": "Clip on the sensor. Watch every room. Trim the evening peak."
+    },
+    {
+      "id": "narration-caption-004",
+      "startFrame": 528,
+      "endFrame": 629,
+      "text": "Start saving this week. Order your Gridsense today."
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "blender-smoke-480p",
+    "name": "Blender smoke fixture 480p",
+    "revision": 1,
+    "objective": "Low-power Blender runtime acceptance: 0.8s rotating cube at 480x270 to keep the weak host responsive.",
+    "frameRate": { "numerator": 30, "denominator": 1 },
+    "canvas": { "width": 480, "height": 270 },
+    "totalDurationFrames": 24
+  },
+  "creative": {
+    "concept": "Minimal EEVEE smoke fixture: one primitive, one camera, default two-point lighting.",
+    "audience": "engineering acceptance only",
+    "message": "Not a creative production."
+  },
+  "brand": {
+    "colors": { "primary": "#4ADE80", "accent": "#0E2A3A" }
+  },
+  "assets": [],
+  "scenes": [
+    {
+      "id": "cube-orbit",
+      "name": "Cube orbit smoke scene",
+      "startFrame": 0,
+      "durationFrames": 24,
+      "intent": "Low-power runtime acceptance render: one primitive rotating one quarter turn.",
+      "description": "Cylinder rotating one quarter turn.",
+      "layers": [
+        {
+          "id": "smoke-cube",
+          "kind": "3d",
+          "engineHint": "blender",
+          "requiredCapabilities": ["3d"],
+          "content": {
+            "primitive": "cube",
+            "transform": { "location": [0, 0, 0], "scale": [1, 1, 1] },
+            "keyframes": [
+              { "frame": 0, "rotation": [0, 0, 0] },
+              { "frame": 23, "rotation": [0, 0, 1.5708] }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "audio": { "tracks": [] },
+  "delivery": {
+    "primaryTargetId": "smoke-480p",
+    "targets": [
+      {
+        "id": "smoke-480p",
+        "container": "mp4",
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "width": 480,
+        "height": 270,
+        "frameRate": { "numerator": 30, "denominator": 1 },
+        "audioRequired": false
+      }
+    ]
+  },
+  "qa": { "defects": [], "repairHistory": [], "gates": [] }
+}

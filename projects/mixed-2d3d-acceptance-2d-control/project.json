@@ -1,0 +1,228 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "mixed-2d3d-acceptance-2d-control",
+    "name": "Mixed 2D/3D acceptance - 2D control",
+    "revision": 1,
+    "objective": "Phase-2 exit gate P2.3: prove the mixed HyperFrames + Blender production path with scoped scene segments, deterministic FFmpeg assembly and a verified master.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 640,
+      "height": 360,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 6
+    },
+    "totalDurationFrames": 120,
+    "colorSpace": "Rec.709"
+  },
+  "creative": {
+    "concept": "Brand spot mixing kinetic 2D plates with a rotating 3D product primitive.",
+    "audience": "Motion Studio engineering acceptance",
+    "message": "2D scenes render in HyperFrames, the 3D scene renders in Blender EEVEE, and the master tiles contiguously at exact integer frame timing.",
+    "mood": [
+      "confident",
+      "technical"
+    ],
+    "visualDirection": "Deep navy background, mint accent, restrained layout, low-power 640x360 render."
+  },
+  "brand": {
+    "colors": {
+      "background": "#0B1626",
+      "accent": "#72F2C2",
+      "text": "#F4F7FB",
+      "primary": "#4ADE80"
+    },
+    "fonts": {
+      "display": "Arial",
+      "body": "Arial"
+    }
+  },
+  "assets": [],
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "Opening headline",
+      "durationFrames": 60,
+      "intent": "Introduce the acceptance spot with a floating headline and accent rule rendered in HyperFrames.",
+      "layers": [
+        {
+          "id": "scene-01-backdrop",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 640,
+            "height": 360
+          },
+          "style": {
+            "backgroundColor": "#0B1626",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "scene-01-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Mixed engines,\none timeline."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 44,
+            "weight": 800,
+            "lineHeight": 1.05,
+            "alignment": "center",
+            "safeArea": true
+          },
+          "transform": {
+            "x": 60,
+            "y": 110,
+            "width": 520,
+            "height": 120
+          },
+          "style": {
+            "color": "#F4F7FB"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "scene-01-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 230,
+            "y": 268,
+            "width": 180,
+            "height": 6
+          },
+          "style": {
+            "backgroundColor": "#72F2C2",
+            "opacity": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "Results and call to action",
+      "durationFrames": 60,
+      "intent": "Close with a chart beat and a call to action rendered in HyperFrames.",
+      "layers": [
+        {
+          "id": "scene-03-backdrop",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 640,
+            "height": 360
+          },
+          "style": {
+            "backgroundColor": "#0B1626",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "scene-03-chart",
+          "kind": "chart",
+          "engineHint": "hyperframes",
+          "content": {
+            "chartType": "bar",
+            "title": "Assembly verification",
+            "xKey": "label",
+            "yKey": "value",
+            "data": [
+              {
+                "label": "frames",
+                "value": 180
+              },
+              {
+                "label": "scenes",
+                "value": 3
+              },
+              {
+                "label": "engines",
+                "value": 2
+              }
+            ]
+          },
+          "transform": {
+            "x": 96,
+            "y": 56,
+            "width": 448,
+            "height": 196
+          },
+          "style": {
+            "color": "#72F2C2",
+            "opacity": 1
+          }
+        },
+        {
+          "id": "scene-03-cta",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Ship the mixed path."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 30,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 270,
+            "width": 400,
+            "height": 56
+          },
+          "style": {
+            "color": "#F4F7FB"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    }
+  ],
+  "audio": {
+    "tracks": []
+  },
+  "delivery": {
+    "primaryTargetId": "master-360p",
+    "targets": [
+      {
+        "id": "master-360p",
+        "format": "mp4",
+        "width": 640,
+        "height": 360,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": false
+      }
+    ]
+  },
+  "qa": {
+    "defects": [],
+    "repairHistory": [],
+    "gates": []
+  }
+}
