@@ -7,9 +7,13 @@ import { fileURLToPath } from 'node:url';
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const WINDOWS_SAPI_SCRIPT = path.join(MODULE_ROOT, 'scripts', 'windows-sapi-speech.ps1');
 
-function inside(root, target) {
+export function inside(root, target) {
   const relative = path.relative(root, target);
   return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+}
+
+export function assertValidSpeechText(text) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 100_000) throw new Error('Speech text must contain 1–100000 characters.');
 }
 
 export function resolveSpeechCommand(platform = process.platform, env = process.env) {
@@ -23,7 +27,7 @@ export function resolveSpeechCommand(platform = process.platform, env = process.
   throw new Error('No offline speech adapter is supported on ' + platform + '.');
 }
 
-function run(executable, args, { cwd, signal, timeoutMs = 120_000 } = {}) {
+export function run(executable, args, { cwd, signal, timeoutMs = 120_000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { cwd, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], signal });
     let stdout = '', stderr = '';
@@ -40,16 +44,16 @@ function run(executable, args, { cwd, signal, timeoutMs = 120_000 } = {}) {
   });
 }
 
-async function probeAudio(file, { signal } = {}) {
+export async function probeAudio(file, { signal, label = 'Local speech output' } = {}) {
   const result = await run('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { signal });
   const report = JSON.parse(result.stdout), audio = (report.streams || []).find(stream => stream.codec_type === 'audio');
   const durationSeconds = Number(report.format?.duration || audio?.duration || 0);
-  if (!audio || !(durationSeconds > 0)) throw new Error('Local speech output failed independent FFprobe audio verification.');
+  if (!audio || !(durationSeconds > 0)) throw new Error(label + ' failed independent FFprobe audio verification.');
   return { codec: audio.codec_name, sampleRate: Number(audio.sample_rate), channels: audio.channels, durationSeconds };
 }
 
 export async function generateSpeech(text, { outputPath, projectRoot, signal, timeoutMs = 120_000 } = {}) {
-  if (typeof text !== 'string' || !text.trim() || text.length > 100_000) throw new Error('Speech text must contain 1–100000 characters.');
+  assertValidSpeechText(text);
   if (typeof projectRoot !== 'string' || !projectRoot.trim() || typeof outputPath !== 'string' || !outputPath.trim()) throw new Error('A projectRoot and outputPath are required for isolated speech generation.');
   const root = path.resolve(projectRoot), output = path.resolve(outputPath);
   if (!inside(root, output)) throw new Error('Speech output must remain inside the project workspace.');

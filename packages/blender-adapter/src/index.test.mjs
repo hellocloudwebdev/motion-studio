@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBlenderSceneSpec } from './index.mjs';
+import { buildBlenderSceneSpec, renderBlenderScene } from './index.mjs';
 
 const project = {
   project: { id: 'fixture', frameRate: { numerator: 30000, denominator: 1001 }, canvas: { width: 1920, height: 1080 } },
@@ -27,4 +27,10 @@ test('Blender refuses implicit placeholder geometry and out-of-range animation f
   assert.throws(() => buildBlenderSceneSpec(project, noGeometry, { outputDirectory: 'frames', metadataPath: 'scene.json' }), /must declare a supported primitive/);
   const badFrame = structuredClone(scene); badFrame.layers[0].content.keyframes[1].frame = 60;
   assert.throws(() => buildBlenderSceneSpec(project, badFrame, { outputDirectory: 'frames', metadataPath: 'scene.json' }), /inside the scene frame range/);
+});
+
+test('Blender thread cap is validated as a positive integer before any render work', async () => {
+  await assert.rejects(() => renderBlenderScene(project, scene, { projectRoot: 'unused', threads: 0 }), /threads must be a positive integer/);
+  await assert.rejects(() => renderBlenderScene(project, scene, { projectRoot: 'unused', threads: 1.5 }), /threads must be a positive integer/);
+  await assert.rejects(() => renderBlenderScene(project, scene, { projectRoot: 'unused', threads: -2 }), /threads must be a positive integer/);
 });

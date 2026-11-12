@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.0.0",
   "project": {
-    "id": "opendoor-startup-ad",
-    "name": "Opendoor — Startup Advertisement",
-    "objective": "Introduce an hourly house-party space platform and drive social engagement.",
+    "id": "startup-ad-acceptance-24s",
+    "name": "Gridsense — Startup Product Advertisement",
+    "objective": "Introduce the Gridsense smart home energy monitor and drive preorders with a 24-second hook, reveal, proof and CTA arc.",
     "frameRate": {
       "numerator": 30,
       "denominator": 1
@@ -14,33 +14,61 @@
       "pixelAspectRatio": 1,
       "safeAreaPercent": 5
     },
-    "totalDurationFrames": 1800,
+    "totalDurationFrames": 720,
     "colorSpace": "Rec.709",
     "revision": 1
   },
   "creative": {
-    "concept": "A better place for every house party.",
-    "audience": "Young adults aged 18–25 in India.",
-    "message": "Find a private, ready-to-host space for your next gathering."
+    "concept": "Most household energy use is invisible. Gridsense makes every watt visible, room by room, so families can trim the peaks that cost them most.",
+    "audience": "Homeowners and renters who want lower power bills without giving up comfort.",
+    "message": "See where your power goes, trim the evening peak, and start saving this week.",
+    "visualDirection": "Confident dark-teal product advertisement with bright energy-green accents, large editorial typography and an animated data reveal."
   },
   "brand": {
     "colors": {
-      "primary": "#F5A623",
-      "ink": "#171717",
-      "surface": "#FFF8EE"
+      "background": "#0E2A3A",
+      "surface": "#14384E",
+      "accent": "#4ADE80",
+      "ink": "#0B2230",
+      "muted": "#A9C6D6",
+      "text": "#FFFFFF"
     },
     "fonts": {
-      "display": "Inter",
-      "body": "Inter"
+      "display": "Arial",
+      "body": "Arial"
     }
   },
   "assets": [],
+  "production": {
+    "script": [
+      {
+        "narration": "Your home is spending power right now. Most of it goes unseen.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Meet Gridsense, the energy monitor that shows every watt.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Clip on the sensor. Watch every room. Trim the evening peak.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Start saving this week. Order your Gridsense today.",
+        "leadInFrames": 12
+      }
+    ]
+  },
+  "audio": {
+    "tracks": []
+  },
   "scenes": [
     {
-      "id": "scene-001",
-      "name": "The problem",
-      "durationFrames": 240,
-      "intent": "Show the friction of planning a house party.",
+      "id": "scene-01",
+      "name": "The hidden cost",
+      "startFrame": 0,
+      "durationFrames": 180,
+      "intent": "Hook: energy is being spent right now and most of it is invisible.",
       "layers": [
         {
           "id": "s1-bg",
@@ -53,200 +81,130 @@
             "height": 1080
           },
           "style": {
-            "backgroundColor": "#171717",
-            "opacity": 1
+            "backgroundColor": "#0E2A3A"
           }
         },
         {
-          "id": "s1-title",
+          "id": "s1-eyebrow",
           "kind": "text",
           "engineHint": "hyperframes",
-          "typography": {
-            "family": "Inter",
-            "sizePx": 104,
-            "weight": 800,
-            "lineHeight": 1.04,
-            "alignment": "left",
-            "safeArea": true
-          },
           "content": {
-            "text": "Planning a house party\nshouldn't be this hard."
+            "text": "THE PROBLEM"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
           },
           "transform": {
             "x": 140,
-            "y": 350,
-            "width": 1600,
-            "height": 300
-          },
-          "style": {
-            "color": "#FFF8EE"
-          },
-          "motion": {
-            "preset": "fade-up",
-            "durationFrames": 40
-          }
-        }
-      ]
-    },
-    {
-      "id": "scene-002",
-      "name": "The reveal",
-      "durationFrames": 300,
-      "intent": "Introduce Opendoor as the solution.",
-      "layers": [
-        {
-          "id": "s2-product",
-          "kind": "3d",
-          "engineHint": "blender",
-          "requiredCapabilities": [
-            "3d",
-            "lighting"
-          ]
-        },
-        {
-          "id": "s2-title",
-          "kind": "text",
-          "engineHint": "hyperframes",
-          "typography": {
-            "family": "Inter",
-            "sizePx": 112,
-            "weight": 800,
-            "lineHeight": 1,
-            "alignment": "left",
-            "safeArea": true
-          },
-          "content": {
-            "text": "Make room for\nthe good times."
-          },
-          "transform": {
-            "x": 160,
-            "y": 340,
-            "width": 1500,
-            "height": 280
-          },
-          "style": {
-            "color": "#F5A623"
-          },
-          "motion": {
-            "preset": "fade-up"
-          }
-        }
-      ]
-    },
-    {
-      "id": "scene-003",
-      "name": "How it works",
-      "durationFrames": 360,
-      "intent": "Explain discovery, booking and hosting.",
-      "layers": [
-        {
-          "id": "s3-ui",
-          "kind": "image",
-          "engineHint": "hyperframes",
-          "content": {
-            "alt": "Opendoor booking interface preview"
-          },
-          "transform": {
-            "x": 1100,
-            "y": 170,
+            "y": 150,
             "width": 640,
-            "height": 740
+            "height": 48
           },
           "style": {
-            "backgroundColor": "#F5A623",
-            "borderRadius": 36,
-            "opacity": 1
-          }
-        },
-        {
-          "id": "s3-copy",
-          "kind": "text",
-          "engineHint": "hyperframes",
-          "typography": {
-            "family": "Inter",
-            "sizePx": 68,
-            "weight": 750,
-            "lineHeight": 1.12,
-            "alignment": "left",
-            "safeArea": true
-          },
-          "content": {
-            "text": "Find a space.\nBook by the hour.\nBring everyone together."
-          },
-          "transform": {
-            "x": 140,
-            "y": 300,
-            "width": 860,
-            "height": 460
-          },
-          "style": {
-            "color": "#171717"
+            "color": "#4ADE80"
           },
           "motion": {
-            "preset": "fade-up"
-          }
-        }
-      ]
-    },
-    {
-      "id": "scene-004",
-      "name": "The experience",
-      "durationFrames": 420,
-      "intent": "Build emotional appeal with the gathering experience.",
-      "layers": [
-        {
-          "id": "s4-footage",
-          "kind": "video",
-          "engineHint": "hyperframes",
-          "assetId": "opendoor-party-footage",
-          "transform": {
-            "x": 0,
-            "y": 0,
-            "width": 1920,
-            "height": 1080
+            "preset": "float",
+            "durationFrames": 24
           }
         },
         {
-          "id": "s4-overlay",
+          "id": "s1-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 230,
+            "width": 160,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s1-headline",
           "kind": "text",
           "engineHint": "hyperframes",
-          "requiredCapabilities": [
-            "advanced-typography"
-          ],
-          "typography": {
-            "family": "Inter",
-            "sizePx": 72,
-            "weight": 800,
-            "lineHeight": 1,
-            "alignment": "center",
-            "safeArea": true
-          },
           "content": {
-            "text": "Your people. Your place. Your night."
+            "text": "Your home is spending\npower right now."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 96,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
           },
           "transform": {
             "x": 140,
-            "y": 780,
-            "width": 1640,
+            "y": 280,
+            "width": 1200,
+            "height": 240
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s1-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Most of it goes unseen, unmeasured, and unmanaged."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 400,
+            "lineHeight": 1.2,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 580,
+            "width": 940,
             "height": 150
           },
           "style": {
-            "color": "#ffffff"
+            "color": "#A9C6D6"
           },
           "motion": {
-            "preset": "fade-up"
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 6
           }
         }
       ]
     },
     {
-      "id": "scene-005",
-      "name": "Call to action",
-      "durationFrames": 480,
-      "intent": "Close with a clear social call to action.",
+      "id": "scene-02",
+      "name": "Meet Gridsense",
+      "startFrame": 180,
+      "durationFrames": 180,
+      "intent": "Product reveal: a small meter sensor with a live usage readout.",
       "layers": [
         {
-          "id": "s5-logo",
+          "id": "s2-bg",
           "kind": "shape",
           "engineHint": "hyperframes",
           "transform": {
@@ -256,43 +214,661 @@
             "height": 1080
           },
           "style": {
-            "backgroundColor": "#F5A623",
-            "opacity": 1
+            "backgroundColor": "#14384E"
           }
         },
         {
-          "id": "s5-cta",
+          "id": "s2-eyebrow",
           "kind": "text",
           "engineHint": "hyperframes",
-          "allowOcclusion": true,
+          "content": {
+            "text": "MEET GRIDSENSE"
+          },
           "typography": {
-            "family": "Inter",
-            "sizePx": 112,
-            "weight": 800,
-            "lineHeight": 1,
-            "alignment": "center",
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
             "safeArea": true
           },
-          "content": {
-            "text": "Your next gathering\nstarts here."
-          },
           "transform": {
-            "x": 180,
-            "y": 270,
-            "width": 1560,
-            "height": 360
+            "x": 140,
+            "y": 150,
+            "width": 700,
+            "height": 48
           },
           "style": {
-            "color": "#171717"
+            "color": "#4ADE80"
           },
           "motion": {
-            "preset": "zoom"
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s2-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 230,
+            "width": 160,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s2-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Every watt,\nmade visible."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 96,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 280,
+            "width": 1060,
+            "height": 240
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s2-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "A small sensor on your meter. A live view of your home."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 400,
+            "lineHeight": 1.2,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 560,
+            "width": 900,
+            "height": 150
+          },
+          "style": {
+            "color": "#A9C6D6"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 6
+          }
+        },
+        {
+          "id": "s2-device",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 1210,
+            "y": 240,
+            "width": 540,
+            "height": 600
+          },
+          "style": {
+            "backgroundColor": "#0B2230",
+            "borderRadius": 28,
+            "border": "3px solid #4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-screen",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 1270,
+            "y": 300,
+            "width": 440,
+            "height": 280
+          },
+          "style": {
+            "backgroundColor": "#0E2A3A",
+            "borderRadius": 16
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-live-value",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "2.4 kW"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 64,
+            "weight": 800,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1270,
+            "y": 330,
+            "width": 440,
+            "height": 90
+          },
+          "style": {
+            "color": "#FFFFFF",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-live-label",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "LIVE USAGE NOW"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 28,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 4,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1270,
+            "y": 430,
+            "width": 440,
+            "height": 44
+          },
+          "style": {
+            "color": "#4ADE80",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s2-tagline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "No subscription. No electrician."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 30,
+            "weight": 500,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1210,
+            "y": 880,
+            "width": 540,
+            "height": 44
+          },
+          "style": {
+            "color": "#A9C6D6",
+            "textAlign": "center"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "How it works",
+      "startFrame": 360,
+      "durationFrames": 180,
+      "intent": "Proof: three simple steps next to an animated daily usage chart.",
+      "layers": [
+        {
+          "id": "s3-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#0E2A3A"
+          }
+        },
+        {
+          "id": "s3-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "HOW IT WORKS"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 150,
+            "width": 640,
+            "height": 48
+          },
+          "style": {
+            "color": "#4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s3-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 230,
+            "width": 160,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s3-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "See where\nthe power goes."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 88,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 280,
+            "width": 880,
+            "height": 220
+          },
+          "style": {
+            "color": "#FFFFFF"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s3-steps",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "1  Clip the sensor to your meter\n2  Watch live usage by room\n3  Trim the evening peak"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 36,
+            "weight": 500,
+            "lineHeight": 1.35,
+            "alignment": "left",
+            "maxLines": 4,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 560,
+            "width": 840,
+            "height": 300
+          },
+          "style": {
+            "color": "#A9C6D6"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 6
+          }
+        },
+        {
+          "id": "s3-chart",
+          "kind": "chart",
+          "engineHint": "hyperframes",
+          "content": {
+            "chartType": "bar",
+            "title": "Sample day profile (kWh)",
+            "xKey": "label",
+            "yKey": "value",
+            "data": [
+              {
+                "label": "Morning",
+                "value": 2.1
+              },
+              {
+                "label": "Midday",
+                "value": 1.2
+              },
+              {
+                "label": "Evening",
+                "value": 4.6
+              },
+              {
+                "label": "Night",
+                "value": 0.8
+              }
+            ]
+          },
+          "transform": {
+            "x": 1020,
+            "y": 260,
+            "width": 740,
+            "height": 420
+          },
+          "style": {
+            "color": "#4ADE80"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 32
+          }
+        },
+        {
+          "id": "s3-chart-caption",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Sample day in the Gridsense app"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 26,
+            "weight": 400,
+            "lineHeight": 1.1,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 1020,
+            "y": 700,
+            "width": 740,
+            "height": 44
+          },
+          "style": {
+            "color": "#7FA3B8"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-04",
+      "name": "Call to action",
+      "startFrame": 540,
+      "durationFrames": 180,
+      "intent": "Close on the brand accent color with a single clear ordering action.",
+      "layers": [
+        {
+          "id": "s4-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "style": {
+            "backgroundColor": "#4ADE80"
+          }
+        },
+        {
+          "id": "s4-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "READY WHEN YOU ARE"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 32,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 170,
+            "width": 760,
+            "height": 48
+          },
+          "style": {
+            "color": "#0B2230"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Stop paying for power\nyou never see."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 92,
+            "weight": 800,
+            "lineHeight": 1.08,
+            "alignment": "left",
+            "maxLines": 2,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 260,
+            "width": 1300,
+            "height": 280
+          },
+          "style": {
+            "color": "#0B2230"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "It pays for itself one peak at a time."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 400,
+            "lineHeight": 1.2,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 560,
+            "width": 900,
+            "height": 90
+          },
+          "style": {
+            "color": "#0B2230",
+            "opacity": 0.85
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-button",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 140,
+            "y": 680,
+            "width": 560,
+            "height": 110
+          },
+          "style": {
+            "backgroundColor": "#0B2230",
+            "borderRadius": 55
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-cta-text",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Get Gridsense today"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 42,
+            "weight": 800,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 706,
+            "width": 560,
+            "height": 56
+          },
+          "style": {
+            "color": "#FFFFFF",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-fineprint",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Ships free. 30-day money-back guarantee."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 26,
+            "weight": 500,
+            "lineHeight": 1.1,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 140,
+            "y": 840,
+            "width": 900,
+            "height": 44
+          },
+          "style": {
+            "color": "#0B2230",
+            "opacity": 0.8
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24
           }
         }
       ]
     }
   ],
   "delivery": {
+    "primaryTargetId": "master-16x9",
     "targets": [
       {
         "id": "master-16x9",
@@ -306,7 +882,8 @@
         "videoCodec": "libx264",
         "audioCodec": "aac",
         "colorSpace": "Rec.709",
-        "alpha": false
+        "alpha": false,
+        "audioRequired": true
       }
     ]
   }

@@ -59,7 +59,9 @@ options = args_after_separator()
 with open(options['--spec'], 'r', encoding='utf-8') as handle: spec = json.load(handle)
 for obj in list(bpy.data.objects): bpy.data.objects.remove(obj, do_unlink=True)
 scene = bpy.context.scene
-scene.render.engine = 'BLENDER_EEVEE_NEXT'
+available_engines = {item.identifier for item in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items}
+render_engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in available_engines else 'BLENDER_EEVEE'
+scene.render.engine = render_engine
 scene.render.resolution_x = spec['width']; scene.render.resolution_y = spec['height']; scene.render.resolution_percentage = 100
 scene.render.fps = spec['fpsNumerator']; scene.render.fps_base = spec['fpsDenominator']
 scene.render.image_settings.file_format = 'PNG'; scene.render.image_settings.color_mode = 'RGBA' if spec['alpha'] else 'RGB'; scene.render.film_transparent = spec['alpha']
@@ -77,10 +79,11 @@ for name, location, energy, size in [('Key', (4, -5, 6), 1200, 5), ('Fill', (-4,
 for item in spec['objects']: make_object(item)
 os.makedirs(spec['outputDirectory'], exist_ok=True)
 for frame in range(scene.frame_start, scene.frame_end + 1):
-    scene.frame_set(frame); scene.render.filepath = os.path.join(spec['outputDirectory'], 'frame_')
+    scene.frame_set(frame)
+    scene.render.filepath = os.path.join(spec['outputDirectory'], 'frame_' + str(frame).zfill(4))
     bpy.ops.render.render(write_still=True)
 with open(spec['metadataPath'], 'w', encoding='utf-8') as handle:
-    json.dump({'width': spec['width'], 'height': spec['height'], 'fpsNumerator': spec['fpsNumerator'], 'fpsDenominator': spec['fpsDenominator'], 'durationFrames': spec['durationFrames'], 'alpha': spec['alpha'], 'renderer': 'blender-eevee-next'}, handle, indent=2)
+    json.dump({'width': spec['width'], 'height': spec['height'], 'fpsNumerator': spec['fpsNumerator'], 'fpsDenominator': spec['fpsDenominator'], 'durationFrames': spec['durationFrames'], 'alpha': spec['alpha'], 'renderer': render_engine, 'blenderVersion': bpy.app.version_string}, handle, indent=2)
 `;
 
 function safeProjectId(value) {
@@ -138,19 +141,22 @@ export function buildBlenderSceneSpec(project, scene, { outputDirectory, metadat
   };
 }
 
-export async function renderBlenderScene(project, scene, { projectRoot, signal, onLine = () => {} } = {}) {
+export async function renderBlenderScene(project, scene, { projectRoot, signal, onLine = () => {}, threads } = {}) {
   if (!projectRoot) throw new Error('A projectRoot is required for Blender output isolation.');
   const projectId = safeProjectId(project?.project?.id), sceneId = safeProjectId(scene?.id);
   const root = path.resolve(projectRoot), engineRoot = path.join(root, 'engines', 'blender', sceneId);
   const framesDir = path.join(engineRoot, 'frames'), specPath = path.join(engineRoot, 'scene-spec.json'), driverPath = path.join(engineRoot, 'motion-studio-driver.py'), metadataPath = path.join(engineRoot, 'scene-output.json');
   const rootRelative = path.relative(root, engineRoot);
   if (rootRelative.startsWith('..') || path.isAbsolute(rootRelative)) throw new Error('Blender output path escaped the project root.');
+  if (threads !== undefined && (!Number.isInteger(threads) || threads < 1 || threads > 64)) throw new Error('threads must be a positive integer when provided.');
   await rm(framesDir, { recursive: true, force: true });
   await mkdir(framesDir, { recursive: true });
   const spec = buildBlenderSceneSpec(project, scene, { outputDirectory: framesDir, metadataPath });
   await writeFile(specPath, JSON.stringify(spec, null, 2) + '\n');
   await writeFile(driverPath, PYTHON_DRIVER, 'utf8');
-  const args = ['--background', '--factory-startup', '--python', driverPath, '--', '--spec', specPath];
+  const args = ['--background', '--factory-startup'];
+  if (threads !== undefined) args.push('--threads', String(threads));
+  args.push('--python', driverPath, '--', '--spec', specPath);
   const result = await new Promise((resolve, reject) => {
     const child = spawn('blender', args, { cwd: engineRoot, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], signal });
     let stdout = '', stderr = '';
@@ -181,7 +187,7 @@ export async function renderBlenderScene(project, scene, { projectRoot, signal, 
   const frameMetadata = probe.streams?.[0];
   if (!frameMetadata || frameMetadata.width !== project.project.canvas.width || frameMetadata.height !== project.project.canvas.height) throw new Error('Blender frame dimensions do not match the project canvas.');
   return {
-    projectId, sceneId, engine: 'blender', renderer: 'BLENDER_EEVEE_NEXT', frameRate: project.project.frameRate,
+    projectId, sceneId, engine: 'blender', renderer: metadata.renderer, blenderVersion: metadata.blenderVersion, threads: threads ?? null, frameRate: project.project.frameRate,
     durationFrames: scene.durationFrames, width: metadata.width, height: metadata.height, alpha: metadata.alpha,
     framesDirectory: framesDir, frameCount: evidence.length, firstFrame: evidence[0], lastFrame: evidence[evidence.length - 1],
     frameEvidenceDigest: createHash('sha256').update(JSON.stringify(evidence)).digest('hex'), frameMetadata, metadata, process: { code: result.code, logTail: (result.stderr || result.stdout).slice(-4000) }, verified: true
