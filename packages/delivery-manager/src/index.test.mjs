@@ -75,6 +75,30 @@ test('delivery refuses to package a referenced asset that escapes the project ro
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('registry-approved rights vocabulary satisfies delivery acceptance', async () => {
+  // asset-registry approveRights stamps metadata.rightsStatus='approved'; the
+  // delivery gate must treat that flow as cleared, not just manual 'cleared'/'user-owned'.
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-approved-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const assetBytes = Buffer.from('registry approved still');
+    await writeFile(path.join(projectDir, 'still.png'), assetBytes);
+    const input = project([
+      { id: 'still', kind: 'image', uri: 'still.png', sha256: createHash('sha256').update(assetBytes).digest('hex'), metadata: { rightsStatus: 'approved' } }
+    ]);
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    const result = await buildDeliveryPackage({
+      project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'),
+      renderManifest: { productionReady: true, verified: true, projectIrSha256: createHash('sha256').update(JSON.stringify(input)).digest('hex') }
+    });
+    assert.equal(result.acceptance.passed, true);
+    assert.equal(JSON.parse(await readFile(result.assetManifest, 'utf8')).assets[0].rightsStatus, 'approved');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('delivery records silence findings from the final audio-mixed variant', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-audio-'));
   try {

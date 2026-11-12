@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { resolveHyperFramesCli, createMediaQaContext, computeSceneTimeline, assertScopedSceneSegmentIdsUnique } from './index.mjs';
+import { resolveHyperFramesCli, createMediaQaContext, computeSceneTimeline, assertScopedSceneSegmentIdsUnique, renderManifestPathFor } from './index.mjs';
 import { evaluateRenderEvidence } from '../../core/src/index.mjs';
 
 test('render manager process execution never uses shell interpolation', async () => {
@@ -58,6 +58,22 @@ test('scoped renders reject scene ids that collide after sanitization', () => {
   assert.throws(() => assertScopedSceneSegmentIdsUnique([{ id: 'scene/1' }, { id: 'scene-1' }]), /sanitize to the same segment name/);
   assert.throws(() => assertScopedSceneSegmentIdsUnique([{ id: 'a b' }, { id: 'a-b' }]), /sanitize to the same segment name/);
   assert.doesNotThrow(() => assertScopedSceneSegmentIdsUnique([{ id: 'intro' }, { id: 'outro' }]));
+});
+
+test('label-scoped renders write their render-manifest sidecar beside the label, not over the master sidecar', () => {
+  const outputRoot = path.join('workspaces', 'ad', 'renders');
+  // No label: byte-identical to the historical path derivation.
+  assert.equal(renderManifestPathFor(outputRoot, path.join(outputRoot, 'ad-draft.mp4')), path.join(outputRoot, 'ad-draft.mp4.render.json'));
+  // Full render under a label no longer overwrites the master's sidecar.
+  assert.equal(
+    renderManifestPathFor(outputRoot, path.join(outputRoot, 'targeted', 'ad-draft.mp4'), 'targeted'),
+    path.join(outputRoot, 'targeted', 'ad-draft.mp4.render.json')
+  );
+  // Scoped re-renders key their sidecar by the label directory too.
+  assert.equal(
+    renderManifestPathFor(outputRoot, path.join(outputRoot, 'targeted', 'segments'), 'targeted'),
+    path.join(outputRoot, 'targeted', 'segments.render.json')
+  );
 });
 
 test('computeSceneTimeline uses declared starts when present and cumulative ones otherwise', () => {
@@ -131,7 +147,7 @@ test('media findings enter QA as localized render-media defects that keep frame 
   assert.equal(qa.passed, false);
   const defect = qa.defects.find(item => item.category === 'render-media');
   assert.deepEqual(defect.timeRangeFrames, { startFrame: 60, endFrame: 105 });
-  assert.equal(defect.defectId, 'media-001');
+  assert.equal(defect.defectId, 'media-audio-silence-segment-f60-905c8570');
   assert.equal(defect.severity, 'high');
   assert.equal(defect.code, 'AUDIO_SILENCE_SEGMENT');
   assert.equal(defect.sceneId, 'outro');

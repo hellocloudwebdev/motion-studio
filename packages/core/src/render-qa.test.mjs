@@ -90,7 +90,7 @@ test("converts media-analysis findings into localized render-media defects", () 
   assert.equal(result.summary.total, 4);
   const silence = result.defects.find(item => item.code === "AUDIO_SILENCE_SEGMENT");
   assert.deepEqual(silence.timeRangeFrames, { startFrame: 60, endFrame: 105 });
-  assert.equal(silence.defectId, "media-001");
+  assert.equal(silence.defectId, "media-audio-silence-segment-f60-905c8570");
   assert.equal(silence.category, "render-media");
   assert.equal(silence.severity, "high");
   assert.equal(silence.repairOwner, "audio-producer");
@@ -98,7 +98,7 @@ test("converts media-analysis findings into localized render-media defects", () 
   assert.equal(silence.retestRequired, true);
   assert.equal(silence.evidence.path, "renders/master.mp4.render.json");
   const quiet = result.defects.find(item => item.code === "AUDIO_PROGRAM_TOO_QUIET");
-  assert.equal(quiet.defectId, "media-002");
+  assert.equal(quiet.defectId, "media-audio-program-too-quiet-e524717e");
   assert.equal(quiet.timeRangeFrames, null);
   assert.equal(quiet.sceneId, "project");
   assert.equal(quiet.repairOwner, "audio-producer");
@@ -130,6 +130,22 @@ test("media findings with pre-converted integer ranges keep those frames", () =>
   const silence = result.defects.find(item => item.code === "AUDIO_SILENCE_SEGMENT");
   assert.deepEqual(silence.timeRangeFrames, { startFrame: 5, endFrame: 9 });
   assert.equal(silence.sceneId, "scene-a");
+});
+
+test("media defect ids stay stable when findings change position between cycles", () => {
+  const finding = { code: "AUDIO_SILENCE_SEGMENT", severity: "high", event: { start: 2, end: 3.5 }, message: "An audio-silence segment exceeded the configured threshold." };
+  const alone = evaluateRenderEvidence({ ...good, fpsRational: { numerator: 30, denominator: 1 } }, { mediaFindings: [finding] });
+  const preceded = evaluateRenderEvidence({ ...good, fpsRational: { numerator: 30, denominator: 1 } }, { mediaFindings: [
+    { code: "BLACK_FRAME_SEGMENT", severity: "medium", event: { start: 0.5, end: 1.25 }, message: "Unexpected black frames occur inside the rendered clip." },
+    finding
+  ] });
+  assert.equal(alone.defects[0].defectId, preceded.defects.find(item => item.code === "AUDIO_SILENCE_SEGMENT").defectId);
+  // A changed finding (different measured range) changes identity; a byte-equal
+  // duplicate of the same event is the only case that falls back to sequence.
+  const duplicated = evaluateRenderEvidence({ ...good, fpsRational: { numerator: 30, denominator: 1 } }, { mediaFindings: [finding, structuredClone(finding)] });
+  const ids = duplicated.defects.map(item => item.defectId);
+  assert.equal(ids[0], alone.defects[0].defectId);
+  assert.equal(ids[1], ids[0] + "-x2");
 });
 
 test("compiler blocking warnings still become blocking defects", () => {

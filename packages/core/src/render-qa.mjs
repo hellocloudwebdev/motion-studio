@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { secondsToFrameRange, mapEventToScenes, fpsValue } from "./frame-time.mjs";
 
 const severityRank = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -13,19 +14,47 @@ function mediaRepairOwner(code) {
   return "technical-qa";
 }
 
+// Media defect ids must survive repair cycles: the same finding at the same
+// frames keeps one identity across ledger entries, so the id is derived from
+// stable content (code + frame range + hash of the measured event) instead of
+// list position. The sequence number only breaks ties between byte-identical
+// duplicate findings.
+function stableMediaDefectId(finding, range, tiebreaker) {
+  const code = String(finding.code || "MEDIA_FINDING");
+  const slug = code.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "finding";
+  const event = finding.event && typeof finding.event === "object" ? finding.event : null;
+  const atSeconds = Number.isFinite(Number(finding.atSeconds)) ? Number(finding.atSeconds) : null;
+  const payload = JSON.stringify({
+    code,
+    startFrame: range ? range.startFrame : null,
+    endFrame: range ? range.endFrame : null,
+    ...(event ? { event } : {}),
+    ...(atSeconds !== null ? { atSeconds } : {}),
+    ...(finding.text === undefined ? {} : { text: String(finding.text) }),
+    ...(finding.box === undefined ? {} : { box: finding.box }),
+    ...(finding.value === undefined ? {} : { value: finding.value }),
+    ...(finding.threshold === undefined ? {} : { threshold: finding.threshold }),
+    message: String(finding.message || "")
+  });
+  const digest = createHash("sha256").update(payload).digest("hex").slice(0, 8);
+  return "media-" + slug + (range ? "-f" + range.startFrame : "") + "-" + digest + (tiebreaker > 1 ? "-x" + String(tiebreaker) : "");
+}
+
 function mediaFindingDefects(findings, { fps, scenes, evidencePath }) {
   const defects = [];
-  let sequence = 0;
+  const seenIds = new Map();
   for (const finding of Array.isArray(findings) ? findings : []) {
     if (!finding || typeof finding !== "object") continue;
-    sequence += 1;
     const code = String(finding.code || "MEDIA_FINDING");
     const range = finding.timeRangeFrames && Number.isInteger(finding.timeRangeFrames.startFrame) && Number.isInteger(finding.timeRangeFrames.endFrame) ? { startFrame: finding.timeRangeFrames.startFrame, endFrame: finding.timeRangeFrames.endFrame } : secondsToFrameRange(finding.event ?? finding.atSeconds ?? null, fps);
+    const baseId = stableMediaDefectId(finding, range, 1);
+    const occurrence = (seenIds.get(baseId) || 0) + 1;
+    seenIds.set(baseId, occurrence);
     const sceneIds = range ? mapEventToScenes(range.startFrame, range.endFrame, scenes) : [];
     const evidence = { type: "media-analysis", ...(evidencePath ? { path: evidencePath } : {}), ...(sceneIds.length > 1 ? { sceneIds } : {}) };
     // Measured value/threshold ride along so conditional repair builders (audio
     // gain rows) can derive bounded ops from the defect itself.
-    defects.push({ defectId: "media-" + String(sequence).padStart(3, "0"), category: "render-media", severity: knownSeverities.has(finding.severity) ? finding.severity : "medium", code, description: String(finding.message || "A media-analysis finding was recorded against the rendered output."), repairOwner: mediaRepairOwner(code), sceneId: sceneIds[0] || "project", timeRangeFrames: range, evidence, ...(finding.value === undefined ? {} : { value: finding.value }), ...(finding.threshold === undefined ? {} : { threshold: finding.threshold }), retestRequired: true });
+    defects.push({ defectId: baseId + (occurrence > 1 ? "-x" + String(occurrence) : ""), category: "render-media", severity: knownSeverities.has(finding.severity) ? finding.severity : "medium", code, description: String(finding.message || "A media-analysis finding was recorded against the rendered output."), repairOwner: mediaRepairOwner(code), sceneId: sceneIds[0] || "project", timeRangeFrames: range, evidence, ...(finding.value === undefined ? {} : { value: finding.value }), ...(finding.threshold === undefined ? {} : { threshold: finding.threshold }), retestRequired: true });
   }
   return defects;
 }

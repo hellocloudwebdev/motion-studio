@@ -7,6 +7,7 @@ import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-r
 import { loadQualityGates } from '../../../packages/orchestrator/src/quality-gates.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
 import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
+import { renderMixedProject } from '../../../packages/render-manager/src/mixed-render.mjs';
 import { runRepairLoop } from '../../../packages/repair-executor/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
@@ -321,6 +322,27 @@ if (command === 'assets') {
       }
     }
   }
+} else if (command === 'render-mixed') {
+  // Mixed 2D/3D path: routes each scene to its engine (HyperFrames scoped
+  // segments / Blender frame sequences), assembles in IR scene order and
+  // verifies the master. Concurrency stays 1; fails closed on unsupported
+  // shapes (mixed engines in one scene, non-contiguous timelines).
+  if (!file) throw new Error('Usage: motion-studio render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>]');
+  const mixedProject = await load(file);
+  const mixedValidation = validateProject(mixedProject);
+  if (!mixedValidation.valid) { print(mixedValidation); process.exitCode = 1; }
+  else {
+    const target = paths(mixedProject, file);
+    const result = await renderMixedProject(mixedProject, {
+      projectRoot: option('--project-root', target.projectRoot),
+      outputRoot: option('--render-dir', target.outputRoot),
+      quality: option('--quality', 'draft'),
+      threads: Number(option('--threads', '2')),
+      installRoot: process.cwd()
+    });
+    print(result);
+    if (!result.verified || !result.productionReady) process.exitCode = 2;
+  }
 } else if (command === 'repair') {
   // Repair loop entry (design §4.2 step 1). No shell spawning: the executor
   // renders through render-manager's fixed-executable argv paths, workers
@@ -369,5 +391,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

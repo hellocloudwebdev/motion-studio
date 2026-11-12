@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildTranscodePlan, buildProbePlan, buildFinalizationPlan, parseProbeOutput, renderCaptions, runMediaCommand, finalizeMedia } from './index.mjs';
+import { buildTranscodePlan, buildProbePlan, buildFinalizationPlan, parseProbeOutput, renderCaptions, runMediaCommand, finalizeMedia, buildSceneAssemblyPlan, assembleScenes, countVideoFrames } from './index.mjs';
 
 test('transcode plan uses an argument array and explicit paths', () => {
   const plan = buildTranscodePlan({ input: 'source.mp4', output: 'final.mp4', width: 1920, height: 1080, fps: 30 });
@@ -62,5 +62,84 @@ test('FFmpeg mixes, trims, fades and ducks real audio tracks into a verified MP4
     assert.equal(result.media.hasAudio, true);
     assert.equal(result.media.width, 320);
     assert.ok(Math.abs(result.media.durationSeconds - 2) < 0.04);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+function makeSegment(file, { frames, size = '320x180', rate = 30, source } = {}) {
+  const input = source || 'testsrc2=size=' + size + ':rate=' + rate;
+  return runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', input, '-frames:v', String(frames), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file]);
+}
+
+async function rawGrayFrame(file, atSeconds, output) {
+  const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', file];
+  if (atSeconds !== undefined) args.push('-ss', atSeconds.toFixed(4));
+  args.push('-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'gray', output);
+  await runMediaCommand('ffmpeg', args);
+  return readFile(output);
+}
+
+test('scene assembly plan uses the concat demuxer with an argument array and validates input', () => {
+  const plan = buildSceneAssemblyPlan({ sceneFiles: [{ path: 'a.mp4', durationFrames: 30 }, { path: 'b.mp4', durationFrames: 15 }], fps: { numerator: 30, denominator: 1 }, output: 'master.mp4', width: 320, height: 180 });
+  assert.equal(plan.executable, 'ffmpeg');
+  assert.ok(Array.isArray(plan.args));
+  assert.deepEqual(plan.args.slice(0, 6), ['-hide_banner', '-y', '-f', 'concat', '-safe', '0']);
+  assert.ok(plan.args.includes('-r'));
+  assert.ok(plan.args.includes('30'));
+  assert.equal(plan.expected.frameCount, 45);
+  assert.throws(() => buildSceneAssemblyPlan({ sceneFiles: [], fps: { numerator: 30, denominator: 1 }, output: 'm.mp4' }), /non-empty sceneFiles/);
+  assert.throws(() => buildSceneAssemblyPlan({ sceneFiles: [{ path: 'a.mp4', durationFrames: 30 }], fps: { numerator: 29.97, denominator: 1 }, output: 'm.mp4' }), /positive integer rational fps/);
+  assert.throws(() => buildSceneAssemblyPlan({ sceneFiles: [{ path: 'a.mp4', durationFrames: 0 }], fps: { numerator: 30, denominator: 1 }, output: 'm.mp4' }), /positive integer/);
+  assert.throws(() => buildSceneAssemblyPlan({ sceneFiles: [{ path: 'a.mp4', durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: 'm.mp4', videoCodec: 'mpeg2video' }), /allowlist/);
+  // A line break in any path would inject a concat-list directive.
+  assert.throws(() => buildSceneAssemblyPlan({ sceneFiles: [{ path: "a.mp4'\nfile 'C:/evil.mp4", durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: 'm.mp4' }), /line-break control character/);
+  assert.throws(() => buildSceneAssemblyPlan({ sceneFiles: [{ path: 'a.mp4', durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: 'out\r\nput.mp4' }), /line-break control character/);
+});
+
+test('assembles scene segments in exact order into a verified master', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ffmpeg-concat-'));
+  try {
+    const first = path.join(root, 'scene-01.mp4'), second = path.join(root, 'scene-02.mp4'), master = path.join(root, 'master.mp4');
+    await makeSegment(first, { frames: 30 });
+    await makeSegment(second, { frames: 15 });
+    const receipt = await assembleScenes({ sceneFiles: [{ path: first, durationFrames: 30 }, { path: second, durationFrames: 15 }], fps: { numerator: 30, denominator: 1 }, output: master, width: 320, height: 180 });
+    assert.equal(receipt.verified, true);
+    assert.equal(receipt.frameCount, 45);
+    assert.equal(receipt.expectedFrameCount, 45);
+    assert.equal(receipt.media.width, 320);
+    assert.equal(receipt.media.height, 180);
+    assert.equal(await countVideoFrames(master), 45);
+    assert.ok(receipt.bytes > 0);
+    assert.equal(receipt.totalDurationFrames, 45);
+    // Exact cross-segment frame ordering is proven by the color-sequence test below.
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('assembly frame order follows the sceneFiles list, not an alphabetical guess', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ffmpeg-order-'));
+  try {
+    const red = path.join(root, 'z-last-file.mp4'), blue = path.join(root, 'a-first-file.mp4');
+    await makeSegment(red, { frames: 15, source: 'color=c=red:s=320x180:r=30' });
+    await makeSegment(blue, { frames: 15, source: 'color=c=blue:s=320x180:r=30' });
+    const masterRedFirst = path.join(root, 'red-first.mp4');
+    await assembleScenes({ sceneFiles: [{ path: red, durationFrames: 15 }, { path: blue, durationFrames: 15 }], fps: { numerator: 30, denominator: 1 }, output: masterRedFirst });
+    const redFirst = await rawGrayFrame(masterRedFirst, 0, path.join(root, 'rf.raw'));
+    const blueFirst = await rawGrayFrame(masterRedFirst, 0.5, path.join(root, 'bf.raw'));
+    assert.notDeepEqual(redFirst, blueFirst);
+    const redSegmentFrame = await rawGrayFrame(red, 0, path.join(root, 'r.raw'));
+    assert.deepEqual(redFirst, redSegmentFrame);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('assembly fails closed on missing segments, dimension, frame-rate and duration mismatches', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ffmpeg-concat-guard-'));
+  try {
+    const good = path.join(root, 'good.mp4'), wide = path.join(root, 'wide.mp4'), slow = path.join(root, 'slow.mp4'), missing = path.join(root, 'gone.mp4');
+    await makeSegment(good, { frames: 30 });
+    await makeSegment(wide, { frames: 30, size: '320x240' });
+    await makeSegment(slow, { frames: 30, rate: 24, size: '320x180' });
+    await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: missing, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /missing/);
+    await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 30 }, { path: wide, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /SCENE_DIMENSION_MISMATCH/);
+    await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 30 }, { path: slow, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /SCENE_FRAME_RATE_MISMATCH/);
+    await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 60 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /SCENE_DURATION_MISMATCH/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

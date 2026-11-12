@@ -8,9 +8,20 @@ import { evaluateRenderEvidence, createRepairPlan, persistQaRecord, runVisualCri
 import { analyzeRenderedMedia } from './media-analysis.mjs';
 
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+
 // Matches the HyperFrames adapter's safeId sanitization for scene composition
-// file names (scenes/<id>.html).
-const safeSceneId = value => String(value).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'scene';
+// file names (scenes/<id>.html). Exported so downstream assembly paths (mixed
+// renders) key their own artifacts by the same segment names.
+export const safeSceneId = value => String(value).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'scene';
+
+// The render manifest sidecar is derived from the output artifact. Label-scoped
+// renders (targeted re-renders, mixed scene passes) must not overwrite the
+// master's sidecar, so a render label scopes the sidecar into the label
+// directory as well; the default no-label path stays byte-identical.
+export function renderManifestPathFor(outputRoot, outputFile, renderLabel = null) {
+  const sidecar = path.join(outputRoot, path.basename(outputFile) + '.render.json');
+  return renderLabel ? path.join(path.dirname(sidecar), renderLabel, path.basename(sidecar)) : sidecar;
+}
 
 // Scoped segment paths are keyed by the adapter's sanitized scene-id form; two
 // distinct scene ids that sanitize to the same segment name would overwrite each
@@ -64,7 +75,9 @@ function run(command, args, { cwd, env = process.env, onLine = () => {}, signal,
   });
 }
 
-function rationalFps(frameRate) {
+// Exported for downstream render paths (mixed renders) that must validate and
+// format the same Canonical IR rational frame rate.
+export function rationalFps(frameRate) {
   const numerator = Number(frameRate?.numerator);
   const denominator = Number(frameRate?.denominator);
   if (!Number.isInteger(numerator) || numerator <= 0 || !Number.isInteger(denominator) || denominator <= 0) {
@@ -84,6 +97,13 @@ export function createMediaQaContext(mediaAnalysis, project, evidencePath = null
     scenes: Array.isArray(project?.scenes) ? project.scenes : [],
     evidencePath: evidencePath || null
   };
+}
+
+// Compiler warnings that block production readiness wherever they appear
+// (full renders, scoped re-renders, mixed scene passes). Shared so every render
+// path classifies blockers identically.
+export function compilerBlockerWarnings(warnings) {
+  return (Array.isArray(warnings) ? warnings : []).filter(x => ['ASSET_REFERENCE_MISSING', 'ASSET_FILE_MISSING', 'EXTERNAL_ASSET', 'NON_HYPERFRAMES_LAYER', 'UNSUPPORTED_LAYER_KIND'].includes(x.code));
 }
 
 export async function renderHyperFramesProject(project, options = {}) {
@@ -272,7 +292,7 @@ export async function renderHyperFramesProject(project, options = {}) {
   }
   checks.mediaAnalysisPassed = mediaAnalysis.passed;
   const verified = Object.values(checks).every(Boolean) && frameEvidence.every(x => x.decoded);
-  const compilerBlockers = compile.warnings.filter(x => ['ASSET_REFERENCE_MISSING', 'ASSET_FILE_MISSING', 'EXTERNAL_ASSET', 'NON_HYPERFRAMES_LAYER', 'UNSUPPORTED_LAYER_KIND'].includes(x.code));
+  const compilerBlockers = compilerBlockerWarnings(compile.warnings);
   const mediaBlockers = mediaAnalysis.findings.filter(x => x.severity === 'critical' || x.severity === 'high').map(x => ({ code: x.code, message: x.message }));
   const blockingWarnings = [...compilerBlockers, ...mediaBlockers];
   const manifest = {
@@ -303,7 +323,7 @@ export async function renderHyperFramesProject(project, options = {}) {
     verified,
     productionReady: false
   };
-  const renderManifestPath = path.join(outputRoot, path.basename(outputFile) + '.render.json');
+  const renderManifestPath = renderManifestPathFor(outputRoot, outputFile, renderLabel);
   // Media blockers stay on the manifest record; inside QA they are represented as
   // localized render-media defects instead of lossy BLOCKING_* warnings.
   const qaResult = evaluateRenderEvidence(

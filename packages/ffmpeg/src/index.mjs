@@ -1,10 +1,13 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { access, mkdir, stat } from 'node:fs/promises';
+import { access, mkdir, stat, writeFile } from 'node:fs/promises';
 
 function assertSafePath(value, label) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(label + ' must be a non-empty path.');
   if (value.includes('\0')) throw new Error(label + ' contains a null byte.');
+  // Line-based consumers (e.g. the concat demuxer list file) treat a control
+  // character as a directive boundary — reject them before any escaping.
+  if (/[\n\r\u2028\u2029]/.test(value)) throw new Error(label + ' contains a line-break control character.');
   return path.resolve(value);
 }
 
@@ -150,6 +153,119 @@ export async function finalizeMedia(options = {}) {
   const receipt = { output: plan.output, bytes: outputStat.size, verified: result.passed, media: result.media, checks: result, createdAt: new Date().toISOString(), input: plan.input, audio: plan.audio, subtitlePath: plan.subtitlePath };
   if (!result.passed) throw Object.assign(new Error('Final media failed independent FFprobe inspection.'), { receipt });
   return receipt;
+}
+
+// Scene assembly (v2 master refresh path): concat per-scene MP4 segments in
+// exact IR scene order through the FFmpeg concat demuxer with a deterministic
+// re-encode. Every segment is probed before encoding and the assembled master
+// is probed afterwards; any mismatch fails closed with a receipt attached.
+export function buildSceneAssemblyPlan({ sceneFiles, fps, output, videoCodec = 'libx264', crf = 18, width, height } = {}) {
+  if (!Array.isArray(sceneFiles) || !sceneFiles.length) throw new Error('Scene assembly requires a non-empty sceneFiles array.');
+  const numerator = Number(fps?.numerator), denominator = Number(fps?.denominator);
+  if (!Number.isInteger(numerator) || numerator <= 0 || !Number.isInteger(denominator) || denominator <= 0) throw new Error('Scene assembly requires a positive integer rational fps.');
+  if (!SAFE_VIDEO_CODECS.has(videoCodec)) throw new Error('Video codec is not in the delivery allowlist.');
+  if (!Number.isFinite(crf) || crf < 0 || crf > 51) throw new Error('Invalid crf.');
+  const target = assertSafePath(output, 'output');
+  const segments = sceneFiles.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') throw new Error('sceneFiles[' + index + '] must be an object with path and durationFrames.');
+    const segmentPath = assertSafePath(entry.path, 'sceneFiles[' + index + '].path');
+    if (!Number.isInteger(entry.durationFrames) || entry.durationFrames <= 0) throw new Error('sceneFiles[' + index + '].durationFrames must be a positive integer.');
+    return { path: segmentPath, durationFrames: entry.durationFrames };
+  });
+  let expectedWidth = null, expectedHeight = null;
+  if (width !== undefined || height !== undefined) {
+    expectedWidth = Number(width); expectedHeight = Number(height);
+    if (!Number.isInteger(expectedWidth) || expectedWidth <= 0 || !Number.isInteger(expectedHeight) || expectedHeight <= 0) throw new Error('Scene assembly target dimensions must be positive integers when provided.');
+  }
+  const fpsArgument = denominator === 1 ? String(numerator) : numerator + '/' + denominator;
+  const listPath = path.join(path.dirname(target), path.basename(target) + '.concat-list.txt');
+  // Concat demuxer list entries: absolute paths, quoted, with ffmpeg's single-
+  // quote escaping; forward slashes keep Windows paths parseable.
+  const listEntries = segments.map(segment => "file '" + segment.path.replace(/\\/g, '/').replace(/'/g, "'\\''") + "'");
+  const args = ['-hide_banner', '-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c:v', videoCodec];
+  if (videoCodec === 'prores_ks') args.push('-profile:v', '3', '-pix_fmt', 'yuv422p10le');
+  else if (videoCodec === 'libvpx-vp9') args.push('-crf', String(Math.round(crf)), '-b:v', '0', '-pix_fmt', 'yuv420p');
+  else args.push('-crf', String(Math.round(crf)), '-pix_fmt', 'yuv420p');
+  // Re-encode at the exact rational fps; audio is dropped in v1 (assembly is
+  // video-only — audio mixes happen at delivery through finalizeMedia).
+  args.push('-r', fpsArgument, '-an');
+  if (!target.toLowerCase().endsWith('.webm')) args.push('-movflags', '+faststart');
+  args.push(target);
+  return { executable: 'ffmpeg', args, listPath, listEntries, output: target, sceneFiles: segments, fps: { numerator, denominator }, fpsArgument, expected: { width: expectedWidth, height: expectedHeight, fps: numerator / denominator, frameCount: segments.reduce((sum, segment) => sum + segment.durationFrames, 0), videoCodec, crf: Math.round(crf) } };
+}
+
+export async function countVideoFrames(input, options = {}) {
+  const source = assertSafePath(input, 'input');
+  const result = await runMediaCommand('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-count_frames', '-show_entries', 'stream=nb_read_frames', '-of', 'json', source], options);
+  const count = Number(JSON.parse(result.stdout).streams?.[0]?.nb_read_frames);
+  if (!Number.isInteger(count) || count < 0) throw new Error('FFprobe could not count decoded video frames for ' + source + '.');
+  return count;
+}
+
+function rationalFrameRateValue(frameRate) {
+  const [n, d = '1'] = String(frameRate).split('/');
+  const value = Number(n) / Number(d);
+  return Number.isFinite(value) ? value : NaN;
+}
+
+export async function assembleScenes(options = {}) {
+  const plan = buildSceneAssemblyPlan(options);
+  const fpsValue = plan.expected.fps;
+  // One frame of container-rounding slack, matching render-manager's
+  // durationWithinOneFrame convention.
+  const frameTolerance = 1 / fpsValue + 0.02;
+  const timeoutMs = options.timeoutMs === undefined ? null : Number(options.timeoutMs);
+  if (timeoutMs !== null && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) throw new Error('timeoutMs must be a positive number when provided.');
+  const timeoutController = timeoutMs !== null ? new AbortController() : null;
+  const signals = [options.signal, timeoutController?.signal].filter(Boolean);
+  const commandSignal = signals.length ? AbortSignal.any(signals) : undefined;
+  const timer = timeoutController ? setTimeout(() => timeoutController.abort(), timeoutMs) : null;
+  try {
+    // Fail closed before encoding: every segment must exist and match the
+    // target dimensions, frame rate and declared frame duration.
+    const segments = [];
+    let targetWidth = plan.expected.width, targetHeight = plan.expected.height;
+    for (const [index, segment] of plan.sceneFiles.entries()) {
+      try { await access(segment.path); }
+      catch { throw new Error('Scene segment file is missing: ' + segment.path); }
+      const media = await probeMedia(segment.path, { signal: commandSignal });
+      if (targetWidth === null) { targetWidth = media.width; targetHeight = media.height; }
+      const mismatches = [];
+      if (media.width !== targetWidth || media.height !== targetHeight) mismatches.push({ code: 'SCENE_DIMENSION_MISMATCH', expected: { width: targetWidth, height: targetHeight }, actual: { width: media.width, height: media.height } });
+      if (Math.abs(rationalFrameRateValue(media.frameRate) - fpsValue) >= 0.001) mismatches.push({ code: 'SCENE_FRAME_RATE_MISMATCH', expected: fpsValue, actual: media.frameRate });
+      const expectedSeconds = segment.durationFrames / fpsValue;
+      if (Math.abs(media.durationSeconds - expectedSeconds) > frameTolerance) mismatches.push({ code: 'SCENE_DURATION_MISMATCH', expectedFrames: segment.durationFrames, expectedSeconds, actualSeconds: media.durationSeconds });
+      if (mismatches.length) throw Object.assign(new Error('Scene segment ' + index + ' failed pre-assembly verification: ' + mismatches.map(item => item.code).join(', ') + ' (' + segment.path + ')'), { mismatches, segmentPath: segment.path });
+      segments.push({ path: segment.path, durationFrames: segment.durationFrames, durationSeconds: media.durationSeconds, width: media.width, height: media.height, frameRate: media.frameRate });
+    }
+    await mkdir(path.dirname(plan.output), { recursive: true });
+    await writeFile(plan.listPath, plan.listEntries.join('\n') + '\n', 'utf8');
+    try { await runMediaCommand(plan.executable, plan.args, { signal: commandSignal, onProgress: options.onLine }); }
+    catch (error) {
+      if (timeoutController?.signal.aborted) throw new Error('Scene assembly timed out after ' + timeoutMs + 'ms.');
+      throw error;
+    }
+    const outputStat = await stat(plan.output);
+    if (!outputStat.isFile() || outputStat.size === 0) throw new Error('FFmpeg returned without a non-empty assembled master at ' + plan.output);
+    const media = await probeMedia(plan.output, { signal: commandSignal });
+    const frameCount = await countVideoFrames(plan.output, { signal: commandSignal });
+    const checks = {
+      widthMatches: media.width === targetWidth,
+      heightMatches: media.height === targetHeight,
+      frameRateMatch: Math.abs(rationalFrameRateValue(media.frameRate) - fpsValue) < 0.001,
+      frameCountMatchesTimeline: frameCount === plan.expected.frameCount,
+      nonEmpty: outputStat.size > 0
+    };
+    const receipt = {
+      output: plan.output, bytes: outputStat.size, verified: Object.values(checks).every(Boolean),
+      checks, media, frameCount, expectedFrameCount: plan.expected.frameCount,
+      sceneCount: plan.sceneFiles.length, totalDurationFrames: plan.expected.frameCount,
+      fps: fpsValue, fpsRational: plan.fpsArgument, videoCodec: plan.expected.videoCodec,
+      audio: 'none', listPath: plan.listPath, segments, createdAt: new Date().toISOString()
+    };
+    if (!receipt.verified) throw Object.assign(new Error('Assembled master failed independent FFprobe verification: ' + Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', ')), { receipt });
+    return receipt;
+  } finally { if (timer) clearTimeout(timer); }
 }
 
 function timestamp(seconds, decimalSeparator) {

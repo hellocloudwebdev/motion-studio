@@ -170,7 +170,9 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     ffprobe: await runMediaCommand('ffprobe', ['-version'], { signal }).then(result => result.stdout.split(/\r?\n/)[0]).catch(() => null)
   };
   const softwareEvidencePath = await saveEvidence('software-versions.json', softwareVersions);
-  const rightsCleared = assetManifest.every(asset => ['cleared', 'user-owned'].includes(asset.rightsStatus) || asset.kind === 'generated');
+  // 'approved' is the asset-registry approve-rights vocabulary; a registry
+  // approval flow must satisfy delivery acceptance the same as manual clearance.
+  const rightsCleared = assetManifest.every(asset => ['cleared', 'user-owned', 'approved'].includes(asset.rightsStatus) || asset.kind === 'generated');
   const assetsPackaged = assetManifest.every(asset => asset.included);
   const canonicalIrSha256 = createHash('sha256').update(JSON.stringify(project)).digest('hex');
   const renderSourceMatches = renderManifest?.projectIrSha256 === canonicalIrSha256;
