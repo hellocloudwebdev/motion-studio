@@ -3,12 +3,12 @@
   "projectId": "offline-narrated-explainer-18s-fish",
   "runId": "run-offline-narrated-explainer-18s-fish-1794586664948",
   "status": "qa",
-  "revision": 1,
+  "revision": 2,
   "repairCycles": 0,
   "inputs": {
-    "projectIrSha256": "2178755394fc539b5872b5102abb98a65c825c0b625f4c1bd4111001c2a14768",
-    "projectFileSha256": "99f491d9e6c70fbbf1dcad336627d4ffe4ee1a414545d747be834bcbb5183700",
-    "recordedAt": "2026-11-13T16:17:44.948Z"
+    "projectIrSha256": "3ba52a72c97a1edb3a67063ffde98fb24aa4672bca8ff6cba0ac1906776edf28",
+    "projectFileSha256": "723001d4c47984021bc0082e1a79f01d28ed1195a27ac0140fa5d0e6a3084765",
+    "recordedAt": "2026-11-13T17:23:22.794Z"
   },
   "policy": {
     "maxCycles": 2,
@@ -26,6 +26,15 @@
       "verified": true,
       "projectIrSha256": "2178755394fc539b5872b5102abb98a65c825c0b625f4c1bd4111001c2a14768",
       "recordedAt": "2026-11-13T16:18:40.024Z"
+    },
+    {
+      "id": "master-3ba52a72",
+      "kind": "master-render",
+      "path": "D:\\motions\\motion-studio\\projects\\offline-narrated-explainer-18s-fish\\renders\\offline-narrated-explainer-18s-fish-draft.mp4",
+      "sha256": "9429f5ab90611f732309b111278bfabaf5514bc7635317a63e075d1dcae5aef7",
+      "verified": true,
+      "projectIrSha256": "3ba52a72c97a1edb3a67063ffde98fb24aa4672bca8ff6cba0ac1906776edf28",
+      "recordedAt": "2026-11-13T17:24:16.014Z"
     }
   ],
   "events": [
@@ -42,45 +51,57 @@
       }
     },
     {
+      "revision": 2,
+      "from": "qa",
+      "to": "planned",
+      "at": "2026-11-13T17:23:22.795Z",
+      "type": "inputs-invalidated",
+      "metadata": {
+        "projectIrSha256": "3ba52a72c97a1edb3a67063ffde98fb24aa4672bca8ff6cba0ac1906776edf28",
+        "projectFileSha256": "723001d4c47984021bc0082e1a79f01d28ed1195a27ac0140fa5d0e6a3084765",
+        "droppedArtifacts": []
+      }
+    },
+    {
       "revision": 0,
       "from": null,
       "to": "draft",
-      "at": "2026-11-13T16:17:44.950Z",
+      "at": "2026-11-13T17:23:22.797Z",
       "metadata": {}
     },
     {
       "revision": 1,
       "from": "draft",
       "to": "planned",
-      "at": "2026-11-13T16:17:44.951Z",
+      "at": "2026-11-13T17:23:22.798Z",
       "metadata": {}
     },
     {
       "revision": 2,
       "from": "planned",
       "to": "rendering",
-      "at": "2026-11-13T16:17:44.951Z",
+      "at": "2026-11-13T17:23:22.798Z",
       "metadata": {}
     },
     {
       "revision": 3,
       "from": "rendering",
       "to": "qa",
-      "at": "2026-11-13T16:18:40.021Z",
+      "at": "2026-11-13T17:24:16.010Z",
       "metadata": {}
     },
     {
       "revision": 4,
       "from": "qa",
       "to": "qa",
-      "at": "2026-11-13T16:18:40.024Z",
+      "at": "2026-11-13T17:24:16.014Z",
       "metadata": {
         "event": "artifact-recorded",
-        "artifactId": "master-21787553"
+        "artifactId": "master-3ba52a72"
       }
     }
   ],
-  "updatedAt": "2026-11-13T16:18:40.024Z",
+  "updatedAt": "2026-11-13T17:24:16.014Z",
   "repair": {
     "cycles": 0,
     "maxCycles": 2,

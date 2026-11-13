@@ -49,7 +49,7 @@
       "sha256": "00c7cf467b66b48167b0bb862a0c58bc653b810563108f72f128b0533f3feaa4",
       "byteSize": 185792,
       "source": "fish-audio",
-      "rightsStatus": "unknown",
+      "rightsStatus": "cleared",
       "metadata": {
         "generated": true,
         "provider": "fish-audio",
@@ -61,7 +61,15 @@
         "sampleRate": 44100,
         "channels": 1,
         "durationSeconds": 2.105601,
-        "trailingSilenceTrimmedSeconds": 0.203106
+        "trailingSilenceTrimmedSeconds": 0.203106,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration (free-tier terms accepted); producer-reviewed after comparing Fish vs system-SAPI versions and selecting Fish",
+          "usageScope": "Motion Studio mandatory acceptance productions (kinetic-type-acceptance, offline-narrated-explainer-18s-fish)",
+          "note": "Producer reviewed both pending masters and stated the Fish voice is better — approval recorded 2026-11-13.",
+          "approvedAt": "2026-11-13T17:22:08.052Z"
+        }
       }
     },
     {
@@ -71,7 +79,7 @@
       "sha256": "7dc2f62a959f56e3f02032d00e66b8b5f46c3b9ddc9f14a250fca8e2ce5be8dd",
       "byteSize": 173126,
       "source": "fish-audio",
-      "rightsStatus": "unknown",
+      "rightsStatus": "cleared",
       "metadata": {
         "generated": true,
         "provider": "fish-audio",
@@ -83,7 +91,15 @@
         "sampleRate": 44100,
         "channels": 1,
         "durationSeconds": 1.961995,
-        "trailingSilenceTrimmedSeconds": 0.20004599999999995
+        "trailingSilenceTrimmedSeconds": 0.20004599999999995,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration (free-tier terms accepted); producer-reviewed after comparing Fish vs system-SAPI versions and selecting Fish",
+          "usageScope": "Motion Studio mandatory acceptance productions (kinetic-type-acceptance, offline-narrated-explainer-18s-fish)",
+          "note": "Producer reviewed both pending masters and stated the Fish voice is better — approval recorded 2026-11-13.",
+          "approvedAt": "2026-11-13T17:22:08.052Z"
+        }
       }
     },
     {
@@ -93,7 +109,7 @@
       "sha256": "7250940d7a76539c3776157f02616b0118776c43ac8bad9a5364c90b78160f37",
       "byteSize": 105734,
       "source": "fish-audio",
-      "rightsStatus": "unknown",
+      "rightsStatus": "cleared",
       "metadata": {
         "generated": true,
         "provider": "fish-audio",
@@ -105,7 +121,15 @@
         "sampleRate": 44100,
         "channels": 1,
         "durationSeconds": 1.197914,
-        "trailingSilenceTrimmedSeconds": 0.27975000000000017
+        "trailingSilenceTrimmedSeconds": 0.27975000000000017,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration (free-tier terms accepted); producer-reviewed after comparing Fish vs system-SAPI versions and selecting Fish",
+          "usageScope": "Motion Studio mandatory acceptance productions (kinetic-type-acceptance, offline-narrated-explainer-18s-fish)",
+          "note": "Producer reviewed both pending masters and stated the Fish voice is better — approval recorded 2026-11-13.",
+          "approvedAt": "2026-11-13T17:22:08.052Z"
+        }
       }
     },
     {
@@ -115,7 +139,7 @@
       "sha256": "8405252b95e9e85c04814dc81325270e80c738354a109487156ad5135d61d664",
       "byteSize": 164418,
       "source": "fish-audio",
-      "rightsStatus": "unknown",
+      "rightsStatus": "cleared",
       "metadata": {
         "generated": true,
         "provider": "fish-audio",
@@ -127,7 +151,15 @@
         "sampleRate": 44100,
         "channels": 1,
         "durationSeconds": 1.863265,
-        "trailingSilenceTrimmedSeconds": 0.20102100000000012
+        "trailingSilenceTrimmedSeconds": 0.20102100000000012,
+        "rightsApproval": {
+          "approved": true,
+          "actor": "Producer (project owner, via Motion Studio session)",
+          "license": "Fish Audio s2.1-pro-free provider-generated narration (free-tier terms accepted); producer-reviewed after comparing Fish vs system-SAPI versions and selecting Fish",
+          "usageScope": "Motion Studio mandatory acceptance productions (kinetic-type-acceptance, offline-narrated-explainer-18s-fish)",
+          "note": "Producer reviewed both pending masters and stated the Fish voice is better — approval recorded 2026-11-13.",
+          "approvedAt": "2026-11-13T17:22:08.052Z"
+        }
       }
     }
   ],
