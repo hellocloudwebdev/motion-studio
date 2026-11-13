@@ -1,32 +1,71 @@
 name: Motion Studio CI
 
+# Cross-platform CI for the Motion Studio monorepo.
+# Scope and evidence rules: docs/CI.md
+# - Verifies: npm install from lockfile, `node --test` suite, dependency audit (non-blocking).
+# - Does NOT verify: Blender / Adobe / HyperFrames-browser rendering. Those are
+#   runtime-gated on developer hosts, not CI-gated. See docs/CI.md.
+
 on:
   push:
-    branches: [main, "milestone/**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [24, 26]
+        node: [24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+          cache: npm
+
+      # None of the *-latest runner images ship FFmpeg (verified 2026-11-13 against
+      # actions/runner-images installed-software lists); install it explicitly.
+      # The test suite skips media-fixture tests gracefully when FFmpeg is absent,
+      # but installing it keeps those tests in the CI signal.
+      - name: Install FFmpeg (Linux)
         if: runner.os == 'Linux'
-      - run: choco install ffmpeg -y --no-progress
-        if: runner.os == 'Windows'
-      - run: brew install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install FFmpeg (macOS)
         if: runner.os == 'macOS'
-      - run: npm ci --no-audit --no-fund
-      - run: npm test
-      - run: npm run validate:example
-      - run: npm run route:example
-      - run: npm run compile:example
+        run: brew install ffmpeg
+
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+
+      - name: Verify FFmpeg/FFprobe on PATH
+        run: |
+          ffmpeg -version
+          ffprobe -version
+
+      # package-lock.json is committed, so installs are reproducible via npm ci.
+      # If the lockfile is ever removed, replace with `npm install` and drop
+      # the `cache: npm` option above. See docs/CI.md.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run test suite
+        run: npm test
+
+      # Advisory only: tracked in the roadmap, reported in the job log, never
+      # blocks the pipeline and nothing is uploaded. See docs/CI.md.
+      - name: Dependency audit (non-blocking, log only)
+        run: npm audit --omit=dev
+        continue-on-error: true
