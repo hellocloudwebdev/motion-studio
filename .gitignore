@@ -16,3 +16,6 @@ projects/**/temp/
 
 # Mimosa security-hook local state (machine-local scan cache)
 .mimosa/
+
+# Local scratch workspace (agent run logs, probes)
+work/
