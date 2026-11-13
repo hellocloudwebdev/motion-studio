@@ -179,10 +179,10 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 | Acceptance project | Current state | Required closeout |
 |---|---|---|
 | Startup/product advertisement | **ACCEPTED 2026-11-12**: 24 s ad (startup-ad-acceptance-24s) — Fish Audio narration + synthesized SFX, rights recorded, receipt `accepted`, 24-file package verified 24/24, 0 media findings | Maintain: none blocking; re-use as the reference acceptance run |
-| Kinetic typography | A short technical sample was rendered and packaged; narration-driven acceptance is not established | Add approved narration/captions/transitions, run safe-area and timing QA, record acceptance |
-| Narrated explainer | 18-second video rendered and visually/technically verified; audio-mixed MP4 and SRT/VTT package verify; scene-movement gate passes | Review rights for system voice, improve/approve narration pauses, add licensed music/SFX, human speech/creative review, then accept delivery |
-| Data visualization | Chart layer support exists; full production acceptance not established | Add sourced data, evidence/provenance, visual hierarchy and verified final render |
-| Mixed 2D/3D | Three.js runtime fixture passes; Blender runtime unavailable; no accepted mixed delivery | Complete P2.1–P2.3 on a supported Blender host |
+| Kinetic typography | **Packaged 2026-11-13** (kinetic-type-acceptance): 18 s narration-driven piece, Fish Audio narration, verified render + 21/21 package | Producer voice-rights review, then re-deliver to accept |
+| Narrated explainer | **Packaged 2026-11-13** (offline-narrated-explainer-18s-fish): Fish Audio narration, 19/19 package; SAPI version intact | Producer voice-rights review, then re-deliver to accept |
+| Data visualization | **ACCEPTED 2026-11-13** (data-viz-acceptance): 19 s IRENA-sourced renewable-capacity charts with provenance, silent master, 15/15 integrity, 0 media findings | Maintain: none blocking |
+| Mixed 2D/3D | **ACCEPTED 2026-11-13** (mixed-2d3d-acceptance): Blender 5.3.0 EEVEE scene + 2 HyperFrames scenes assembled and delivered, 14/14 integrity | Single-scene multi-engine compositing, alpha, audio-in-assembly remain open |
 
 ### Dependency and status rules
 
