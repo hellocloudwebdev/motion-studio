@@ -1133,6 +1133,38 @@
         "colorSpace": "Rec.709",
         "alpha": false,
         "audioRequired": true
+      },
+      {
+        "id": "vertical-9x16",
+        "format": "mp4",
+        "width": 1080,
+        "height": 1920,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": true,
+        "fit": "contain"
+      },
+      {
+        "id": "square-1x1",
+        "format": "mp4",
+        "width": 1080,
+        "height": 1080,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": true,
+        "fit": "contain"
       }
     ]
   },

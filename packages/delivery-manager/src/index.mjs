@@ -1,4 +1,5 @@
-import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { finalizeMedia, renderCaptions, runMediaCommand, validateCaptionTimeline } from '../../ffmpeg/src/index.mjs';
@@ -6,6 +7,31 @@ import { analyzeRenderedMedia } from '../../render-manager/src/media-analysis.mj
 
 function hashFile(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function safeFilename(value) { return String(value || 'asset').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'asset'; }
+
+// Roadmap P3.3 per-target aspect handling. 'contain' (the default) is encoded
+// natively by finalizeMedia (scale-to-fit + black pad bars, no distortion).
+// 'cover' and 'stretch' are pre-normalized in a video-only pass so the final
+// variant still comes from finalizeMedia's single verified transcode path.
+const DELIVERY_FITS = new Set(['contain', 'cover', 'stretch']);
+
+function resolveDeliveryFit(target) {
+  if (target.fit === undefined || target.fit === null || target.fit === 'contain') return 'contain';
+  if (!DELIVERY_FITS.has(target.fit)) throw new Error('Delivery target ' + (target.id || '(unnamed)') + ' fit must be one of contain, cover or stretch.');
+  return target.fit;
+}
+
+function buildFitPrepassPlan({ input, output, width, height, fit } = {}) {
+  if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) throw new Error('Fit pre-pass requires positive integer target dimensions.');
+  if (fit !== 'cover' && fit !== 'stretch') throw new Error('Fit pre-pass only applies to cover and stretch targets.');
+  const source = String(input), target = String(output);
+  if (!source || !target || source.includes('\0') || target.includes('\0')) throw new Error('Fit pre-pass paths must be non-empty strings without null bytes.');
+  const filter = fit === 'stretch'
+    ? 'scale=' + width + ':' + height
+    : 'scale=' + width + ':' + height + ':force_original_aspect_ratio=increase,crop=' + width + ':' + height;
+  // Video-only intermediate: finalizeMedia maps [0:v] from it and mixes audio
+  // inputs itself, so no audio is carried through the pre-pass.
+  return { executable: 'ffmpeg', args: ['-hide_banner', '-y', '-i', source, '-vf', filter, '-an', '-c:v', 'libx264', '-crf', '16', '-pix_fmt', 'yuv420p', target], input: source, output: target, fit };
+}
 function assertInside(root, target) {
   const relative = path.relative(root, target);
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Delivery path must be inside the project delivery folder.');
@@ -72,9 +98,21 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     const defaultVideoCodec = target.format === 'webm' ? 'libvpx-vp9' : target.format === 'prores' ? 'prores_ks' : 'libx264';
     const defaultAudioCodec = target.format === 'webm' ? 'libopus' : target.format === 'prores' ? 'pcm_s16le' : 'aac';
     const durationSeconds = project.project.totalDurationFrames * project.project.frameRate.denominator / project.project.frameRate.numerator;
-    const receipt = await finalizeMedia({ input: source, output, width: target.width, height: target.height, fps, durationSeconds, videoCodec: target.videoCodec || defaultVideoCodec, audioCodec: target.audioCodec || defaultAudioCodec, crf: target.crf ?? 18, audioInputs, audioRequired: Boolean(target.audioRequired), signal });
+    const fit = resolveDeliveryFit(target);
+    const finalizeOptions = { output, width: target.width, height: target.height, fps, durationSeconds, videoCodec: target.videoCodec || defaultVideoCodec, audioCodec: target.audioCodec || defaultAudioCodec, crf: target.crf ?? 18, audioInputs, audioRequired: Boolean(target.audioRequired), signal };
+    let receipt;
+    if (fit === 'contain') {
+      receipt = await finalizeMedia({ input: source, ...finalizeOptions });
+    } else {
+      const prepassRoot = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-fit-'));
+      try {
+        const prepass = buildFitPrepassPlan({ input: source, output: path.join(prepassRoot, safeFilename(target.id) + '-fit.mp4'), width: target.width, height: target.height, fit });
+        await runMediaCommand(prepass.executable, prepass.args, { signal });
+        receipt = await finalizeMedia({ input: prepass.output, ...finalizeOptions });
+      } finally { await rm(prepassRoot, { recursive: true, force: true }); }
+    }
     const mediaAnalysis = await analyzeRenderedMedia({ input: output, media: receipt.media, options: { ocr: false }, signal });
-    variants.push({ target, ...receipt, mediaAnalysis });
+    variants.push({ target, fit, ...receipt, mediaAnalysis });
   }
   const primaryVideo = variants.find(variant => variant.target.id === primary.id)?.output || variants[0].output;
   const thumbnail = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'thumbnail.jpg'));
@@ -178,6 +216,14 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   const renderSourceMatches = renderManifest?.projectIrSha256 === canonicalIrSha256;
   const mediaAnalysisPassed = variants.every(variant => variant.mediaAnalysis?.passed === true);
   const productionAccepted = renderManifest?.productionReady === true && renderManifest?.verified === true && renderSourceMatches && rightsCleared && assetsPackaged && mediaAnalysisPassed;
+  // Roadmap P3.3 (v1): aspect ratios that differ from the render canvas are
+  // delivered by scaling the master to fit with black pad bars; typography and
+  // graphics are not reflowed per profile yet, so record that honestly.
+  const canvas = project.project.canvas && Number.isInteger(project.project.canvas.width) && Number.isInteger(project.project.canvas.height) ? project.project.canvas : null;
+  const layoutLimitations = canvas ? variants
+    .filter(variant => variant.fit === 'contain' && variant.target.width * canvas.height !== variant.target.height * canvas.width)
+    .map(variant => ({ targetId: variant.target.id, kind: 'layout-reflow-pending', reason: 'Delivered by scaling the ' + canvas.width + 'x' + canvas.height + ' master to fit with black pad bars (contain); layout was not reflowed for this aspect ratio (roadmap P3.3).' }))
+    : [];
   const receipt = {
     schemaVersion: '1.0', projectId: project.project.id, projectRevision: project.project.revision || 1,
     createdAt: new Date().toISOString(),
@@ -189,7 +235,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     assetManifest: manifestPath, provenance: project.provenance || { sources: [], software: [], decisions: [] },
     evidence: { renderManifest: renderEvidencePath, qaReport: qaEvidencePath, editorialAssembly: editorialEvidencePath, operationHistory: operationHistoryPath, softwareVersions: softwareEvidencePath, qaFrames: frameEvidence.length ? path.relative(packageRoot, qaFramesDirectory).split(path.sep).join('/') : null },
     renderManifest: renderManifest || null, qaReport: renderManifest?.qa || project.qa || null,
-    limitations: assetManifest.filter(asset => asset.included === false).map(asset => ({ assetId: asset.id, reason: asset.unresolvedReason || 'Referenced asset could not be packaged.' }))
+    limitations: [...assetManifest.filter(asset => asset.included === false).map(asset => ({ assetId: asset.id, reason: asset.unresolvedReason || 'Referenced asset could not be packaged.' })), ...layoutLimitations]
   };
   const humanReport = [
     '# Delivery report', '',

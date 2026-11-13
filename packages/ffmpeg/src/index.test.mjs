@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildTranscodePlan, buildProbePlan, buildFinalizationPlan, parseProbeOutput, renderCaptions, runMediaCommand, finalizeMedia, buildSceneAssemblyPlan, assembleScenes, countVideoFrames } from './index.mjs';
+import { buildTranscodePlan, buildProbePlan, buildFinalizationPlan, parseProbeOutput, renderCaptions, runMediaCommand, finalizeMedia, buildSceneAssemblyPlan, normalizeAssemblyAudioInputs, assembleScenes, countVideoFrames } from './index.mjs';
 
 test('transcode plan uses an argument array and explicit paths', () => {
   const plan = buildTranscodePlan({ input: 'source.mp4', output: 'final.mp4', width: 1920, height: 1080, fps: 30 });
@@ -141,5 +141,110 @@ test('assembly fails closed on missing segments, dimension, frame-rate and durat
     await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 30 }, { path: wide, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /SCENE_DIMENSION_MISMATCH/);
     await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 30 }, { path: slow, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /SCENE_FRAME_RATE_MISMATCH/);
     await assert.rejects(() => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 60 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4') }), /SCENE_DURATION_MISMATCH/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('assembly plan mixes audio cues through filter_complex and keeps video-only args untouched', () => {
+  const base = { sceneFiles: [{ path: 'a.mp4', durationFrames: 30 }, { path: 'b.mp4', durationFrames: 15 }], fps: { numerator: 30, denominator: 1 }, output: 'master.mp4', width: 320, height: 180 };
+  const silent = buildSceneAssemblyPlan(base);
+  assert.equal(silent.args.includes('-an'), true);
+  assert.equal(silent.args.includes('-filter_complex'), false);
+  assert.equal(silent.args.includes('-c:a'), false);
+  assert.equal(silent.expected.hasAudio, false);
+  assert.deepEqual(silent.audioInputs, []);
+
+  const plan = buildSceneAssemblyPlan({ ...base, audioInputs: [
+    { path: 'narration.wav', offsetSeconds: 0.2, durationSeconds: 1.2, volume: 0.9, fadeInSeconds: 0.05, fadeOutSeconds: 0.1 },
+    { path: 'bed.wav', offsetSeconds: 0.25, durationSeconds: 1, volume: 0.2, duckAgainst: 'narration.wav' }
+  ] });
+  assert.equal(plan.expected.hasAudio, true);
+  assert.equal(plan.args.includes('-an'), false);
+  assert.equal(plan.args.filter(arg => arg === '-i').length, 3);
+  const graph = plan.args[plan.args.indexOf('-filter_complex') + 1];
+  assert.match(graph, /\[1:a\]volume=0\.9,atrim=duration=1\.200000,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0\.050000,afade=t=out:st=1\.100000:d=0\.100000,adelay=200\|200\[a0\]/);
+  assert.match(graph, /\[2:a\]volume=0\.2,.*adelay=250\|250\[a1\]/);
+  assert.match(graph, /sidechaincompress=threshold=0\.035:ratio=8:attack=15:release=250:makeup=1/);
+  assert.match(graph, /amix=inputs=2:duration=longest:normalize=0,apad=whole_dur=1\.500000\[aout\]/);
+  assert.deepEqual(plan.args.slice(plan.args.indexOf('-c:a'), plan.args.indexOf('-c:a') + 6), ['-c:a', 'aac', '-b:a', '192k', '-t', '1.500000']);
+  // Fail-closed validation mirrors finalizeMedia plus duckAgainst wiring.
+  assert.throws(() => buildSceneAssemblyPlan({ ...base, audioInputs: 'narration.wav' }), /audioInputs must be an array/);
+  assert.throws(() => buildSceneAssemblyPlan({ ...base, audioInputs: [{ path: 'sfx.wav', duckAgainst: 'missing.wav' }] }), /duckAgainst must reference another audio input/);
+  assert.throws(() => buildSceneAssemblyPlan({ ...base, audioInputs: [{ path: 'sfx.wav', duckAgainst: 'sfx.wav' }] }), /cannot duck against itself/);
+  assert.throws(() => buildSceneAssemblyPlan({ ...base, audioInputs: [{ path: 'sfx.wav', fadeOutSeconds: 0.2 }] }), /fade range/);
+  assert.throws(() => buildSceneAssemblyPlan({ ...base, audioInputs: [{ path: 'sfx.wav', volume: 9 }] }), /gain/);
+  assert.throws(() => buildSceneAssemblyPlan({ ...base, audioInputs: [{ path: 'sfx.wav', offsetSeconds: -1 }] }), /fade range/);
+  // Idempotent normalization: pre-normalized cues survive a second pass with
+  // offsets, durations and fades intact (render-manager pre-validates then
+  // passes the result on to assembleScenes).
+  const once = buildSceneAssemblyPlan({ ...base, audioInputs: [{ path: 'narration.wav', offsetSeconds: 0.2, durationSeconds: 1.2, volume: 0.9, fadeInSeconds: 0.05, fadeOutSeconds: 0.1, duckAgainst: 'bed.wav' }, { path: 'bed.wav', offsetSeconds: 0.25 }] }).audioInputs;
+  assert.equal(once[0].offsetSeconds, 0.2);
+  assert.equal(once[0].durationSeconds, 1.2);
+  assert.equal(once[0].fadeOutSeconds, 0.1);
+  assert.deepEqual(normalizeAssemblyAudioInputs(once), once);
+});
+
+async function meanVolume(file, start, duration) {
+  const result = await runMediaCommand('ffmpeg', ['-hide_banner', '-ss', start, '-t', duration, '-i', file, '-af', 'volumedetect', '-f', 'null', '-']);
+  const match = result.stderr.match(/mean_volume:\s*(-?[0-9.]+) dB/);
+  if (!match) throw new Error('volumedetect produced no mean_volume for ' + file);
+  return Number(match[1]);
+}
+
+test('assembles segments with narration, ducked bed and fades into a verified aac master', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ffmpeg-concat-audio-'));
+  try {
+    const first = path.join(root, 'scene-01.mp4'), second = path.join(root, 'scene-02.mp4');
+    const narration = path.join(root, 'narration.wav'), bed = path.join(root, 'bed.wav'), master = path.join(root, 'master.mp4');
+    await makeSegment(first, { frames: 30 });
+    await makeSegment(second, { frames: 15 });
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1.2', '-c:a', 'pcm_s16le', narration]);
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=110:duration=1', '-c:a', 'pcm_s16le', bed]);
+    const receipt = await assembleScenes({
+      sceneFiles: [{ path: first, durationFrames: 30 }, { path: second, durationFrames: 15 }],
+      fps: { numerator: 30, denominator: 1 }, output: master, width: 320, height: 180,
+      audioInputs: [
+        { path: narration, offsetSeconds: 0.2, durationSeconds: 1.2, volume: 0.9, fadeInSeconds: 0.05, fadeOutSeconds: 0.1 },
+        { path: bed, offsetSeconds: 0.25, durationSeconds: 1, volume: 0.2, duckAgainst: narration }
+      ]
+    });
+    assert.equal(receipt.verified, true);
+    assert.equal(receipt.audio, 'aac');
+    assert.equal(receipt.audioInputs.length, 2);
+    assert.equal(receipt.media.hasAudio, true);
+    assert.equal(receipt.media.audioCodec, 'aac');
+    assert.equal(receipt.frameCount, 45);
+    assert.ok(Math.abs(receipt.media.durationSeconds - 1.5) < 0.06, 'master duration ' + receipt.media.durationSeconds + ' should match the 45-frame timeline');
+    // Non-silent exactly in the expected window: audible after the 0.2s
+    // narration offset, digital silence before any cue starts.
+    const loud = await meanVolume(master, '0.30', '0.60');
+    const silentLeadIn = await meanVolume(master, '0', '0.15');
+    assert.ok(loud > -30, 'expected an audible mix in the narration window, got ' + loud + ' dB');
+    assert.ok(silentLeadIn < -60, 'expected silence before the first cue offset, got ' + silentLeadIn + ' dB');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('assembly fails closed when an audio input file is missing', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ffmpeg-concat-audio-guard-'));
+  try {
+    const good = path.join(root, 'good.mp4'), gone = path.join(root, 'gone.wav');
+    await makeSegment(good, { frames: 30 });
+    await assert.rejects(
+      () => assembleScenes({ sceneFiles: [{ path: good, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: path.join(root, 'm.mp4'), audioInputs: [{ path: gone, offsetSeconds: 0 }] }),
+      /Audio input file is missing/
+    );
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('empty audioInputs keeps the video-only assembly contract', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ffmpeg-concat-silent-'));
+  try {
+    const first = path.join(root, 'scene-01.mp4'), master = path.join(root, 'master.mp4');
+    await makeSegment(first, { frames: 30 });
+    const receipt = await assembleScenes({ sceneFiles: [{ path: first, durationFrames: 30 }], fps: { numerator: 30, denominator: 1 }, output: master, width: 320, height: 180, audioInputs: [] });
+    assert.equal(receipt.verified, true);
+    assert.equal(receipt.audio, 'none');
+    assert.deepEqual(receipt.audioInputs, []);
+    assert.equal(receipt.media.hasAudio, false);
+    assert.equal(receipt.frameCount, 30);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

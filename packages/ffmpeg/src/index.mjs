@@ -155,11 +155,89 @@ export async function finalizeMedia(options = {}) {
   return receipt;
 }
 
+// Assembly-time audio cues (P3.3): narration/SFX mixed into the assembled
+// master. Frame-agnostic by contract — offsets/durations/fades arrive in
+// seconds, computed by the caller. Same fail-closed normalization rules as
+// finalizeMedia, plus an optional `duckAgainst` path that must reference
+// another input in the same list (sidechaincompress source). Idempotent: the
+// normalized output is itself valid input, so callers may pre-normalize (e.g.
+// render-manager fail-fast validation) and pass the result on.
+export function normalizeAssemblyAudioInputs(audioInputs) {
+  if (audioInputs === undefined) return [];
+  if (!Array.isArray(audioInputs)) throw new Error('audioInputs must be an array of { path, offsetSeconds, ... } audio cues.');
+  const normalized = audioInputs.map((source, index) => {
+    if (!source || typeof source !== 'object') throw new Error('audioInputs[' + index + '] must be an object with a path.');
+    const file = assertSafePath(source.path, 'audioInputs[' + index + '].path');
+    const offset = Number(source.offsetSeconds || 0), volume = Number(source.volume ?? 1);
+    const duration = source.durationSeconds === undefined ? null : Number(source.durationSeconds);
+    const fadeIn = Number(source.fadeInSeconds || 0), fadeOut = Number(source.fadeOutSeconds || 0);
+    if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(volume) || volume < 0 || volume > 4 || duration !== null && (!Number.isFinite(duration) || duration <= 0) || !Number.isFinite(fadeIn) || fadeIn < 0 || !Number.isFinite(fadeOut) || fadeOut < 0 || fadeOut && duration === null || duration !== null && fadeIn + fadeOut > duration) throw new Error('Invalid audio offset, gain, cue duration or fade range for audioInputs[' + index + '].');
+    if (source.duckAgainst !== undefined && source.duckAgainst !== null && (typeof source.duckAgainst !== 'string' || !source.duckAgainst.trim())) throw new Error('audioInputs[' + index + '].duckAgainst must be the path of another audio input when provided.');
+    const duckAgainst = source.duckAgainst === undefined || source.duckAgainst === null ? null : assertSafePath(source.duckAgainst, 'audioInputs[' + index + '].duckAgainst');
+    return {
+      path: file, offsetSeconds: offset, volume,
+      ...(duration !== null ? { durationSeconds: duration } : {}),
+      fadeInSeconds: fadeIn, fadeOutSeconds: fadeOut,
+      ...(duckAgainst !== null ? { duckAgainst } : {})
+    };
+  });
+  const byPath = new Map(normalized.map(cue => [cue.path, cue]));
+  for (const [index, cue] of normalized.entries()) {
+    if (cue.duckAgainst === undefined) continue;
+    const target = byPath.get(cue.duckAgainst);
+    if (!target) throw new Error('audioInputs[' + index + '].duckAgainst must reference another audio input path; no audio input resolves to ' + cue.duckAgainst + '.');
+    if (target === cue) throw new Error('audioInputs[' + index + '] cannot duck against itself.');
+  }
+  return normalized;
+}
+
+// Mixing graph for assembly audio: per-cue volume/trim/fade chains ending in an
+// adelay offset, then one amix padded/trimmed to the concat timeline length.
+// Ducking mirrors finalizeMedia: each duck-against target is split so one copy
+// feeds the sidechain of every input that ducks against it and one copy
+// reaches the final mix.
+function buildAssemblyAudioMixGraph(audioInputs, totalSeconds) {
+  const filters = [];
+  audioInputs.forEach((cue, index) => {
+    const duration = cue.durationSeconds === undefined ? null : cue.durationSeconds;
+    const chain = ['volume=' + cue.volume];
+    if (duration !== null) chain.push('atrim=duration=' + duration.toFixed(6), 'asetpts=PTS-STARTPTS');
+    if (cue.fadeInSeconds) chain.push('afade=t=in:st=0:d=' + cue.fadeInSeconds.toFixed(6));
+    if (cue.fadeOutSeconds) chain.push('afade=t=out:st=' + (duration - cue.fadeOutSeconds).toFixed(6) + ':d=' + cue.fadeOutSeconds.toFixed(6));
+    const delay = Math.round(cue.offsetSeconds * 1000);
+    chain.push('adelay=' + delay + '|' + delay);
+    filters.push('[' + (index + 1) + ':a]' + chain.join(',') + '[a' + index + ']');
+  });
+  const targetByDucked = new Map(), duckersByTarget = new Map();
+  for (const [index, cue] of audioInputs.entries()) {
+    if (cue.duckAgainst === undefined) continue;
+    const targetIndex = audioInputs.findIndex(item => item.path === cue.duckAgainst);
+    targetByDucked.set(index, targetIndex);
+    if (!duckersByTarget.has(targetIndex)) duckersByTarget.set(targetIndex, []);
+    duckersByTarget.get(targetIndex).push(index);
+  }
+  const sidechainLabelByDucked = new Map();
+  for (const [targetIndex, duckedIndices] of duckersByTarget) {
+    const labels = duckedIndices.map((_, position) => 'sidechain' + targetIndex + 'x' + position);
+    labels.push('targetmix' + targetIndex);
+    filters.push('[a' + targetIndex + ']asplit=' + labels.length + labels.map(label => '[' + label + ']').join(''));
+    duckedIndices.forEach((duckedIndex, position) => sidechainLabelByDucked.set(duckedIndex, labels[position]));
+  }
+  for (const [duckedIndex] of targetByDucked) {
+    filters.push('[a' + duckedIndex + '][' + sidechainLabelByDucked.get(duckedIndex) + ']sidechaincompress=threshold=0.035:ratio=8:attack=15:release=250:makeup=1[duck' + duckedIndex + ']');
+  }
+  const mixInputs = audioInputs.map((_, index) => targetByDucked.has(index) ? '[duck' + index + ']' : duckersByTarget.has(index) ? '[targetmix' + index + ']' : '[a' + index + ']');
+  filters.push(mixInputs.join('') + 'amix=inputs=' + audioInputs.length + ':duration=longest:normalize=0,apad=whole_dur=' + totalSeconds.toFixed(6) + '[aout]');
+  return filters.join(';');
+}
+
 // Scene assembly (v2 master refresh path): concat per-scene MP4 segments in
 // exact IR scene order through the FFmpeg concat demuxer with a deterministic
 // re-encode. Every segment is probed before encoding and the assembled master
 // is probed afterwards; any mismatch fails closed with a receipt attached.
-export function buildSceneAssemblyPlan({ sceneFiles, fps, output, videoCodec = 'libx264', crf = 18, width, height } = {}) {
+// With audioInputs the cues are mixed into the concat output (aac); without
+// them the args stay exactly the video-only contract (-an).
+export function buildSceneAssemblyPlan({ sceneFiles, fps, output, videoCodec = 'libx264', crf = 18, width, height, audioInputs } = {}) {
   if (!Array.isArray(sceneFiles) || !sceneFiles.length) throw new Error('Scene assembly requires a non-empty sceneFiles array.');
   const numerator = Number(fps?.numerator), denominator = Number(fps?.denominator);
   if (!Number.isInteger(numerator) || numerator <= 0 || !Number.isInteger(denominator) || denominator <= 0) throw new Error('Scene assembly requires a positive integer rational fps.');
@@ -182,16 +260,25 @@ export function buildSceneAssemblyPlan({ sceneFiles, fps, output, videoCodec = '
   // Concat demuxer list entries: absolute paths, quoted, with ffmpeg's single-
   // quote escaping; forward slashes keep Windows paths parseable.
   const listEntries = segments.map(segment => "file '" + segment.path.replace(/\\/g, '/').replace(/'/g, "'\\''") + "'");
-  const args = ['-hide_banner', '-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c:v', videoCodec];
+  const audio = normalizeAssemblyAudioInputs(audioInputs);
+  const frameCount = segments.reduce((sum, segment) => sum + segment.durationFrames, 0);
+  const totalSeconds = frameCount * denominator / numerator;
+  const args = ['-hide_banner', '-y', '-f', 'concat', '-safe', '0', '-i', listPath];
+  for (const cue of audio) args.push('-i', cue.path);
+  if (audio.length) args.push('-map', '0:v', '-filter_complex', buildAssemblyAudioMixGraph(audio, totalSeconds), '-map', '[aout]');
+  args.push('-c:v', videoCodec);
   if (videoCodec === 'prores_ks') args.push('-profile:v', '3', '-pix_fmt', 'yuv422p10le');
   else if (videoCodec === 'libvpx-vp9') args.push('-crf', String(Math.round(crf)), '-b:v', '0', '-pix_fmt', 'yuv420p');
   else args.push('-crf', String(Math.round(crf)), '-pix_fmt', 'yuv420p');
-  // Re-encode at the exact rational fps; audio is dropped in v1 (assembly is
-  // video-only — audio mixes happen at delivery through finalizeMedia).
-  args.push('-r', fpsArgument, '-an');
+  // Re-encode at the exact rational fps. Audio is dropped (-an) unless cues
+  // were supplied; then the mix is encoded as aac and hard-trimmed to the
+  // concat timeline so the master duration stays frame-authoritative.
+  args.push('-r', fpsArgument);
+  if (audio.length) args.push('-c:a', 'aac', '-b:a', '192k', '-t', totalSeconds.toFixed(6));
+  else args.push('-an');
   if (!target.toLowerCase().endsWith('.webm')) args.push('-movflags', '+faststart');
   args.push(target);
-  return { executable: 'ffmpeg', args, listPath, listEntries, output: target, sceneFiles: segments, fps: { numerator, denominator }, fpsArgument, expected: { width: expectedWidth, height: expectedHeight, fps: numerator / denominator, frameCount: segments.reduce((sum, segment) => sum + segment.durationFrames, 0), videoCodec, crf: Math.round(crf) } };
+  return { executable: 'ffmpeg', args, listPath, listEntries, output: target, sceneFiles: segments, fps: { numerator, denominator }, fpsArgument, audioInputs: audio, expected: { width: expectedWidth, height: expectedHeight, fps: numerator / denominator, frameCount, videoCodec, crf: Math.round(crf), hasAudio: audio.length > 0 } };
 }
 
 export async function countVideoFrames(input, options = {}) {
@@ -238,6 +325,12 @@ export async function assembleScenes(options = {}) {
       if (mismatches.length) throw Object.assign(new Error('Scene segment ' + index + ' failed pre-assembly verification: ' + mismatches.map(item => item.code).join(', ') + ' (' + segment.path + ')'), { mismatches, segmentPath: segment.path });
       segments.push({ path: segment.path, durationFrames: segment.durationFrames, durationSeconds: media.durationSeconds, width: media.width, height: media.height, frameRate: media.frameRate });
     }
+    // Same fail-closed rule for assembly audio: every cue file must exist
+    // before the encode starts.
+    for (const cue of plan.audioInputs) {
+      try { await access(cue.path); }
+      catch { throw new Error('Audio input file is missing: ' + cue.path); }
+    }
     await mkdir(path.dirname(plan.output), { recursive: true });
     await writeFile(plan.listPath, plan.listEntries.join('\n') + '\n', 'utf8');
     try { await runMediaCommand(plan.executable, plan.args, { signal: commandSignal, onProgress: options.onLine }); }
@@ -249,11 +342,14 @@ export async function assembleScenes(options = {}) {
     if (!outputStat.isFile() || outputStat.size === 0) throw new Error('FFmpeg returned without a non-empty assembled master at ' + plan.output);
     const media = await probeMedia(plan.output, { signal: commandSignal });
     const frameCount = await countVideoFrames(plan.output, { signal: commandSignal });
+    const expectedAudioSeconds = plan.expected.hasAudio ? plan.expected.frameCount / fpsValue : null;
     const checks = {
       widthMatches: media.width === targetWidth,
       heightMatches: media.height === targetHeight,
       frameRateMatch: Math.abs(rationalFrameRateValue(media.frameRate) - fpsValue) < 0.001,
       frameCountMatchesTimeline: frameCount === plan.expected.frameCount,
+      audioStreamPresent: !plan.expected.hasAudio || (media.hasAudio === true && media.audioCodec === 'aac'),
+      audioDurationMatchesTimeline: !plan.expected.hasAudio || Math.abs(media.durationSeconds - expectedAudioSeconds) <= frameTolerance,
       nonEmpty: outputStat.size > 0
     };
     const receipt = {
@@ -261,7 +357,8 @@ export async function assembleScenes(options = {}) {
       checks, media, frameCount, expectedFrameCount: plan.expected.frameCount,
       sceneCount: plan.sceneFiles.length, totalDurationFrames: plan.expected.frameCount,
       fps: fpsValue, fpsRational: plan.fpsArgument, videoCodec: plan.expected.videoCodec,
-      audio: 'none', listPath: plan.listPath, segments, createdAt: new Date().toISOString()
+      audio: plan.expected.hasAudio ? 'aac' : 'none', audioInputs: plan.audioInputs,
+      listPath: plan.listPath, segments, createdAt: new Date().toISOString()
     };
     if (!receipt.verified) throw Object.assign(new Error('Assembled master failed independent FFprobe verification: ' + Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', ')), { receipt });
     return receipt;

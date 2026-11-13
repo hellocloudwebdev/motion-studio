@@ -124,3 +124,72 @@ test('delivery records silence findings from the final audio-mixed variant', asy
     assert.equal(result.variants[0].media.hasAudio, true);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+// Roadmap P3.3: one verified variant per declared target, with distinct
+// canvas dimensions produced from the same canonical master (contain = the
+// finalizeMedia-native scale-to-fit + black pad bars).
+test('packages one verified variant per delivery target with distinct dimensions', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-multitarget-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.delivery.targets = [
+      { id: 'master', format: 'mp4', width: 320, height: 180, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false },
+      { id: 'vertical-9x16', format: 'mp4', width: 160, height: 284, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false },
+      { id: 'square-1x1', format: 'mp4', width: 320, height: 320, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false }
+    ];
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha } });
+    assert.equal(result.status, 'accepted');
+    assert.deepEqual(result.variants.map(variant => variant.target.id), ['master', 'vertical-9x16', 'square-1x1']);
+    assert.deepEqual(result.variants.map(variant => [variant.media.width, variant.media.height]), [[320, 180], [160, 284], [320, 320]]);
+    assert.ok(result.variants.every(variant => variant.fit === 'contain' && variant.mediaAnalysis.passed === true));
+    assert.deepEqual(result.limitations.filter(item => item.kind === 'layout-reflow-pending').map(item => item.targetId).sort(), ['square-1x1', 'vertical-9x16']);
+    assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery'))).passed, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('delivery honors per-target fit modes (stretch and cover) with exact dimensions', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-fit-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.delivery.primaryTargetId = 'stretch';
+    input.delivery.targets = [
+      { id: 'stretch', format: 'mp4', width: 200, height: 180, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false, fit: 'stretch' },
+      { id: 'cover', format: 'mp4', width: 240, height: 180, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false, fit: 'cover' }
+    ];
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha } });
+    assert.equal(result.status, 'accepted');
+    assert.deepEqual(result.variants.map(variant => variant.fit), ['stretch', 'cover']);
+    assert.deepEqual(result.variants.map(variant => [variant.media.width, variant.media.height]), [[200, 180], [240, 180]]);
+    assert.ok(result.variants.every(variant => variant.mediaAnalysis.passed === true));
+    assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery'))).passed, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('delivery rejects an unknown per-target fit mode', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-badfit-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.delivery.targets[0].fit = 'crop';
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input));
+    await makeVideo(sourceVideo);
+    await assert.rejects(
+      buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: createHash('sha256').update(JSON.stringify(input)).digest('hex') } }),
+      /fit must be one of contain, cover or stretch/
+    );
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

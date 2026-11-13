@@ -144,6 +144,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Define deterministic audio-analysis inputs and frame-bound outputs before adding audio-reactive graphics.
 - Produce 16:9, 9:16, 1:1 and custom profiles from the same canonical project; reflow/reposition typography and graphics rather than merely crop where a profile requires layout changes.
 - Verify each output’s codec, dimensions, rational frame rate, duration, captions, safe area and audio.
+- **Status (2026-11-13): multi-ratio delivery in progress.** Done: `delivery.targets` accepts multiple targets with distinct canvas dimensions and a validated per-target `fit` mode (`contain` default, `cover`, `stretch`); delivery-manager transcodes, media-analyzes and integrity-verifies one variant per target from the same canonical IR, and `startup-ad-acceptance-24s` delivers accepted 16:9 / 9:16 / 1:1 variants (contain = scale-to-fit with black pad bars, no distortion). Remaining: true per-profile reflow — typography and graphics are currently pad-barred, not repositioned/rescaled per profile (recorded as `layout-reflow-pending` limitations in the delivery receipt), plus custom profiles beyond the three fixed ratios and per-profile safe-area verification.
 
 **P3.4 — Complete advanced creative critique and repair**
 - Evaluate brief/message alignment, hook, pacing, continuity, art direction and CTA using structured advisory findings tied to evidence and time ranges.

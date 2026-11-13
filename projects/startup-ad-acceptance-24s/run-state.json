@@ -3,12 +3,12 @@
   "projectId": "startup-ad-acceptance-24s",
   "runId": "run-startup-ad-acceptance-24s-1794504690874",
   "status": "qa",
-  "revision": 1,
+  "revision": 2,
   "repairCycles": 0,
   "inputs": {
-    "projectIrSha256": "d93f3f44c25472699874b589dccc7cac117e7b763034013d42c8e4e8043a65e5",
-    "projectFileSha256": "d4c8cb5dd53b9373441cdf9c362e126226fafd7212b8ecdcc7fe671b366d2349",
-    "recordedAt": "2026-11-12T17:31:30.874Z"
+    "projectIrSha256": "eae902538883f11bea85bbcedd84a36c6e7d1f1de27a7cb74f26dc31ee73d8c8",
+    "projectFileSha256": "0d5f3c0fb464da7bfb9905fe55c3422711e4b71ed8b985bf04e4f5d5cd327e93",
+    "recordedAt": "2026-11-13T16:38:53.781Z"
   },
   "policy": {
     "maxCycles": 2,
@@ -26,6 +26,15 @@
       "verified": true,
       "projectIrSha256": "d93f3f44c25472699874b589dccc7cac117e7b763034013d42c8e4e8043a65e5",
       "recordedAt": "2026-11-12T17:33:15.233Z"
+    },
+    {
+      "id": "master-eae90253",
+      "kind": "master-render",
+      "path": "D:\\motions\\motion-studio\\projects\\startup-ad-acceptance-24s\\renders\\startup-ad-acceptance-24s-draft.mp4",
+      "sha256": "6eeca1b2701a03fcc4b7a7915e9310ca2f224960635bdff85242648ce574be3e",
+      "verified": true,
+      "projectIrSha256": "eae902538883f11bea85bbcedd84a36c6e7d1f1de27a7cb74f26dc31ee73d8c8",
+      "recordedAt": "2026-11-13T16:42:58.228Z"
     }
   ],
   "events": [
@@ -42,45 +51,57 @@
       }
     },
     {
+      "revision": 2,
+      "from": "qa",
+      "to": "planned",
+      "at": "2026-11-13T16:38:53.782Z",
+      "type": "inputs-invalidated",
+      "metadata": {
+        "projectIrSha256": "eae902538883f11bea85bbcedd84a36c6e7d1f1de27a7cb74f26dc31ee73d8c8",
+        "projectFileSha256": "0d5f3c0fb464da7bfb9905fe55c3422711e4b71ed8b985bf04e4f5d5cd327e93",
+        "droppedArtifacts": []
+      }
+    },
+    {
       "revision": 0,
       "from": null,
       "to": "draft",
-      "at": "2026-11-12T17:31:30.877Z",
+      "at": "2026-11-13T16:38:53.783Z",
       "metadata": {}
     },
     {
       "revision": 1,
       "from": "draft",
       "to": "planned",
-      "at": "2026-11-12T17:31:30.879Z",
+      "at": "2026-11-13T16:38:53.784Z",
       "metadata": {}
     },
     {
       "revision": 2,
       "from": "planned",
       "to": "rendering",
-      "at": "2026-11-12T17:31:30.879Z",
+      "at": "2026-11-13T16:38:53.784Z",
       "metadata": {}
     },
     {
       "revision": 3,
       "from": "rendering",
       "to": "qa",
-      "at": "2026-11-12T17:33:15.197Z",
+      "at": "2026-11-13T16:42:58.216Z",
       "metadata": {}
     },
     {
       "revision": 4,
       "from": "qa",
       "to": "qa",
-      "at": "2026-11-12T17:33:15.233Z",
+      "at": "2026-11-13T16:42:58.228Z",
       "metadata": {
         "event": "artifact-recorded",
-        "artifactId": "master-d93f3f44"
+        "artifactId": "master-eae90253"
       }
     }
   ],
-  "updatedAt": "2026-11-12T17:33:15.233Z",
+  "updatedAt": "2026-11-13T16:42:58.228Z",
   "repair": {
     "cycles": 0,
     "maxCycles": 2,

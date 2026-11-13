@@ -1,21 +1,33 @@
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { renderHyperFramesProject, rationalFps, safeSceneId, compilerBlockerWarnings, createMediaQaContext } from './index.mjs';
 import { analyzeRenderedMedia } from './media-analysis.mjs';
 import { renderBlenderScene } from '../../blender-adapter/src/index.mjs';
 import { routeScenes, projectIrSha256, evaluateRenderEvidence, createRepairPlan, persistQaRecord } from '../../core/src/index.mjs';
-import { assembleScenes, countVideoFrames, probeMedia, runMediaCommand } from '../../ffmpeg/src/index.mjs';
+import { assembleScenes, countVideoFrames, normalizeAssemblyAudioInputs, probeMedia, runMediaCommand } from '../../ffmpeg/src/index.mjs';
 
 // Mixed-path v1 capability boundary (mirrors the receipt `limitations` entries):
-// whole scenes render on exactly one supported engine; single-scene engine
-// mixing, explicit scene start offsets and audio in the assembled master are
-// all rejected or documented instead of silently dropped.
+// whole scenes render on exactly one supported engine and single-scene engine
+// mixing, explicit scene start offsets are rejected instead of silently
+// dropped. The assembled master stays video-only unless the caller supplies
+// audioInputs, in which case cues are mixed in at assembly time (see
+// mixedRenderLimitations).
 const MIXED_SUPPORTED_ENGINES = new Set(['hyperframes', 'blender']);
 const MIXED_LIMITATIONS = [
   { code: 'SINGLE_SCENE_MULTI_ENGINE_UNSUPPORTED', reason: 'v1 renders every scene on exactly one engine; scenes mixing HyperFrames and Blender layers are rejected before rendering instead of being silently split.' },
   { code: 'EXPLICIT_SCENE_START_OFFSETS_UNSUPPORTED', reason: 'Assembly v1 requires scenes to tile contiguously from frame 0; explicit startFrame offsets, gaps and overlaps are rejected.' },
   { code: 'ASSEMBLY_IS_VIDEO_ONLY', reason: 'Scene assembly concatenates video segments without audio; audio mixing happens at delivery through finalizeMedia.' }
 ];
+
+// P3.3: supplying audioInputs supersedes ASSEMBLY_IS_VIDEO_ONLY — the mixed
+// master then carries the mixed cues (aac), and the receipt says so explicitly.
+export function mixedRenderLimitations(audioEnabled) {
+  if (!audioEnabled) return MIXED_LIMITATIONS;
+  return [
+    ...MIXED_LIMITATIONS.filter(item => item.code !== 'ASSEMBLY_IS_VIDEO_ONLY'),
+    { code: 'AUDIO_MIXED_AT_ASSEMBLY', reason: 'Caller-supplied audioInputs were mixed into the assembled master at assembly time (aac); assembly without audioInputs remains video-only and delivery-time finalizeMedia mixing is unchanged.' }
+  ];
+}
 
 // Classify routeScenes plans into whole-scene engine buckets. Scenes whose
 // tasks span multiple engines, or that route to engines outside the v1 mixed
@@ -100,6 +112,26 @@ export async function renderMixedProject(project, options = {}) {
   const workers = 1;
   const renderLabel = typeof options.renderLabel === 'string' && options.renderLabel.trim() ? options.renderLabel.trim() : 'mixed';
   const throwOnQaFailure = options.throwOnQaFailure !== false;
+
+  // P3.3 optional assembly-time audio: cues are mixed into the assembled
+  // master at assembly time. Relative cue paths resolve against the project
+  // root; shape validation and existence checks fail closed here — before any
+  // scene renders — so a bad cue can never waste a full render pass.
+  const providedAudioInputs = options.audioInputs ?? [];
+  if (!Array.isArray(providedAudioInputs)) throw new Error('audioInputs must be an array of { path, offsetSeconds, durationSeconds, volume, fadeInSeconds, fadeOutSeconds, duckAgainst } audio cues.');
+  for (const [index, input] of providedAudioInputs.entries()) {
+    if (!input || typeof input !== 'object' || typeof input.path !== 'string' || !input.path.trim()) throw new Error('audioInputs[' + index + '] must be an object with a non-empty path.');
+  }
+  const audioInputs = normalizeAssemblyAudioInputs(providedAudioInputs.map(input => ({
+    ...input,
+    path: path.resolve(projectRoot, input.path),
+    ...(input.duckAgainst === undefined ? {} : { duckAgainst: path.resolve(projectRoot, input.duckAgainst) })
+  })));
+  for (const cue of audioInputs) {
+    try { await access(cue.path); }
+    catch { throw new Error('Audio input file is missing: ' + cue.path); }
+  }
+  const audioEnabled = audioInputs.length > 0;
 
   // IR is the only source of truth: route scenes, then fail closed on anything
   // outside the v1 mixed path (mixed-engine scenes, threejs/after-effects).
@@ -214,6 +246,7 @@ export async function renderMixedProject(project, options = {}) {
     fps: project.project.frameRate, output: master,
     width: canvas.width, height: canvas.height,
     videoCodec: options.videoCodec === undefined ? 'libx264' : options.videoCodec,
+    audioInputs,
     signal, timeoutMs: options.timeoutMs, onLine
   });
 
@@ -231,6 +264,7 @@ export async function renderMixedProject(project, options = {}) {
     scenesComplete: sceneReceipts.length === sceneCount,
     assemblyVerified: assembly.verified === true,
     scenesVerified: sceneReceipts.every(receipt => receipt.verified),
+    masterAudioMixed: !audioEnabled || assembly.media.hasAudio === true,
     mediaAnalysisPassed: mediaAnalysis.passed,
     nonEmpty: assembly.bytes > 0
   };
@@ -251,7 +285,8 @@ export async function renderMixedProject(project, options = {}) {
     sceneTimeline: timeline,
     sceneReceipts,
     assembly,
-    limitations: MIXED_LIMITATIONS,
+    limitations: mixedRenderLimitations(audioEnabled),
+    ...(audioEnabled ? { audio: { enabled: true, codec: assembly.media.audioCodec, inputs: audioInputs } } : {}),
     media: assembly.media,
     checks,
     frameEvidence,

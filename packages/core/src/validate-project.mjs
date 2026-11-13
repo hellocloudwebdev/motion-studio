@@ -1,4 +1,8 @@
 const ENGINE_HINTS = new Set(['after-effects', 'hyperframes', 'blender', 'threejs', 'ffmpeg', 'auto']);
+// Roadmap P3.3: how each delivery target derives its canvas from the render
+// master. 'contain' fits with black pad bars, 'cover' fills and crops the
+// overflow, 'stretch' fills exactly (may distort).
+const DELIVERY_FITS = new Set(['contain', 'cover', 'stretch']);
 const LAYER_KINDS = new Set(['text', 'shape', 'image', 'video', '3d', 'camera', 'effect', 'audio', 'chart', 'particle', 'composite', 'other']);
 // project.id and scene.id name filesystem workspaces and render artifacts, so
 // they are held to the same charset the adapters' safeId sanitization keeps
@@ -75,12 +79,27 @@ export function validateProject(project) {
   if (project.audio?.tracks !== undefined && !Array.isArray(project.audio.tracks)) issues.push(issue('INVALID_AUDIO_TRACKS', '$.audio.tracks', 'audio.tracks must be an array.'));
   else for (const [ai, cue] of (project.audio?.tracks || []).entries()) validateAudioCue(cue, `$.audio.tracks[${ai}]`, issues, p?.totalDurationFrames, project.assets || []);
   if (!project.delivery || !Array.isArray(project.delivery.targets) || project.delivery.targets.length === 0) issues.push(issue('DELIVERY_TARGET_REQUIRED', '$.delivery.targets', 'At least one delivery target is required.'));
-  else project.delivery.targets.forEach((target, i) => {
-    const tp = `$.delivery.targets[${i}]`;
-    if (!target || !Number.isInteger(target.width) || target.width <= 0 || !Number.isInteger(target.height) || target.height <= 0) issues.push(issue('INVALID_DELIVERY_DIMENSIONS', tp, 'Delivery target needs positive integer width and height.'));
-    const rate = target?.frameRate;
-    if (!rate || !Number.isInteger(rate.numerator) || rate.numerator <= 0 || !Number.isInteger(rate.denominator) || rate.denominator <= 0) issues.push(issue('INVALID_DELIVERY_FRAME_RATE', `${tp}.frameRate`, 'Delivery frameRate must use positive integer numerator and denominator values.'));
-  });
+  else {
+    const targetIds = new Set();
+    project.delivery.targets.forEach((target, i) => {
+      const tp = `$.delivery.targets[${i}]`;
+      if (!target || !Number.isInteger(target.width) || target.width <= 0 || !Number.isInteger(target.height) || target.height <= 0) issues.push(issue('INVALID_DELIVERY_DIMENSIONS', tp, 'Delivery target needs positive integer width and height.'));
+      const rate = target?.frameRate;
+      if (!rate || !Number.isInteger(rate.numerator) || rate.numerator <= 0 || !Number.isInteger(rate.denominator) || rate.denominator <= 0) issues.push(issue('INVALID_DELIVERY_FRAME_RATE', `${tp}.frameRate`, 'Delivery frameRate must use positive integer numerator and denominator values.'));
+      // Multi-target packages (roadmap P3.3) write one artifact per target as
+      // <projectId>-<targetId>.<ext>, so ids are only required once a project
+      // declares more than one target — single-target IRs keep validating as
+      // before. Held to the same charset as project.id/scene.id and unique.
+      if (project.delivery.targets.length > 1) {
+        if (!target || typeof target.id !== 'string' || !target.id.trim()) issues.push(issue('DELIVERY_TARGET_ID_REQUIRED', `${tp}.id`, 'Each delivery target of a multi-target project needs a non-empty id used to name its delivery artifact.'));
+        else if (!ID_PATTERN.test(target.id)) issues.push(issue('INVALID_DELIVERY_TARGET_ID', `${tp}.id`, 'delivery target id must be 1-80 characters of [a-zA-Z0-9_-] so it can safely name delivery artifacts.'));
+        else if (targetIds.has(target.id)) issues.push(issue('DUPLICATE_DELIVERY_TARGET_ID', `${tp}.id`, 'Duplicate delivery target id: ' + target.id + '.'));
+        else targetIds.add(target.id);
+      } else if (target && typeof target.id === 'string' && target.id.trim()) targetIds.add(target.id);
+      if (target?.fit !== undefined && !DELIVERY_FITS.has(target.fit)) issues.push(issue('INVALID_DELIVERY_FIT', `${tp}.fit`, 'Delivery fit must be one of contain, cover or stretch when provided.'));
+    });
+    if (project.delivery.primaryTargetId !== undefined && !targetIds.has(project.delivery.primaryTargetId)) issues.push(issue('INVALID_PRIMARY_TARGET_ID', '$.delivery.primaryTargetId', 'primaryTargetId must reference a declared delivery target id.'));
+  }
   const errors = issues.filter(x => x.severity === 'error');
   return { valid: errors.length === 0, issues, summary: { errors: errors.length, warnings: issues.length - errors.length } };
 }

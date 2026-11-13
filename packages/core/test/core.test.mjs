@@ -48,3 +48,53 @@ test('project and scene ids must match the filesystem-safe charset', () => {
   bounded.scenes.forEach((scene, index) => { scene.id = 's'.repeat(79) + index; });
   assert.equal(validateProject(bounded).valid, true);
 });
+
+// Roadmap P3.3 multi-ratio delivery: several targets with distinct dimensions
+// must validate, target ids must stay unique and filesystem-safe (they name
+// delivery artifacts), and the optional per-target fit mode is enumerated.
+test('delivery validation accepts multiple targets with distinct dimensions and fit modes', () => {
+  const multi = structuredClone(project);
+  multi.delivery.targets.push(
+    { id: 'vertical-9x16', format: 'mp4', width: 1080, height: 1920, frameRate: { numerator: 30, denominator: 1 }, fit: 'contain' },
+    { id: 'square-1x1', format: 'mp4', width: 1080, height: 1080, frameRate: { numerator: 30, denominator: 1 }, fit: 'cover' }
+  );
+  assert.equal(validateProject(multi).valid, true);
+});
+test('delivery validation rejects duplicate, unsafe and missing target ids in multi-target projects', () => {
+  const secondTarget = { id: 'vertical-9x16', format: 'mp4', width: 1080, height: 1920, frameRate: { numerator: 30, denominator: 1 } };
+  const duplicate = structuredClone(project);
+  duplicate.delivery.targets.push(structuredClone(duplicate.delivery.targets[0]));
+  assert.ok(validateProject(duplicate).issues.some(x => x.code === 'DUPLICATE_DELIVERY_TARGET_ID' && x.severity === 'error'));
+  const unsafe = structuredClone(project);
+  unsafe.delivery.targets.push(structuredClone(secondTarget));
+  unsafe.delivery.targets[0].id = '../escape';
+  const unsafeResult = validateProject(unsafe);
+  assert.equal(unsafeResult.valid, false);
+  assert.ok(unsafeResult.issues.some(x => x.code === 'INVALID_DELIVERY_TARGET_ID' && x.severity === 'error'));
+  const unnamed = structuredClone(project);
+  unnamed.delivery.targets.push(structuredClone(secondTarget));
+  delete unnamed.delivery.targets[0].id;
+  const unnamedResult = validateProject(unnamed);
+  assert.equal(unnamedResult.valid, false);
+  assert.ok(unnamedResult.issues.some(x => x.code === 'DELIVERY_TARGET_ID_REQUIRED' && x.severity === 'error'));
+});
+test('delivery validation keeps single-target projects id-optional for backward compatibility', () => {
+  const unnamed = structuredClone(project);
+  delete unnamed.delivery.targets[0].id;
+  delete unnamed.delivery.primaryTargetId;
+  const result = validateProject(unnamed);
+  assert.equal(result.valid, true);
+  assert.ok(!result.issues.some(x => String(x.code).startsWith('DELIVERY_TARGET_ID') || x.code === 'INVALID_DELIVERY_TARGET_ID' || x.code === 'DUPLICATE_DELIVERY_TARGET_ID'));
+});
+test('delivery validation rejects unknown fit modes and dangling primaryTargetId', () => {
+  const badFit = structuredClone(project);
+  badFit.delivery.targets[0].fit = 'crop';
+  const badFitResult = validateProject(badFit);
+  assert.equal(badFitResult.valid, false);
+  assert.ok(badFitResult.issues.some(x => x.code === 'INVALID_DELIVERY_FIT' && x.severity === 'error'));
+  const dangling = structuredClone(project);
+  dangling.delivery.primaryTargetId = 'missing-target';
+  const danglingResult = validateProject(dangling);
+  assert.equal(danglingResult.valid, false);
+  assert.ok(danglingResult.issues.some(x => x.code === 'INVALID_PRIMARY_TARGET_ID' && x.severity === 'error'));
+});

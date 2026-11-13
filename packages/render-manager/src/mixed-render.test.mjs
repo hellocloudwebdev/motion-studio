@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyMixedScenes, validateContiguousSceneTimeline, buildBlenderSegmentPlan } from './mixed-render.mjs';
+import { classifyMixedScenes, validateContiguousSceneTimeline, buildBlenderSegmentPlan, mixedRenderLimitations, renderMixedProject } from './mixed-render.mjs';
 
 function plan(sceneId, engines) {
   return { sceneId, tasks: engines.map((engine, index) => ({ taskId: sceneId + ':' + engine + ':' + index, engine, layerIds: ['layer-' + index], sequence: index })) };
@@ -60,4 +60,20 @@ test('blender frame sequences encode into deterministic MP4 segments matching th
   assert.throws(() => buildBlenderSegmentPlan({ framesDirectory: '', frameCount: 60, output: 'x.mp4', fps: { numerator: 30, denominator: 1 } }), /framesDirectory/);
   assert.throws(() => buildBlenderSegmentPlan({ framesDirectory: 'frames', frameCount: 1.5, output: 'x.mp4', fps: { numerator: 30, denominator: 1 } }), /positive integer/);
   assert.throws(() => buildBlenderSegmentPlan({ framesDirectory: 'frames', frameCount: 60, output: 'x.mp4', fps: { numerator: 30000, denominator: 0 } }), /positive integer rational/);
+});
+
+test('renderMixedProject rejects malformed or missing audioInputs before any scene renders', async () => {
+  const project = { project: { id: 'audio-guard', revision: 1, frameRate: { numerator: 30, denominator: 1 }, canvas: { width: 64, height: 36 } }, scenes: [{ id: 'scene-01', durationFrames: 30 }] };
+  await assert.rejects(() => renderMixedProject(project, { audioInputs: 'narration.wav' }), /audioInputs must be an array/);
+  await assert.rejects(() => renderMixedProject(project, { audioInputs: [{ path: '' }] }), /non-empty path/);
+  await assert.rejects(() => renderMixedProject(project, { audioInputs: [{ path: 'Z:/definitely-missing/narration.wav', offsetSeconds: 0 }] }), /Audio input file is missing/);
+  await assert.rejects(() => renderMixedProject(project, { audioInputs: [{ path: 'sfx.wav', volume: 99 }] }), /gain/);
+});
+
+test('mixed limitations supersede ASSEMBLY_IS_VIDEO_ONLY when audio is mixed at assembly', () => {
+  assert.ok(mixedRenderLimitations(false).some(item => item.code === 'ASSEMBLY_IS_VIDEO_ONLY'));
+  const withAudio = mixedRenderLimitations(true);
+  assert.ok(!withAudio.some(item => item.code === 'ASSEMBLY_IS_VIDEO_ONLY'));
+  assert.ok(withAudio.some(item => item.code === 'AUDIO_MIXED_AT_ASSEMBLY'));
+  assert.ok(withAudio.some(item => item.code === 'SINGLE_SCENE_MULTI_ENGINE_UNSUPPORTED'));
 });
