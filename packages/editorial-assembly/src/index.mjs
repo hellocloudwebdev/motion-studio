@@ -3,6 +3,48 @@ const TRACK_FAMILY = { video: 'V', audio: 'A', image: 'G', text: 'G', shape: 'G'
 
 const issue = (code, path, message, severity = 'error') => ({ code, path, message, severity });
 
+const isPlainObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+function normalizeRational(value) {
+  if (isPlainObject(value)) {
+    if (Number.isSafeInteger(value.numerator) && Number.isSafeInteger(value.denominator) && value.numerator > 0 && value.denominator > 0) {
+      return { numerator: value.numerator, denominator: value.denominator };
+    }
+    return null;
+  }
+  if (typeof value === 'string') {
+    const match = /^(\d+)\s*\/\s*(\d+)$/.exec(value.trim()) || /^(\d+)$/.exec(value.trim());
+    if (match) {
+      const numerator = Number(match[1]);
+      const denominator = match[2] === undefined ? 1 : Number(match[2]);
+      if (Number.isSafeInteger(numerator) && Number.isSafeInteger(denominator) && numerator > 0 && denominator > 0) {
+        return { numerator, denominator };
+      }
+    }
+  }
+  return null;
+}
+
+const framesToSeconds = (frame, rate) => frame * rate.denominator / rate.numerator;
+
+/**
+ * Ingested footage metadata is untrusted input: accept it from the asset record
+ * (asset.metadata.footage, as written by media-derivatives ingestFootage) or from
+ * an options.footageMetadata registry keyed by asset id, but only validated fields
+ * are ever used. Returns null when nothing usable is declared for the asset.
+ */
+function footageMetadataFor(assetId, assets, options) {
+  if (typeof assetId !== 'string') return null;
+  const asset = assets.get(assetId) || null;
+  const fromAsset = asset && isPlainObject(asset.metadata) && isPlainObject(asset.metadata.footage) ? asset.metadata.footage : null;
+  const registry = options.footageMetadata;
+  let fromRegistry = null;
+  if (isPlainObject(registry)) fromRegistry = isPlainObject(registry[assetId]) ? registry[assetId] : null;
+  else if (registry instanceof Map) fromRegistry = isPlainObject(registry.get(assetId)) ? registry.get(assetId) : null;
+  const metadata = fromAsset || fromRegistry;
+  return metadata ? { frameCount: metadata.frameCount, rationalFps: metadata.rationalFps, durationSeconds: metadata.durationSeconds } : null;
+}
+
 function validProject(project) {
   const errors = [];
   if (!project || typeof project !== 'object' || Array.isArray(project)) {
@@ -95,21 +137,57 @@ export function createEditorialAssembly(project, options = {}) {
       const startFrame = sceneStart + localStart;
       const endFrame = startFrame + duration;
       const trackNumber = allocateTrack(laneState[family], startFrame, endFrame);
-      const asset = layer.assetId ? assets.get(layer.assetId) : null;
+      const declaredAssetId = layer.assetId || layer.sourceAssetId || null;
+      const asset = declaredAssetId ? assets.get(declaredAssetId) : null;
       const clip = {
         clipId: layer.id, sceneId: scene.id, name: layer.name || layer.id,
         kind: layer.kind || 'other', family, track: family === 'video' ? 'V' + trackNumber : family === 'audio' ? 'A' + trackNumber : 'G' + trackNumber,
         startFrame, endFrame, durationFrames: duration,
         sourceInFrame: Number.isInteger(layer.sourceInFrame) && layer.sourceInFrame >= 0 ? layer.sourceInFrame : 0,
         assetId: layer.assetId || null,
+        sourceAssetId: layer.sourceAssetId || null,
         sourceUri: asset?.uri || null,
         sourceSha256: asset?.sha256 || null,
         rightsStatus: asset?.metadata?.rightsStatus || (asset ? 'needs-review' : null),
         media: MEDIA_KINDS.has(layer.kind)
       };
-      if (layer.assetId && !asset) issues.push(issue('ASSET_UNRESOLVED', layerPath + '.assetId', 'No attached asset record exists for ' + layer.assetId + '.', 'warning'));
+      if (declaredAssetId && !asset) issues.push(issue('ASSET_UNRESOLVED', layerPath + (layer.sourceAssetId && !layer.assetId ? '.sourceAssetId' : '.assetId'), 'No attached asset record exists for ' + declaredAssetId + '.', 'warning'));
       if (asset && asset.metadata?.rightsStatus !== 'approved') issues.push(issue('ASSET_RIGHTS_REVIEW_REQUIRED', layerPath + '.assetId', 'Asset ' + asset.id + ' has not been marked approved in producer rights-review metadata.', 'warning'));
-      if (MEDIA_KINDS.has(layer.kind) && !layer.assetId) issues.push(issue('MEDIA_ASSET_REQUIRED', layerPath + '.assetId', 'Media layers need an assetId to resolve source media.', 'warning'));
+      if (MEDIA_KINDS.has(layer.kind) && !declaredAssetId) issues.push(issue('MEDIA_ASSET_REQUIRED', layerPath + '.assetId', 'Media layers need an assetId to resolve source media.', 'warning'));
+      if (layer.sourceAssetId !== undefined || layer.inFrame !== undefined) {
+        const inFrame = layer.inFrame === undefined || layer.inFrame === null ? 0 : layer.inFrame;
+        if (!Number.isSafeInteger(inFrame) || inFrame < 0) {
+          issues.push(issue('FOOTAGE_IN_FRAME_INVALID', layerPath + '.inFrame', 'inFrame must be a non-negative integer source frame index.'));
+        } else {
+          clip.inFrame = inFrame;
+          clip.sourceInFrame = inFrame;
+          clip.sourceInPointSeconds = framesToSeconds(inFrame, fps);
+          clip.sourceOutPointSeconds = framesToSeconds(inFrame + duration, fps);
+          const footage = footageMetadataFor(declaredAssetId, assets, options);
+          if (!footage) {
+            issues.push(issue('FOOTAGE_METADATA_MISSING', layerPath, 'No ingested footage metadata is available for asset ' + (declaredAssetId ?? '(none)') + '; the declared in-point cannot be verified against the source.', 'warning'));
+          } else {
+            const problems = [];
+            if (!Number.isSafeInteger(footage.frameCount) || footage.frameCount < 1) problems.push('frameCount must be a positive integer');
+            if (footage.rationalFps !== undefined && !normalizeRational(footage.rationalFps)) problems.push('rationalFps must be an integer rational');
+            if (footage.durationSeconds !== undefined && (!Number.isFinite(Number(footage.durationSeconds)) || Number(footage.durationSeconds) < 0)) problems.push('durationSeconds must be a non-negative finite number');
+            if (problems.length) {
+              issues.push(issue('FOOTAGE_METADATA_INVALID', layerPath, 'Ingested footage metadata for asset ' + declaredAssetId + ' is invalid (' + problems.join('; ') + ').'));
+            } else {
+              const footageRate = footage.rationalFps === undefined ? null : normalizeRational(footage.rationalFps);
+              if (footageRate && (footageRate.numerator !== fps.numerator || footageRate.denominator !== fps.denominator)) {
+                issues.push(issue('FOOTAGE_FRAME_RATE_MISMATCH', layerPath, 'Footage ' + declaredAssetId + ' runs at ' + footageRate.numerator + '/' + footageRate.denominator + ' fps while the project conforms at ' + fps.numerator + '/' + fps.denominator + ' fps; any frame-rate conversion must be verified against rendered output.', 'warning'));
+              }
+              clip.footageFrameCount = footage.frameCount;
+              if (footageRate) clip.footageFrameRate = { numerator: footageRate.numerator, denominator: footageRate.denominator };
+              clip.footageVerified = inFrame + duration <= footage.frameCount;
+              if (!clip.footageVerified) {
+                issues.push(issue('FOOTAGE_RANGE_EXCEEDS_SOURCE', layerPath, 'Clip ' + layer.id + ' requires source frames ' + inFrame + '..' + (inFrame + duration) + ' but ingested footage ' + declaredAssetId + ' provides only ' + footage.frameCount + ' frames.'));
+              }
+            }
+          }
+        }
+      }
       clips.push(clip);
     });
     cursor = sceneEnd;
@@ -129,7 +207,7 @@ export function createEditorialAssembly(project, options = {}) {
     tracks: Object.entries(laneState).flatMap(([family, lanes]) => lanes.map((lane, index) => ({ id: (family === 'video' ? 'V' : family === 'audio' ? 'A' : 'G') + (index + 1), family, index: index + 1 }))),
     clips: orderedClips,
     issues,
-    summary: { valid: errors.length === 0, errors: errors.length, warnings: warnings.length, sceneCount: scenes.length, clipCount: clips.length, trackCount: Object.values(laneState).reduce((sum, lanes) => sum + lanes.length, 0), mediaClipCount: clips.filter(clip => clip.media).length }
+    summary: { valid: errors.length === 0, errors: errors.length, warnings: warnings.length, sceneCount: scenes.length, clipCount: clips.length, trackCount: Object.values(laneState).reduce((sum, lanes) => sum + lanes.length, 0), mediaClipCount: clips.filter(clip => clip.media).length, footageClipCount: clips.filter(clip => Number.isInteger(clip.inFrame)).length, verifiedFootageClipCount: clips.filter(clip => clip.footageVerified === true).length }
   };
 }
 
@@ -145,6 +223,8 @@ export function validateEditorialAssembly(assembly) {
     else if (ids.has(clip.clipId)) issues.push(issue('DUPLICATE_CLIP_ID', '$.clips[' + index + '].clipId', 'Clip ids must be unique.'));
     else ids.add(clip.clipId);
     if (!Number.isInteger(clip.startFrame) || !Number.isInteger(clip.endFrame) || clip.startFrame < 0 || clip.endFrame <= clip.startFrame) issues.push(issue('INVALID_CLIP_RANGE', '$.clips[' + index + ']', 'Clip range must be a positive integer frame interval.'));
+    if (clip.inFrame !== undefined && (!Number.isSafeInteger(clip.inFrame) || clip.inFrame < 0)) issues.push(issue('FOOTAGE_IN_FRAME_INVALID', '$.clips[' + index + '].inFrame', 'Clip inFrame must be a non-negative integer source frame index.'));
+    if (clip.sourceAssetId !== undefined && clip.sourceAssetId !== null && typeof clip.sourceAssetId !== 'string') issues.push(issue('FOOTAGE_SOURCE_ASSET_INVALID', '$.clips[' + index + '].sourceAssetId', 'Clip sourceAssetId must be a string asset id.'));
     if (!/^[VAG][1-9][0-9]*$/.test(clip.track || '')) issues.push(issue('INVALID_TRACK_ID', '$.clips[' + index + '].track', 'Track id must be Vn, An or Gn.'));
     if (clip && typeof clip.track === 'string' && Number.isInteger(clip.startFrame) && Number.isInteger(clip.endFrame)) {
       byTrack.set(clip.track, [...(byTrack.get(clip.track) || []), { ...clip, index }]);

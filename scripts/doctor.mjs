@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir, stat } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectAdobeApplications } from './software-detect.mjs';
@@ -33,6 +34,53 @@ const hyperframes = await packageVersion('hyperframes');
 const afterEffectsMcp = await packageVersion('@kumoproductions/mcp-aftereffects');
 const premiereMcp = await packageVersion('premiere-pro-mcp');
 const software = detectAdobeApplications();
+
+// P4.3 additive checks. Credential checks report PRESENCE ONLY — key values
+// are never read into or printed by this output.
+async function findBrowserExecutable(directory, depth = 4) {
+  let entries;
+  try { entries = await readdir(directory, { withFileTypes: true }); } catch { return null; }
+  for (const entry of entries) {
+    const full = path.join(directory, entry.name);
+    if (entry.isFile() && /\.(exe|app|bin)$/i.test(entry.name)) return full;
+    if (entry.isDirectory() && depth > 0) {
+      const found = await findBrowserExecutable(full, depth - 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+const envLocalPath = path.join(root, '.env.local');
+const envLocalText = await readFile(envLocalPath, 'utf8').catch(() => null);
+const envLocalKeys = new Set();
+for (const line of (envLocalText || '').split(/\r?\n/)) {
+  const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+  // Only the key name is kept; the value is never stored or printed.
+  if (match && /\S/.test(line.slice(match[0].length))) envLocalKeys.add(match[1]);
+}
+function credentialPresence(name) {
+  if (typeof process.env[name] === 'string' && process.env[name].trim()) return { present: true, source: 'environment' };
+  if (envLocalKeys.has(name)) return { present: true, source: '.env.local' };
+  return { present: false, source: null };
+}
+const browserCandidates = [];
+for (const name of ['HYPERFRAMES_BROWSER_PATH', 'PRODUCER_HEADLESS_SHELL_PATH']) {
+  if (typeof process.env[name] === 'string' && process.env[name].trim()) browserCandidates.push({ source: 'env:' + name, path: path.resolve(process.env[name].trim()) });
+}
+browserCandidates.push(
+  { source: 'node_modules/hyperframes/browser', path: path.join(root, 'node_modules', 'hyperframes', 'browser') },
+  { source: 'node_modules/hyperframes/.browser', path: path.join(root, 'node_modules', 'hyperframes', '.browser') },
+  { source: '~/.cache/hyperframes/chrome', path: path.join(os.homedir(), '.cache', 'hyperframes', 'chrome') },
+  { source: '~/.cache/puppeteer', path: path.join(os.homedir(), '.cache', 'puppeteer') }
+);
+let hyperframesBrowser = { prepared: false, source: null, path: null };
+for (const candidate of browserCandidates) {
+  const info = await stat(candidate.path).catch(() => null);
+  const executable = info?.isFile() ? candidate.path : info ? await findBrowserExecutable(candidate.path) : null;
+  if (executable) { hyperframesBrowser = { prepared: true, source: candidate.source, path: executable }; break; }
+}
+const benchmarkResultsPath = path.join(root, 'work', 'benchmark-results.json');
+const benchmarkResultsPresent = await access(benchmarkResultsPath).then(() => true, () => false);
 const result = {
   product: 'Motion Studio',
   version: (await readFile(path.join(root, 'VERSION'), 'utf8')).trim(),
@@ -41,6 +89,13 @@ const result = {
   runtime: { node: process.version, minimum: '24.0.0', compatible: nodeMajor >= 24 },
   checks,
   npmPackages: { hyperframes, afterEffectsMcp, premiereMcp },
+  envLocal: { present: envLocalText !== null, path: '.env.local' },
+  credentials: {
+    openRouterApiKey: credentialPresence('OPENROUTER_API_KEY'),
+    fishAudioApiKey: credentialPresence('FISH_AUDIO_API_KEY')
+  },
+  hyperframesBrowser,
+  benchmarkResults: { present: benchmarkResultsPresent, path: 'work/benchmark-results.json' },
   adobe: software,
   policies: {
     afterEffectsReadonlyDefault: true,

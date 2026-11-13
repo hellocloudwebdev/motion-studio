@@ -114,6 +114,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 **P2.1 — Expand the Blender scene contract**
 - Define supported canonical mappings for meshes/primitives, materials, camera, lighting, transforms, integer-frame animation and alpha requirements; reject unsupported features explicitly.
 - Add deterministic fixtures for camera move, lighting/material variations, imported approved asset, and cancellation/error behavior. Keep local rendering concurrency at one.
+- **Status (2026-11-14): DONE, runtime verified on Blender 5.3.0.** Camera keyframes (validated, auto-aim), lighting rig overrides (area/point/sun, ≤8 lights, validated ranges), material params (metallic/roughness/emission), imported .glb/.gltf/.obj assets (containment + no-symlink checks; glTF quaternion rotation-mode bug found and fixed with decoded-frame MD5 regression guards), failed-frame single retry then explicit error, AbortSignal cancellation, RGBA alpha output. Four fixtures runtime-verified (~1.7 s/frame at 480×270 threads 2); unsupported features rejected with explicit errors (full table in the adapter).
 
 **P2.2 — Run Blender on a supported host**
 - Install or provision a supported Blender version on an authorized machine; record OS, Blender/build version, render engine, fonts, hardware and settings.
@@ -125,26 +126,29 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Assemble using the locked editorial owner (Premiere for editorial assembly where the Adobe path is available; FFmpeg for the approved open-source delivery path).
 - Inspect scene boundaries, color/alpha integration, sync and final output metadata.
 - **Phase 2 exit:** a verified Blender receipt and mixed 2D/3D delivery package pass all relevant QA. Adapter tests alone do not close this phase.
+- **Status (2026-11-13): Phase 2 EXIT MET** — P2.2 (Blender 5.3.0 runtime receipts) and P2.3 (mixed 2D/3D production `mixed-2d3d-acceptance` ACCEPTED: Blender EEVEE scene + 2 HyperFrames scenes, 14/14 integrity) are closed. Remaining open items are capability extensions (single-scene multi-engine compositing, explicit scene start offsets in assembly), not exit gates.
 
 ### Phase 3 — Production intelligence: broader inputs and automatic improvement
 
 **Outcome:** The same controlled pipeline can produce multiple video categories and formats, while preserving asset rights, source evidence and bounded repair.
 
+**Phase 3 status (2026-11-14):** P3.1 (provider contracts + local synth providers + OpenRouter image provider), P3.2 (real-footage ingest/trims/editorial in-points; directed narration partial), P3.3 (multi-format delivery + audio-reactive graphics) implemented and locally verified. P3.4 (creative critique wired to the repair loop) remains the open Phase-3 item; true reflow and video/stock providers remain open sub-items.
 **P3.1 — Add provider-neutral asset production/acquisition**
 - Define capability contracts for image, video/stock, music, SFX and speech providers; keep API credentials outside project artifacts and logs.
 - Implement providers incrementally, record prompt/source, model/provider, hash, license/usage terms and approval state, and make unlicensed or unknown-rights assets non-final by default.
 - Keep MCP planning usable under a host harness without forcing a Motion Studio model key; external research/search costs remain explicit and opt-in.
+- **Status (2026-11-14): implemented** — new `packages/asset-providers` defines the capability contracts with deterministic local providers (SFX synth: whoosh/shimmer/pop/riser/impact/thud; music beds: key/bpm/mood chord progressions; gradient images) — all `rightsStatus: generated`, FFprobe-verified, byte-deterministic; OpenRouter image provider implemented (13 image-output models verified present, default `google/gemini-2.5-flash-image`, contract-tested with injectable fetch, live call pending spend opt-in); `attachProviderReceipt` makes unknown-rights assets non-final by default. Speech providers pre-exist in `packages/speech-adapter`. Video/stock slots mapped, no generator yet.
 
 **P3.2 — Add directed narration and real-footage editing**
 - Extend script-to-voice direction (voice/locale/pace/pronunciation) and timing review with provider-independent metadata.
 - Support footage ingest, probe, proxy/derivative and frame-accurate trims while treating media metadata and embedded text as untrusted input.
 - Verify source in-points, frame rate conversion, audio sync, rights and editorial manifest against rendered output.
-
-**P3.3 — Add audio-reactive and multi-format production**
+- **Status (2026-11-14): real-footage path DONE** — `ingestFootage` (rational fps, decoded frame count, half-res proxy, thumbnail, waveform, untrusted-metadata validators) and `trimFootage` (exact-frame cuts fail-closed on range, output frame count verified) in `packages/media-derivatives`; editorial assembly resolves `{sourceAssetId, inFrame, durationFrames}` with explicit finding codes; fixture flow PSNR-verifies in-points at ~50 dB. Directed narration: voice selection + prosody speed done; pronunciation/locale remain.
 - Define deterministic audio-analysis inputs and frame-bound outputs before adding audio-reactive graphics.
 - Produce 16:9, 9:16, 1:1 and custom profiles from the same canonical project; reflow/reposition typography and graphics rather than merely crop where a profile requires layout changes.
 - Verify each output’s codec, dimensions, rational frame rate, duration, captions, safe area and audio.
 - **Status (2026-11-13): multi-ratio delivery in progress.** Done: `delivery.targets` accepts multiple targets with distinct canvas dimensions and a validated per-target `fit` mode (`contain` default, `cover`, `stretch`); delivery-manager transcodes, media-analyzes and integrity-verifies one variant per target from the same canonical IR, and `startup-ad-acceptance-24s` delivers accepted 16:9 / 9:16 / 1:1 variants (contain = scale-to-fit with black pad bars, no distortion). Remaining: true per-profile reflow — typography and graphics are currently pad-barred, not repositioned/rescaled per profile (recorded as `layout-reflow-pending` limitations in the delivery receipt), plus custom profiles beyond the three fixed ratios and per-profile safe-area verification.
+- **Status (2026-11-14): audio-reactive DONE.** `analyzeAudioEnvelope` (packages/ffmpeg) produces deterministic frame-bound RMS envelopes (asetnsamples + astats, byte-identical JSON verified, silence floored at −60 dB, amovie quoting handled via the subtitle-filter convention with loud failure); chart layers bind via `content.audioEnvelope` with containment, normalization, downsampling cap and explicit `AUDIO_ENVELOPE_*` warnings; demo compiles 60 envelope-derived bars with zero warnings (`projects/audio-reactive-demo`).
 
 **P3.4 — Complete advanced creative critique and repair**
 - Evaluate brief/message alignment, hook, pacing, continuity, art direction and CTA using structured advisory findings tied to evidence and time ranges.
@@ -172,6 +176,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Maintain benchmarks for representative durations/resolutions and memory use; publish results with machine and settings context.
 - Track production failures, repair rates, render cost/time and accepted outputs without collecting secrets or unapproved media.
 - **Phase 4 exit:** clean-install release produces reproducible, auditable deliveries on the supported matrix and safely upgrades/recovers without data loss.
+- **Status (2026-11-14): CI configured** (`.github/workflows/ci.yml`, 3-OS × Node 24, per-OS ffmpeg installs — first Actions run pending), benchmarks implemented (`scripts/benchmark.mjs` → `work/benchmark-results.json` with machine context), doctor expanded (credential presence, HyperFrames browser, benchmark results). Installer lifecycle tests and failure tracking remain open.
 
 **Optional integrations:** Remotion remains a future specialist adapter; DaVinci Resolve remains optional finishing. Neither is a prerequisite for the four phase exit gates. Do not add distributed rendering before the local acceptance pipeline is stable.
 
@@ -183,7 +188,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 | Kinetic typography | **ACCEPTED 2026-11-13** (kinetic-type-acceptance): 18 s narration-driven piece, Fish Audio narration, 21/21 package after producer voice review | Maintain: none blocking |
 | Narrated explainer | **ACCEPTED 2026-11-13** (offline-narrated-explainer-18s-fish): Fish Audio narration chosen by producer review over the SAPI version, 19/19 package | Maintain: none blocking |
 | Data visualization | **ACCEPTED 2026-11-13** (data-viz-acceptance): 19 s IRENA-sourced renewable-capacity charts with provenance, silent master, 15/15 integrity, 0 media findings | Maintain: none blocking |
-| Mixed 2D/3D | **ACCEPTED 2026-11-13** (mixed-2d3d-acceptance): Blender 5.3.0 EEVEE scene + 2 HyperFrames scenes assembled and delivered, 14/14 integrity | Single-scene multi-engine compositing, alpha, audio-in-assembly remain open |
+| Mixed 2D/3D | **ACCEPTED 2026-11-13** (mixed-2d3d-acceptance): Blender 5.3.0 EEVEE scene + 2 HyperFrames scenes assembled and delivered, 14/14 integrity | Single-scene multi-engine compositing and explicit start offsets remain open (audio-in-assembly and alpha now implemented) |
 
 ### Dependency and status rules
 

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "provider-demo",
+    "name": "Provider Demo — Locally Synthesized Assets",
+    "objective": "Prove the P3.1 provider-neutral asset production contracts: SFX, music bed and gradient image generation with receipts, rights state and core validation.",
+    "frameRate": { "numerator": 30, "denominator": 1 },
+    "canvas": { "width": 1920, "height": 1080, "pixelAspectRatio": 1, "safeAreaPercent": 5 },
+    "totalDurationFrames": 150,
+    "revision": 1
+  },
+  "creative": {
+    "concept": "A five-second provider showcase where every sound and image is synthesized in-repo with a recorded provenance receipt.",
+    "audience": "Motion Studio producers reviewing provider-generated asset pipelines.",
+    "message": "Every asset carries a receipt: provider, params, hash and rights status."
+  },
+  "assets": [],
+  "scenes": [
+    {
+      "id": "showcase",
+      "name": "Provider Showcase",
+      "intent": "Demonstrate a generated gradient backdrop, music bed and SFX cues backed by full provider receipts.",
+      "durationFrames": 150,
+      "layers": [
+        { "id": "backdrop", "kind": "image", "name": "Gradient backdrop", "startFrame": 0, "durationFrames": 150 },
+        { "id": "title", "kind": "text", "name": "Title", "text": "Provider Demo", "startFrame": 0, "durationFrames": 150, "typography": { "family": "Arial", "sizePx": 96, "weight": 700, "color": "#FFFFFF" } }
+      ]
+    }
+  ],
+  "delivery": {
+    "targets": [
+      { "id": "master", "width": 1920, "height": 1080, "frameRate": { "numerator": 30, "denominator": 1 } }
+    ]
+  }
+}

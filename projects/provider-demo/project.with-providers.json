@@ -1,0 +1,294 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "provider-demo",
+    "name": "Provider Demo — Locally Synthesized Assets",
+    "objective": "Prove the P3.1 provider-neutral asset production contracts: SFX, music bed and gradient image generation with receipts, rights state and core validation.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 5
+    },
+    "totalDurationFrames": 150,
+    "revision": 1
+  },
+  "creative": {
+    "concept": "A five-second provider showcase where every sound and image is synthesized in-repo with a recorded provenance receipt.",
+    "audience": "Motion Studio producers reviewing provider-generated asset pipelines.",
+    "message": "Every asset carries a receipt: provider, params, hash and rights status."
+  },
+  "assets": [
+    {
+      "id": "asset-270865985f3fc094ad69",
+      "contentId": "content-3d5318714c15eba8be9a",
+      "kind": "audio",
+      "uri": "assets/provider/music-bed.wav",
+      "mimeType": "audio/wav",
+      "sha256": "3d5318714c15eba8be9abb3e837ad963dccf503cdf3ff5a7c111176d14de12d2",
+      "byteSize": 882078,
+      "metadata": {
+        "title": "music-bed uplift (ffmpeg-lavfi)",
+        "creator": null,
+        "source": "ffmpeg-lavfi",
+        "description": null,
+        "tags": [
+          "provider-generated",
+          "music-bed",
+          "uplift"
+        ],
+        "license": "Generated locally by Motion Studio; no third-party material",
+        "attribution": null,
+        "rightsStatus": "generated",
+        "rightsApproval": null,
+        "approvedForFinalUse": true,
+        "terms": "Locally synthesized, no third-party material",
+        "prompt": null,
+        "params": {
+          "durationSeconds": 5,
+          "key": "C",
+          "bpm": 96,
+          "mood": "uplift",
+          "chords": [
+            "C",
+            "G",
+            "Am",
+            "F"
+          ],
+          "secondsPerChord": 1.25,
+          "bassFrequency": 65.41,
+          "fadeInSeconds": 0.5,
+          "fadeOutSeconds": 1.25
+        },
+        "verified": true,
+        "generatedAt": "2026-11-13T19:34:52.490Z"
+      }
+    },
+    {
+      "id": "asset-594365e72d4f961ffa2b",
+      "contentId": "content-1343642292942817d1fb",
+      "kind": "audio",
+      "uri": "assets/provider/sfx-whoosh.wav",
+      "mimeType": "audio/wav",
+      "sha256": "1343642292942817d1fb2be1ecf29080af88393829d9ba21c1d34648ea5dba2b",
+      "byteSize": 132378,
+      "metadata": {
+        "title": "sfx whoosh (ffmpeg-lavfi)",
+        "creator": null,
+        "source": "ffmpeg-lavfi",
+        "description": null,
+        "tags": [
+          "provider-generated",
+          "sfx",
+          "whoosh"
+        ],
+        "license": "Generated locally by Motion Studio; no third-party material",
+        "attribution": null,
+        "rightsStatus": "generated",
+        "rightsApproval": null,
+        "approvedForFinalUse": true,
+        "terms": "Locally synthesized, no third-party material",
+        "prompt": null,
+        "params": {
+          "kind": "whoosh",
+          "durationSeconds": 1.5,
+          "frequency": 900,
+          "gain": 1.2,
+          "seed": 1729
+        },
+        "verified": true,
+        "generatedAt": "2026-11-13T19:34:52.179Z"
+      }
+    },
+    {
+      "id": "asset-d10b2175acf1d5bff146",
+      "contentId": "content-3d668af7a291d06e7c58",
+      "kind": "audio",
+      "uri": "assets/provider/sfx-pop.wav",
+      "mimeType": "audio/wav",
+      "sha256": "3d668af7a291d06e7c58c00a0bd36d042f627168331c611d1e6d3d566a35cf4e",
+      "byteSize": 88278,
+      "metadata": {
+        "title": "sfx pop (ffmpeg-lavfi)",
+        "creator": null,
+        "source": "ffmpeg-lavfi",
+        "description": null,
+        "tags": [
+          "provider-generated",
+          "sfx",
+          "pop"
+        ],
+        "license": "Generated locally by Motion Studio; no third-party material",
+        "attribution": null,
+        "rightsStatus": "generated",
+        "rightsApproval": null,
+        "approvedForFinalUse": true,
+        "terms": "Locally synthesized, no third-party material",
+        "prompt": null,
+        "params": {
+          "kind": "pop",
+          "durationSeconds": 1,
+          "frequency": 320,
+          "gain": 1,
+          "seed": 1729
+        },
+        "verified": true,
+        "generatedAt": "2026-11-13T19:34:52.266Z"
+      }
+    },
+    {
+      "id": "asset-9b2c9814b46a31e0d93a",
+      "contentId": "content-2b2b4ce85605327aeec5",
+      "kind": "audio",
+      "uri": "assets/provider/sfx-impact.wav",
+      "mimeType": "audio/wav",
+      "sha256": "2b2b4ce85605327aeec59d3658369e9ffb9e60afc09a228f55f292cbddb3590a",
+      "byteSize": 105918,
+      "metadata": {
+        "title": "sfx impact (ffmpeg-lavfi)",
+        "creator": null,
+        "source": "ffmpeg-lavfi",
+        "description": null,
+        "tags": [
+          "provider-generated",
+          "sfx",
+          "impact"
+        ],
+        "license": "Generated locally by Motion Studio; no third-party material",
+        "attribution": null,
+        "rightsStatus": "generated",
+        "rightsApproval": null,
+        "approvedForFinalUse": true,
+        "terms": "Locally synthesized, no third-party material",
+        "prompt": null,
+        "params": {
+          "kind": "impact",
+          "durationSeconds": 1.2,
+          "frequency": 120,
+          "gain": 1,
+          "seed": 4711
+        },
+        "verified": true,
+        "generatedAt": "2026-11-13T19:34:52.355Z"
+      }
+    },
+    {
+      "id": "asset-0db82bd631f61c46359f",
+      "contentId": "content-c364decdffed66a2be88",
+      "kind": "image",
+      "uri": "assets/provider/gradient.png",
+      "mimeType": "image/png",
+      "sha256": "c364decdffed66a2be8875365bf0a3fbd04a97fad767911b163895b4a6b9861b",
+      "byteSize": 206745,
+      "metadata": {
+        "title": "image gradient (ffmpeg-lavfi)",
+        "creator": null,
+        "source": "ffmpeg-lavfi",
+        "description": null,
+        "tags": [
+          "provider-generated",
+          "image",
+          "gradient"
+        ],
+        "license": "Generated locally by Motion Studio; no third-party material",
+        "attribution": null,
+        "rightsStatus": "generated",
+        "rightsApproval": null,
+        "approvedForFinalUse": true,
+        "terms": "Locally synthesized, no third-party material",
+        "prompt": null,
+        "params": {
+          "width": 1920,
+          "height": 1080,
+          "palette": [
+            "#0E2A3A",
+            "#14384E",
+            "#4ADE80"
+          ],
+          "seed": 42
+        },
+        "verified": true,
+        "generatedAt": "2026-11-13T19:34:52.640Z"
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "showcase",
+      "name": "Provider Showcase",
+      "intent": "Demonstrate a generated gradient backdrop, music bed and SFX cues backed by full provider receipts.",
+      "durationFrames": 150,
+      "layers": [
+        {
+          "id": "backdrop",
+          "kind": "image",
+          "name": "Gradient backdrop",
+          "startFrame": 0,
+          "durationFrames": 150,
+          "assetId": "asset-0db82bd631f61c46359f"
+        },
+        {
+          "id": "title",
+          "kind": "text",
+          "name": "Title",
+          "text": "Provider Demo",
+          "startFrame": 0,
+          "durationFrames": 150,
+          "typography": {
+            "family": "Arial",
+            "sizePx": 96,
+            "weight": 700,
+            "color": "#FFFFFF"
+          }
+        }
+      ],
+      "audioCues": [
+        {
+          "assetId": "asset-270865985f3fc094ad69",
+          "offsetFrames": 0,
+          "durationFrames": 150,
+          "fadeInFrames": 15,
+          "fadeOutFrames": 30,
+          "volume": 0.8
+        },
+        {
+          "assetId": "asset-594365e72d4f961ffa2b",
+          "offsetFrames": 0,
+          "durationFrames": 45,
+          "fadeOutFrames": 10,
+          "volume": 1
+        },
+        {
+          "assetId": "asset-d10b2175acf1d5bff146",
+          "offsetFrames": 60,
+          "durationFrames": 20,
+          "volume": 0.9
+        },
+        {
+          "assetId": "asset-9b2c9814b46a31e0d93a",
+          "offsetFrames": 96,
+          "durationFrames": 30,
+          "fadeOutFrames": 10,
+          "volume": 1
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "targets": [
+      {
+        "id": "master",
+        "width": 1920,
+        "height": 1080,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        }
+      }
+    ]
+  }
+}

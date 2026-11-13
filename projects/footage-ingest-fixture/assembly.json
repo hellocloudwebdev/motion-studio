@@ -1,0 +1,154 @@
+{
+  "assembly": {
+    "assemblyVersion": "1.0.0",
+    "project": {
+      "id": "footage-ingest-fixture",
+      "name": "Real-footage ingest and frame-accurate trim fixture",
+      "revision": 1,
+      "totalDurationFrames": 120,
+      "frameRate": {
+        "numerator": 30,
+        "denominator": 1
+      }
+    },
+    "sequence": {
+      "id": "footage-ingest-fixture-sequence",
+      "name": "footage-ingest-fixture-sequence",
+      "startFrame": 0,
+      "endFrame": 120,
+      "durationFrames": 120
+    },
+    "scenes": [
+      {
+        "sceneId": "scene-01",
+        "name": "Footage clip clip-a",
+        "startFrame": 0,
+        "endFrame": 40,
+        "durationFrames": 40
+      },
+      {
+        "sceneId": "scene-02",
+        "name": "Footage clip clip-b",
+        "startFrame": 40,
+        "endFrame": 80,
+        "durationFrames": 40
+      },
+      {
+        "sceneId": "scene-03",
+        "name": "Footage clip clip-c",
+        "startFrame": 80,
+        "endFrame": 120,
+        "durationFrames": 40
+      }
+    ],
+    "tracks": [
+      {
+        "id": "V1",
+        "family": "video",
+        "index": 1
+      }
+    ],
+    "clips": [
+      {
+        "clipId": "clip-a",
+        "sceneId": "scene-01",
+        "name": "clip-a",
+        "kind": "video",
+        "family": "video",
+        "track": "V1",
+        "startFrame": 0,
+        "endFrame": 40,
+        "durationFrames": 40,
+        "sourceInFrame": 30,
+        "assetId": null,
+        "sourceAssetId": "footage-testsrc2",
+        "sourceUri": "footage/testsrc2-6s-640x360-30fps.mp4",
+        "sourceSha256": "8812a726e5ca1be00017d2e7db6569afc41391b840aa04105de65586ceb32bc9",
+        "rightsStatus": "approved",
+        "media": true,
+        "inFrame": 30,
+        "sourceInPointSeconds": 1,
+        "sourceOutPointSeconds": 2.3333333333333335,
+        "footageFrameCount": 180,
+        "footageFrameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "footageVerified": true
+      },
+      {
+        "clipId": "clip-b",
+        "sceneId": "scene-02",
+        "name": "clip-b",
+        "kind": "video",
+        "family": "video",
+        "track": "V1",
+        "startFrame": 40,
+        "endFrame": 80,
+        "durationFrames": 40,
+        "sourceInFrame": 50,
+        "assetId": null,
+        "sourceAssetId": "footage-testsrc2",
+        "sourceUri": "footage/testsrc2-6s-640x360-30fps.mp4",
+        "sourceSha256": "8812a726e5ca1be00017d2e7db6569afc41391b840aa04105de65586ceb32bc9",
+        "rightsStatus": "approved",
+        "media": true,
+        "inFrame": 50,
+        "sourceInPointSeconds": 1.6666666666666667,
+        "sourceOutPointSeconds": 3,
+        "footageFrameCount": 180,
+        "footageFrameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "footageVerified": true
+      },
+      {
+        "clipId": "clip-c",
+        "sceneId": "scene-03",
+        "name": "clip-c",
+        "kind": "video",
+        "family": "video",
+        "track": "V1",
+        "startFrame": 80,
+        "endFrame": 120,
+        "durationFrames": 40,
+        "sourceInFrame": 120,
+        "assetId": null,
+        "sourceAssetId": "footage-testsrc2",
+        "sourceUri": "footage/testsrc2-6s-640x360-30fps.mp4",
+        "sourceSha256": "8812a726e5ca1be00017d2e7db6569afc41391b840aa04105de65586ceb32bc9",
+        "rightsStatus": "approved",
+        "media": true,
+        "inFrame": 120,
+        "sourceInPointSeconds": 4,
+        "sourceOutPointSeconds": 5.333333333333333,
+        "footageFrameCount": 180,
+        "footageFrameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "footageVerified": true
+      }
+    ],
+    "issues": [],
+    "summary": {
+      "valid": true,
+      "errors": 0,
+      "warnings": 0,
+      "sceneCount": 3,
+      "clipCount": 3,
+      "trackCount": 1,
+      "mediaClipCount": 3,
+      "footageClipCount": 3,
+      "verifiedFootageClipCount": 3
+    }
+  },
+  "validation": {
+    "valid": true,
+    "issues": [],
+    "summary": {
+      "errors": 0
+    }
+  }
+}

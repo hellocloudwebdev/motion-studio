@@ -83,3 +83,106 @@ test('rejects overlapping clips assigned to the same track', () => {
   assert.equal(result.valid, false);
   assert.ok(result.issues.some(x => x.code === 'TRACK_OVERLAP'));
 });
+
+test('resolves declared footage in-points against ingested footage metadata', () => {
+  const input = project();
+  input.assets[0].metadata.footage = { frameCount: 150, rationalFps: { numerator: 30000, denominator: 1001 }, durationSeconds: 5 };
+  input.scenes[0].layers[0].inFrame = 30;
+  const result = createEditorialAssembly(input);
+  const clip = result.clips.find(x => x.clipId === 'hero');
+  assert.equal(result.summary.valid, true);
+  assert.equal(clip.inFrame, 30);
+  assert.equal(clip.sourceInFrame, 30, 'declared in-point must drive sourceInFrame for interchange');
+  assert.equal(clip.sourceAssetId, null);
+  assert.equal(clip.sourceInPointSeconds, 1.001);
+  assert.equal(clip.sourceOutPointSeconds, 4.004);
+  assert.equal(clip.footageFrameCount, 150);
+  assert.deepEqual(clip.footageFrameRate, { numerator: 30000, denominator: 1001 });
+  assert.equal(clip.footageVerified, true);
+  assert.equal(result.summary.footageClipCount, 1);
+  assert.equal(result.summary.verifiedFootageClipCount, 1);
+  assert.ok(!result.issues.some(x => x.code.startsWith('FOOTAGE_')));
+});
+
+test('resolves footage metadata from the options registry when the asset record omits it', () => {
+  const input = project();
+  input.scenes[0].layers[0].sourceAssetId = 'footage';
+  delete input.scenes[0].layers[0].assetId;
+  const result = createEditorialAssembly(input, {
+    footageMetadata: { footage: { frameCount: 120, rationalFps: '30/1' } }
+  });
+  const clip = result.clips.find(x => x.clipId === 'hero');
+  assert.equal(result.summary.valid, true);
+  assert.equal(clip.sourceAssetId, 'footage');
+  assert.equal(clip.assetId, null);
+  assert.equal(clip.inFrame, 0, 'inFrame defaults to 0 when a footage trim is declared');
+  assert.equal(clip.sourceInPointSeconds, 0);
+  assert.equal(clip.footageFrameCount, 120);
+  assert.equal(clip.footageVerified, true);
+  assert.ok(!result.issues.some(x => x.code === 'MEDIA_ASSET_REQUIRED'), 'sourceAssetId satisfies media asset resolution');
+  assert.ok(!result.issues.some(x => x.code === 'FOOTAGE_METADATA_MISSING'));
+  assert.equal(clip.rightsStatus, 'approved', 'rights metadata resolves through sourceAssetId');
+});
+
+test('fails closed when the declared in-point range leaves the ingested footage', () => {
+  const input = project();
+  input.assets[0].metadata.footage = { frameCount: 100, rationalFps: '30000/1001' };
+  input.scenes[0].layers[0].inFrame = 30;
+  const result = createEditorialAssembly(input);
+  assert.equal(result.summary.valid, false);
+  const finding = result.issues.find(x => x.code === 'FOOTAGE_RANGE_EXCEEDS_SOURCE');
+  assert.match(finding.message, /requires source frames 30\.\.120/);
+  assert.match(finding.message, /only 100 frames/);
+});
+
+test('warns when ingested footage metadata is missing for a declared in-point', () => {
+  const input = project();
+  input.scenes[0].layers[0].inFrame = 30;
+  const result = createEditorialAssembly(input);
+  assert.equal(result.summary.valid, true);
+  assert.ok(result.issues.some(x => x.code === 'FOOTAGE_METADATA_MISSING' && x.severity === 'warning'));
+  const clip = result.clips.find(x => x.clipId === 'hero');
+  assert.equal(clip.inFrame, 30);
+  assert.equal(clip.sourceInPointSeconds, 1.001);
+  assert.equal(clip.footageVerified, undefined);
+});
+
+test('rejects malformed ingested footage metadata instead of guessing', () => {
+  const input = project();
+  input.assets[0].metadata.footage = { frameCount: 'many', rationalFps: '30/x', durationSeconds: -4 };
+  input.scenes[0].layers[0].inFrame = 30;
+  const result = createEditorialAssembly(input);
+  assert.equal(result.summary.valid, false);
+  const finding = result.issues.find(x => x.code === 'FOOTAGE_METADATA_INVALID');
+  assert.match(finding.message, /frameCount must be a positive integer/);
+  assert.match(finding.message, /rationalFps must be an integer rational/);
+  assert.match(finding.message, /durationSeconds must be a non-negative finite number/);
+  const clip = result.clips.find(x => x.clipId === 'hero');
+  assert.equal(clip.footageFrameCount, undefined);
+});
+
+test('warns on frame-rate mismatch between footage and the conforming project rate', () => {
+  const input = project();
+  input.assets[0].metadata.footage = { frameCount: 150, rationalFps: { numerator: 24, denominator: 1 } };
+  input.scenes[0].layers[0].inFrame = 48;
+  const result = createEditorialAssembly(input);
+  assert.equal(result.summary.valid, true);
+  const finding = result.issues.find(x => x.code === 'FOOTAGE_FRAME_RATE_MISMATCH');
+  assert.match(finding.message, /24\/1 fps/);
+  assert.match(finding.message, /30000\/1001 fps/);
+  const clip = result.clips.find(x => x.clipId === 'hero');
+  assert.equal(clip.sourceInPointSeconds, 48 * 1001 / 30000, 'in-point seconds follow the project frame rate');
+  assert.equal(clip.footageVerified, true);
+});
+
+test('rejects invalid inFrame declarations and negative ranges', () => {
+  const input = project();
+  input.assets[0].metadata.footage = { frameCount: 150, rationalFps: '30000/1001' };
+  input.scenes[0].layers[0].inFrame = -4;
+  const result = createEditorialAssembly(input);
+  assert.equal(result.summary.valid, false);
+  assert.ok(result.issues.some(x => x.code === 'FOOTAGE_IN_FRAME_INVALID'));
+  const validated = validateEditorialAssembly({ assemblyVersion: '1.0.0', scenes: [], clips: [{ clipId: 'x', startFrame: 0, endFrame: 10, track: 'V1', inFrame: -2 }] });
+  assert.equal(validated.valid, false);
+  assert.ok(validated.issues.some(x => x.code === 'FOOTAGE_IN_FRAME_INVALID'));
+});

@@ -2,6 +2,9 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { access, mkdir, stat, writeFile } from 'node:fs/promises';
 
+// P3.3 deterministic audio-reactive analysis (frame-bound envelope contract).
+export { analyzeAudioEnvelope, downsampleEnvelope, envelopeToChartData } from './audio-reactive.mjs';
+
 function assertSafePath(value, label) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(label + ' must be a non-empty path.');
   if (value.includes('\0')) throw new Error(label + ' contains a null byte.');

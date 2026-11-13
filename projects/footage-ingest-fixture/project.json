@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "footage-ingest-fixture",
+    "name": "Real-footage ingest and frame-accurate trim fixture",
+    "objective": "Exercise P3.2 footage ingest, probe, proxy derivatives and frame-accurate editorial trims end to end.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 640,
+      "height": 360,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 5
+    },
+    "totalDurationFrames": 120,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "assets": [
+    {
+      "id": "footage-testsrc2",
+      "uri": "footage/testsrc2-6s-640x360-30fps.mp4",
+      "sha256": "8812a726e5ca1be00017d2e7db6569afc41391b840aa04105de65586ceb32bc9",
+      "metadata": {
+        "rightsStatus": "approved",
+        "footage": {
+          "frameCount": 180,
+          "rationalFps": {
+            "numerator": 30,
+            "denominator": 1
+          },
+          "durationSeconds": 6,
+          "manifestPath": "assets/footage/8812a726/manifest.json"
+        }
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "Footage clip clip-a",
+      "startFrame": 0,
+      "durationFrames": 40,
+      "intent": "Exercise the declared source in-point 30 against the rendered trim outputs.",
+      "layers": [
+        {
+          "id": "clip-a",
+          "kind": "video",
+          "sourceAssetId": "footage-testsrc2",
+          "inFrame": 30,
+          "startFrame": 0,
+          "durationFrames": 40
+        }
+      ]
+    },
+    {
+      "id": "scene-02",
+      "name": "Footage clip clip-b",
+      "startFrame": 40,
+      "durationFrames": 40,
+      "intent": "Exercise the declared source in-point 50 against the rendered trim outputs.",
+      "layers": [
+        {
+          "id": "clip-b",
+          "kind": "video",
+          "sourceAssetId": "footage-testsrc2",
+          "inFrame": 50,
+          "startFrame": 0,
+          "durationFrames": 40
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "Footage clip clip-c",
+      "startFrame": 80,
+      "durationFrames": 40,
+      "intent": "Exercise the declared source in-point 120 against the rendered trim outputs.",
+      "layers": [
+        {
+          "id": "clip-c",
+          "kind": "video",
+          "sourceAssetId": "footage-testsrc2",
+          "inFrame": 120,
+          "startFrame": 0,
+          "durationFrames": 40
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 640,
+        "height": 360,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": false
+      }
+    ]
+  }
+}

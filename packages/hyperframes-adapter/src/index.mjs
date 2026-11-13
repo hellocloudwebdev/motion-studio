@@ -1,7 +1,8 @@
-import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProject, estimateTextFit } from '../../core/src/index.mjs';
+import { downsampleEnvelope, envelopeToChartData, validateAudioEnvelope } from '../../ffmpeg/src/audio-reactive.mjs';
 import { renderChartSvg } from './charts.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,6 +18,70 @@ const safeCssColor = (value, fallback = 'transparent') => {
 };
 const seconds = (frames, frameRate) => Number((frames * frameRate.denominator / frameRate.numerator).toFixed(6));
 const isExternalUri = value => /^https?:\/\//i.test(value || '');
+// renderChartSvg accepts at most 100 points; longer envelopes are reduced
+// peak-preservingly (loudest window per bucket) with an explicit warning.
+const MAX_CHART_POINTS = 100;
+
+// P3.3 audio-reactive charts: a chart layer may bind its bars to a
+// precomputed audio envelope via content.audioEnvelope (an asset id declared
+// in project.assets, or the envelope JSON uri directly). Unsupported or
+// broken declarations emit explicit compile warnings and skip the layer —
+// they are never silently ignored.
+async function resolveAudioEnvelopeChartData(reference, layer, { assets, sourceRoot, frameRate }) {
+  const warnings = [];
+  const value = String(reference).trim();
+  if (!value) {
+    return { skip: true, warnings: [{ code: 'AUDIO_ENVELOPE_UNSUPPORTED_DECLARATION', message: 'content.audioEnvelope must be a non-empty asset id or envelope JSON uri; chart layer skipped.' }] };
+  }
+  const asset = assets.get(value);
+  const raw = asset ? asset.uri : value;
+  if (asset === undefined) {
+    warnings.push({ code: 'AUDIO_ENVELOPE_NOT_AN_ASSET', message: 'content.audioEnvelope does not match an asset id in project.assets; resolved directly as a file uri: ' + value });
+  }
+  if (typeof raw !== 'string' || !raw.trim() || isExternalUri(raw)) {
+    return { skip: true, warnings: [...warnings, { code: 'AUDIO_ENVELOPE_UNSUPPORTED_DECLARATION', message: 'content.audioEnvelope must reference a local envelope JSON asset; chart layer skipped.' }] };
+  }
+  let envelopePath;
+  try {
+    envelopePath = raw.startsWith('file://') ? fileURLToPath(raw) : path.resolve(sourceRoot, raw);
+  } catch {
+    return { skip: true, warnings: [...warnings, { code: 'AUDIO_ENVELOPE_UNSUPPORTED_DECLARATION', message: 'content.audioEnvelope is not a resolvable file:// uri: ' + raw }] };
+  }
+  const relative = path.relative(path.resolve(sourceRoot), envelopePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Audio envelope path escapes approved project root: ' + value);
+  let envelopeJson;
+  try {
+    const info = await stat(envelopePath);
+    if (!info.isFile()) throw new Error('not a file');
+    envelopeJson = await readFile(envelopePath, 'utf8');
+  } catch {
+    return { skip: true, warnings: [...warnings, { code: 'AUDIO_ENVELOPE_SOURCE_MISSING', message: 'Audio envelope JSON is not readable at ' + envelopePath + '; chart layer skipped.' }] };
+  }
+  let envelope;
+  try {
+    envelope = JSON.parse(envelopeJson);
+    validateAudioEnvelope(envelope);
+  } catch (error) {
+    return { skip: true, warnings: [...warnings, { code: 'AUDIO_ENVELOPE_INVALID', message: 'Audio envelope JSON is not a valid envelope: ' + error.message }] };
+  }
+  const expectedFps = frameRate.numerator / frameRate.denominator;
+  if (Math.abs(Number(envelope.fps) - expectedFps) >= 0.001) {
+    warnings.push({ code: 'AUDIO_ENVELOPE_FPS_MISMATCH', envelopeFps: envelope.fps, projectFps: expectedFps, message: 'Audio envelope fps differs from the project frame rate; window frame labels may not align.' });
+  }
+  let reduced = envelope;
+  if (envelope.windows.length > MAX_CHART_POINTS) {
+    reduced = downsampleEnvelope(envelope, MAX_CHART_POINTS);
+    warnings.push({ code: 'AUDIO_ENVELOPE_DOWNSAMPLED', originalWindows: envelope.windows.length, emittedWindows: reduced.windows.length, message: 'Audio envelope exceeds the chart point cap; reduced peak-preservingly to ' + MAX_CHART_POINTS + ' bars.' });
+  }
+  if (layer.content?.data !== undefined) {
+    warnings.push({ code: 'AUDIO_ENVELOPE_OVERRIDES_STATIC_DATA', message: 'Chart layer declares both content.data and content.audioEnvelope; the audio envelope wins.' });
+  }
+  const { audioEnvelope: _consumedBinding, ...staticContent } = layer.content;
+  return {
+    content: { ...staticContent, chartType: layer.content.chartType || 'bar', title: layer.content.title || 'Audio envelope', data: envelopeToChartData(reduced) },
+    warnings
+  };
+}
 
 function cssFor(layer, fontFamily) {
   const style = layer.style || {};
@@ -246,10 +311,21 @@ export async function compileHyperFramesProject(project, options = {}) {
           warnings.push({ code: 'TEXT_OUTSIDE_SAFE_AREA', sceneId: scene.id, layerId: layer.id, safeAreaPercent: safePercent, bounds: { x, y, width: boxWidth, height: boxHeight } });
         }
       }
+      let effectiveLayer = layer;
+      if (layer.content?.audioEnvelope !== undefined) {
+        if (layer.kind !== 'chart') {
+          warnings.push({ code: 'AUDIO_ENVELOPE_UNSUPPORTED_LAYER', sceneId: scene.id, layerId: layer.id, kind: layer.kind, message: 'content.audioEnvelope is only supported on chart layers; declaration ignored.' });
+        } else {
+          const binding = await resolveAudioEnvelopeChartData(layer.content.audioEnvelope, layer, { assets, sourceRoot, frameRate });
+          warnings.push(...binding.warnings.map(warning => ({ sceneId: scene.id, layerId: layer.id, ...warning })));
+          if (binding.skip) continue;
+          effectiveLayer = { ...layer, content: binding.content };
+        }
+      }
       const assetUri = ['image', 'video', 'audio'].includes(layer.kind) ? await resolveAsset(layer.assetId) : null;
       const needsAsset = ['image', 'video', 'audio'].includes(layer.kind) && !assetUri;
       if (needsAsset && options.allowMissingAssetsAsPlaceholders === false) throw new Error('Required media asset is unavailable for layer ' + layer.id + ' in scene ' + scene.id + '.');
-      const markup = layerMarkup(layer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, needsAsset, displayFont);
+      const markup = layerMarkup(effectiveLayer, scene, index, localStartFrame, globalStartFrame, frameRate, assetUri, needsAsset, displayFont);
       sceneMarkup.push(markup.local);
       rootMarkup.push(markup.global);
     }

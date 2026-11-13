@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "audio-reactive-demo",
+    "name": "Audio-Reactive Envelope Demo (P3.3)",
+    "objective": "Prove the deterministic audio-analysis to frame-bound envelope contract by binding a generated 4s dynamic audio bed to a HyperFrames chart layer.",
+    "frameRate": { "numerator": 30, "denominator": 1 },
+    "canvas": { "width": 1280, "height": 720, "pixelAspectRatio": 1, "safeAreaPercent": 5 },
+    "totalDurationFrames": 120,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "A 4-second sine bed with a scripted loudness contour drives sixty envelope bars; the visuals are derived entirely from the audio analysis, not hand-authored data.",
+    "audience": "Engineering acceptance for the P3.3 audio-reactive contract.",
+    "message": "The rendered bars are the audio envelope.",
+    "visualDirection": "Dark engineering card with a single centered bar chart and a quiet title."
+  },
+  "brand": {
+    "colors": { "background": "#101010", "accent": "#4ADE80", "text": "#FFFFFF" },
+    "fonts": { "display": "Arial", "body": "Arial" }
+  },
+  "assets": [
+    {
+      "id": "beat-audio",
+      "kind": "audio",
+      "uri": "assets/beat.wav",
+      "mimeType": "audio/wav",
+      "metadata": {
+        "title": "Generated dynamic sine bed (4s, 48kHz mono PCM)",
+        "source": "Generated locally with ffmpeg lavfi sine + frame-evaluated volume expression; regenerable byte-for-byte via build.mjs.",
+        "license": "MIT",
+        "rightsStatus": "generated-locally"
+      }
+    },
+    {
+      "id": "envelope-frames",
+      "kind": "data",
+      "uri": "assets/envelope.json",
+      "mimeType": "application/json",
+      "metadata": {
+        "title": "Deterministic audio envelope (30fps, 2-frame windows)",
+        "source": "Derived from assets/beat.wav via @motion-studio/ffmpeg analyzeAudioEnvelope; same input always yields identical JSON.",
+        "license": "MIT",
+        "rightsStatus": "generated-locally"
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "Envelope bars",
+      "startFrame": 0,
+      "durationFrames": 120,
+      "intent": "Show the audio envelope as chart bars bound via content.audioEnvelope.",
+      "layers": [
+        {
+          "id": "bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+          "style": { "backgroundColor": "#101010" }
+        },
+        {
+          "id": "title",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Audio envelope — 2-frame RMS windows" },
+          "typography": { "family": "Arial", "sizePx": 32, "weight": 700, "lineHeight": 1.1, "alignment": "left", "maxLines": 1 },
+          "transform": { "x": 120, "y": 90, "width": 900, "height": 60 },
+          "style": { "color": "#FFFFFF" },
+          "motion": { "preset": "fade-up", "durationFrames": 24 }
+        },
+        {
+          "id": "beat-chart",
+          "kind": "chart",
+          "engineHint": "hyperframes",
+          "content": { "audioEnvelope": "envelope-frames", "chartType": "bar", "title": "Loudness (dBFS → 0..1)" },
+          "transform": { "x": 120, "y": 200, "width": 1040, "height": 420 },
+          "style": { "color": "#4ADE80" }
+        },
+        {
+          "id": "beat-audio-layer",
+          "kind": "audio",
+          "engineHint": "hyperframes",
+          "assetId": "beat-audio",
+          "startFrame": 0,
+          "durationFrames": 120,
+          "volume": 1
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-720p",
+    "targets": [
+      {
+        "id": "master-720p",
+        "container": "mp4",
+        "videoCodec": "libx264",
+        "width": 1280,
+        "height": 720,
+        "frameRate": { "numerator": 30, "denominator": 1 },
+        "audioRequired": false
+      }
+    ]
+  }
+}

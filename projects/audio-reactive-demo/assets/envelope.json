@@ -1,0 +1,315 @@
+{
+  "fps": 30,
+  "windowFrames": 2,
+  "durationFrames": 120,
+  "windows": [
+    {
+      "startFrame": 0,
+      "endFrame": 2,
+      "rmsDb": -40.737
+    },
+    {
+      "startFrame": 2,
+      "endFrame": 4,
+      "rmsDb": -35.3
+    },
+    {
+      "startFrame": 4,
+      "endFrame": 6,
+      "rmsDb": -28.472
+    },
+    {
+      "startFrame": 6,
+      "endFrame": 8,
+      "rmsDb": -27.035
+    },
+    {
+      "startFrame": 8,
+      "endFrame": 10,
+      "rmsDb": -24.165
+    },
+    {
+      "startFrame": 10,
+      "endFrame": 12,
+      "rmsDb": -23.562
+    },
+    {
+      "startFrame": 12,
+      "endFrame": 14,
+      "rmsDb": -22.387
+    },
+    {
+      "startFrame": 14,
+      "endFrame": 16,
+      "rmsDb": -22.181
+    },
+    {
+      "startFrame": 16,
+      "endFrame": 18,
+      "rmsDb": -22.095
+    },
+    {
+      "startFrame": 18,
+      "endFrame": 20,
+      "rmsDb": -22.318
+    },
+    {
+      "startFrame": 20,
+      "endFrame": 22,
+      "rmsDb": -23.276
+    },
+    {
+      "startFrame": 22,
+      "endFrame": 24,
+      "rmsDb": -23.918
+    },
+    {
+      "startFrame": 24,
+      "endFrame": 26,
+      "rmsDb": -26.646
+    },
+    {
+      "startFrame": 26,
+      "endFrame": 28,
+      "rmsDb": -27.823
+    },
+    {
+      "startFrame": 28,
+      "endFrame": 30,
+      "rmsDb": -35.011
+    },
+    {
+      "startFrame": 30,
+      "endFrame": 32,
+      "rmsDb": -36.878
+    },
+    {
+      "startFrame": 32,
+      "endFrame": 34,
+      "rmsDb": -32.475
+    },
+    {
+      "startFrame": 34,
+      "endFrame": 36,
+      "rmsDb": -30.158
+    },
+    {
+      "startFrame": 36,
+      "endFrame": 38,
+      "rmsDb": -25.921
+    },
+    {
+      "startFrame": 38,
+      "endFrame": 40,
+      "rmsDb": -24.94
+    },
+    {
+      "startFrame": 40,
+      "endFrame": 42,
+      "rmsDb": -23.073
+    },
+    {
+      "startFrame": 42,
+      "endFrame": 44,
+      "rmsDb": -22.696
+    },
+    {
+      "startFrame": 44,
+      "endFrame": 46,
+      "rmsDb": -21.998
+    },
+    {
+      "startFrame": 46,
+      "endFrame": 48,
+      "rmsDb": -22.056
+    },
+    {
+      "startFrame": 48,
+      "endFrame": 50,
+      "rmsDb": -22.509
+    },
+    {
+      "startFrame": 50,
+      "endFrame": 52,
+      "rmsDb": -22.897
+    },
+    {
+      "startFrame": 52,
+      "endFrame": 54,
+      "rmsDb": -24.651
+    },
+    {
+      "startFrame": 54,
+      "endFrame": 56,
+      "rmsDb": -25.52
+    },
+    {
+      "startFrame": 56,
+      "endFrame": 58,
+      "rmsDb": -29.622
+    },
+    {
+      "startFrame": 58,
+      "endFrame": 60,
+      "rmsDb": -31.394
+    },
+    {
+      "startFrame": 60,
+      "endFrame": 62,
+      "rmsDb": -40.395
+    },
+    {
+      "startFrame": 62,
+      "endFrame": 64,
+      "rmsDb": -35.314
+    },
+    {
+      "startFrame": 64,
+      "endFrame": 66,
+      "rmsDb": -28.414
+    },
+    {
+      "startFrame": 66,
+      "endFrame": 68,
+      "rmsDb": -27.042
+    },
+    {
+      "startFrame": 68,
+      "endFrame": 70,
+      "rmsDb": -24.137
+    },
+    {
+      "startFrame": 70,
+      "endFrame": 72,
+      "rmsDb": -23.556
+    },
+    {
+      "startFrame": 72,
+      "endFrame": 74,
+      "rmsDb": -22.381
+    },
+    {
+      "startFrame": 74,
+      "endFrame": 76,
+      "rmsDb": -22.179
+    },
+    {
+      "startFrame": 76,
+      "endFrame": 78,
+      "rmsDb": -22.09
+    },
+    {
+      "startFrame": 78,
+      "endFrame": 80,
+      "rmsDb": -22.319
+    },
+    {
+      "startFrame": 80,
+      "endFrame": 82,
+      "rmsDb": -23.263
+    },
+    {
+      "startFrame": 82,
+      "endFrame": 84,
+      "rmsDb": -23.922
+    },
+    {
+      "startFrame": 84,
+      "endFrame": 86,
+      "rmsDb": -26.626
+    },
+    {
+      "startFrame": 86,
+      "endFrame": 88,
+      "rmsDb": -27.828
+    },
+    {
+      "startFrame": 88,
+      "endFrame": 90,
+      "rmsDb": -34.859
+    },
+    {
+      "startFrame": 90,
+      "endFrame": 92,
+      "rmsDb": -36.771
+    },
+    {
+      "startFrame": 92,
+      "endFrame": 94,
+      "rmsDb": -32.477
+    },
+    {
+      "startFrame": 94,
+      "endFrame": 96,
+      "rmsDb": -30.184
+    },
+    {
+      "startFrame": 96,
+      "endFrame": 98,
+      "rmsDb": -25.881
+    },
+    {
+      "startFrame": 98,
+      "endFrame": 100,
+      "rmsDb": -24.941
+    },
+    {
+      "startFrame": 100,
+      "endFrame": 102,
+      "rmsDb": -23.054
+    },
+    {
+      "startFrame": 102,
+      "endFrame": 104,
+      "rmsDb": -22.691
+    },
+    {
+      "startFrame": 104,
+      "endFrame": 106,
+      "rmsDb": -21.999
+    },
+    {
+      "startFrame": 106,
+      "endFrame": 108,
+      "rmsDb": -22.056
+    },
+    {
+      "startFrame": 108,
+      "endFrame": 110,
+      "rmsDb": -22.496
+    },
+    {
+      "startFrame": 110,
+      "endFrame": 112,
+      "rmsDb": -22.897
+    },
+    {
+      "startFrame": 112,
+      "endFrame": 114,
+      "rmsDb": -24.632
+    },
+    {
+      "startFrame": 114,
+      "endFrame": 116,
+      "rmsDb": -25.523
+    },
+    {
+      "startFrame": 116,
+      "endFrame": 118,
+      "rmsDb": -29.589
+    },
+    {
+      "startFrame": 118,
+      "endFrame": 120,
+      "rmsDb": -31.383
+    }
+  ],
+  "warnings": [
+    {
+      "code": "ENVELOPE_WINDOWS_TRUNCATED",
+      "message": "ffprobe returned more windows than the audio duration implies; truncated to the declared duration.",
+      "measured": 120,
+      "expected": 60
+    }
+  ]
+}

@@ -220,7 +220,7 @@ export async function renderMixedProject(project, options = {}) {
       sceneId, engine: 'blender', output: segmentPath, bytes: segmentStat.size,
       durationFrames: timelineEntry.durationFrames, media, frameCount,
       verified: true, passed: analysis.passed === true, findings: shiftedFindings,
-      qa: null, blender: { renderer: blenderReceipt.renderer, blenderVersion: blenderReceipt.blenderVersion, threads: blenderReceipt.threads, framesDirectory: blenderReceipt.framesDirectory, frameCount: blenderReceipt.frameCount, frameEvidenceDigest: blenderReceipt.frameEvidenceDigest }
+      qa: null, blender: { renderer: blenderReceipt.renderer, blenderVersion: blenderReceipt.blenderVersion, threads: blenderReceipt.threads, framesDirectory: blenderReceipt.framesDirectory, frameCount: blenderReceipt.frameCount, retriedFrames: blenderReceipt.retriedFrames, frameEvidenceDigest: blenderReceipt.frameEvidenceDigest }
     });
     findings.push(...shiftedFindings);
   }

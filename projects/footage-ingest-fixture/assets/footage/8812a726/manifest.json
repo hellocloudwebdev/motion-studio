@@ -1,0 +1,50 @@
+{
+  "manifestVersion": "1.0.0",
+  "generatedAt": "2026-11-13T19:13:10.535Z",
+  "sourcePath": "D:\\motions\\motion-studio\\projects\\footage-ingest-fixture\\footage\\testsrc2-6s-640x360-30fps.mp4",
+  "sourceByteSize": 805480,
+  "sha256": "8812a726e5ca1be00017d2e7db6569afc41391b840aa04105de65586ceb32bc9",
+  "rationalFps": {
+    "numerator": 30,
+    "denominator": 1
+  },
+  "frameCount": 180,
+  "durationSeconds": 6,
+  "width": 640,
+  "height": 360,
+  "videoCodec": "h264",
+  "audioCodec": "aac",
+  "hasAudio": true,
+  "outputDirectory": "D:\\motions\\motion-studio\\projects\\footage-ingest-fixture\\assets\\footage\\8812a726",
+  "derivatives": [
+    {
+      "kind": "proxy",
+      "fileName": "proxy.mp4",
+      "path": "D:\\motions\\motion-studio\\projects\\footage-ingest-fixture\\assets\\footage\\8812a726\\proxy.mp4",
+      "mimeType": "video/mp4",
+      "byteSize": 219673,
+      "sha256": "d81badcfed9e7f948bee7c62f4c2e62eb64f3837b433c9f76bd425d592bd3513"
+    },
+    {
+      "kind": "thumbnail",
+      "fileName": "thumbnail.jpg",
+      "path": "D:\\motions\\motion-studio\\projects\\footage-ingest-fixture\\assets\\footage\\8812a726\\thumbnail.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 19486,
+      "sha256": "e1b8925b52b763cb7ecc65d9b2508368df0e06033d05ff2c80715dae6d0adff7"
+    },
+    {
+      "kind": "waveform",
+      "fileName": "waveform.png",
+      "path": "D:\\motions\\motion-studio\\projects\\footage-ingest-fixture\\assets\\footage\\8812a726\\waveform.png",
+      "mimeType": "image/png",
+      "byteSize": 2430,
+      "sha256": "7ce114786089cc3aedd6a76d58ee8f8f72bc4c96d69c4191ec0735a9f809c943"
+    }
+  ],
+  "requestedFps": {
+    "numerator": 30,
+    "denominator": 1
+  },
+  "frameRateMatch": true
+}

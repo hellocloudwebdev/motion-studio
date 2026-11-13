@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "blender-contract-fixtures",
+    "name": "Blender contract fixtures (P2.1)",
+    "revision": 1,
+    "objective": "Deterministic low-power fixtures covering the expanded Blender scene contract: camera move, lighting/material variation, imported approved asset, and alpha output.",
+    "frameRate": { "numerator": 30, "denominator": 1 },
+    "canvas": { "width": 480, "height": 270 },
+    "totalDurationFrames": 48
+  },
+  "creative": {
+    "concept": "Engineering acceptance fixtures only: one primitive or one imported asset per scene at 480x270.",
+    "audience": "engineering acceptance only",
+    "message": "Not a creative production."
+  },
+  "brand": {
+    "colors": { "primary": "#4ADE80", "accent": "#0E2A3A" }
+  },
+  "assets": [
+    {
+      "id": "fixture-reference-cube",
+      "kind": "3d",
+      "uri": "assets/models/reference-cube.glb",
+      "mimeType": "model/gltf-binary",
+      "sha256": "0aaf16bed9448412dc7794ea36a3d8c39355e14409e46e9a90d4c469fc12ebfe",
+      "byteSize": 1948,
+      "metadata": {
+        "title": "Reference cube (generated locally)",
+        "creator": "motion-studio blender-contract-fixtures",
+        "source": "Generated locally with Blender 5.3.0 bpy.ops.export_scene.gltf (plain 2m cube, one Principled material); regenerable byte-for-byte via generate-reference-cube.py.",
+        "description": "Approved imported-asset fixture for the Blender adapter contract.",
+        "tags": ["fixture", "generated-locally", "blender"],
+        "license": "MIT",
+        "rightsStatus": "approved"
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "camera-move",
+      "name": "Camera move fixture",
+      "startFrame": 0,
+      "durationFrames": 12,
+      "intent": "Camera integer keyframes: location-only keys that keep the auto-aim-at-origin convention.",
+      "camera": {
+        "location": [0, -8, 2],
+        "lens": 50,
+        "keyframes": [
+          { "frame": 0, "location": [-3.5, -7, 1.5] },
+          { "frame": 11, "location": [3.5, -7, 2.5] }
+        ]
+      },
+      "layers": [
+        {
+          "id": "orbit-subject",
+          "kind": "3d",
+          "engineHint": "blender",
+          "content": {
+            "primitive": "cube",
+            "color": "#4ADE80",
+            "transform": { "location": [0, 0, 0], "scale": [1, 1, 1] },
+            "keyframes": [
+              { "frame": 0, "rotation": [0, 0, 0] },
+              { "frame": 11, "rotation": [0, 0, 1.5708] }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "lighting-variation",
+      "name": "Lighting and material variation fixture",
+      "startFrame": 12,
+      "durationFrames": 12,
+      "intent": "Lighting rig override (area + point with colors) and Principled material parameters within validated ranges.",
+      "lighting": {
+        "lights": [
+          { "type": "area", "location": [4, -5, 6], "energy": 900, "color": "#FFE1B8", "size": 4 },
+          { "type": "point", "location": [-4, -2, 3], "energy": 450, "color": "#9BC7FF", "size": 1.5 }
+        ]
+      },
+      "layers": [
+        {
+          "id": "metal-sphere",
+          "kind": "3d",
+          "engineHint": "blender",
+          "content": {
+            "primitive": "uv_sphere",
+            "color": "#C0C7CE",
+            "material": { "metallic": 0.9, "roughness": 0.25, "emission": 0.6 },
+            "transform": { "location": [0, 0, 0] },
+            "keyframes": [
+              { "frame": 0, "rotation": [0, 0, 0] },
+              { "frame": 11, "rotation": [0, 3.1416, 0] }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "imported-asset",
+      "name": "Imported approved asset fixture",
+      "startFrame": 24,
+      "durationFrames": 12,
+      "intent": "Layer assetId imports the approved .glb via bpy.ops.import_scene.gltf with a color override; default two-point lighting.",
+      "layers": [
+        {
+          "id": "reference-cube",
+          "kind": "3d",
+          "engineHint": "blender",
+          "assetId": "fixture-reference-cube",
+          "content": {
+            "color": "#F5A623",
+            "transform": { "location": [0, 0, 0] },
+            "keyframes": [
+              { "frame": 0, "rotation": [0, 0, 0] },
+              { "frame": 11, "rotation": [0, 0, 1.5708] }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "alpha",
+      "name": "Transparent output fixture",
+      "startFrame": 36,
+      "durationFrames": 12,
+      "intent": "outputContract.alpha drives film_transparent RGBA PNGs, verified via ffprobe pix_fmt rgba.",
+      "outputContract": { "alpha": true },
+      "layers": [
+        {
+          "id": "alpha-cone",
+          "kind": "3d",
+          "engineHint": "blender",
+          "content": {
+            "primitive": "cone",
+            "color": "#0E2A3A",
+            "transform": { "location": [0, 0, 0] },
+            "keyframes": [
+              { "frame": 0, "location": [0, 0, 0] },
+              { "frame": 11, "location": [0, 0, 1] }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "audio": { "tracks": [] },
+  "delivery": {
+    "primaryTargetId": "fixture-480p",
+    "targets": [
+      {
+        "id": "fixture-480p",
+        "container": "mp4",
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "width": 480,
+        "height": 270,
+        "frameRate": { "numerator": 30, "denominator": 1 },
+        "audioRequired": false
+      }
+    ]
+  },
+  "qa": { "defects": [], "repairHistory": [], "gates": [] }
+}
