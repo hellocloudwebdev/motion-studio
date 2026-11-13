@@ -1,0 +1,683 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "kinetic-type-acceptance",
+    "name": "Make Ideas Move — Kinetic Type",
+    "objective": "A narration-driven kinetic typography piece where oversized words land on the beat and close on the studio line.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 6
+    },
+    "totalDurationFrames": 540,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "Kinetic typography: each narration beat drives a stack of oversized words that zoom, drift and rotate into place, ending on the studio motto.",
+    "audience": "Motion Studio users evaluating the narration-driven typography pipeline.",
+    "message": "Big ideas deserve motion — words that land, type that sets the pace, ideas that move.",
+    "mood": [
+      "bold",
+      "clear",
+      "playful"
+    ],
+    "visualDirection": "Midnight navy background, warm mint accent, centered oversized typography with staggered entrances."
+  },
+  "brand": {
+    "colors": {
+      "background": "#091324",
+      "surface": "#0E1E30",
+      "accent": "#72F2C2",
+      "text": "#F4F7FB"
+    },
+    "fonts": {
+      "display": "Arial",
+      "body": "Arial"
+    }
+  },
+  "assets": [
+    {
+      "id": "generated-narration-001",
+      "kind": "audio",
+      "uri": "assets/narration/segment-001.wav",
+      "sha256": "00c7cf467b66b48167b0bb862a0c58bc653b810563108f72f128b0533f3feaa4",
+      "byteSize": 185792,
+      "source": "fish-audio",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": null,
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 2.105601,
+        "trailingSilenceTrimmedSeconds": 0.203106
+      }
+    },
+    {
+      "id": "generated-narration-002",
+      "kind": "audio",
+      "uri": "assets/narration/segment-002.wav",
+      "sha256": "7dc2f62a959f56e3f02032d00e66b8b5f46c3b9ddc9f14a250fca8e2ce5be8dd",
+      "byteSize": 173126,
+      "source": "fish-audio",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": null,
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 1.961995,
+        "trailingSilenceTrimmedSeconds": 0.20004599999999995
+      }
+    },
+    {
+      "id": "generated-narration-003",
+      "kind": "audio",
+      "uri": "assets/narration/segment-003.wav",
+      "sha256": "7250940d7a76539c3776157f02616b0118776c43ac8bad9a5364c90b78160f37",
+      "byteSize": 105734,
+      "source": "fish-audio",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": null,
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 1.197914,
+        "trailingSilenceTrimmedSeconds": 0.27975000000000017
+      }
+    },
+    {
+      "id": "generated-narration-004",
+      "kind": "audio",
+      "uri": "assets/narration/segment-004.wav",
+      "sha256": "8405252b95e9e85c04814dc81325270e80c738354a109487156ad5135d61d664",
+      "byteSize": 164418,
+      "source": "fish-audio",
+      "rightsStatus": "unknown",
+      "metadata": {
+        "generated": true,
+        "provider": "fish-audio",
+        "model": "s2.1-pro-free",
+        "voiceId": null,
+        "speed": 0.95,
+        "providerFreeTier": true,
+        "terms": "Fish Audio free tier: no TTFA/DPA guarantees; provider may use requests to improve models.",
+        "sampleRate": 44100,
+        "channels": 1,
+        "durationSeconds": 1.863265,
+        "trailingSilenceTrimmedSeconds": 0.20102100000000012
+      }
+    }
+  ],
+  "production": {
+    "script": [
+      {
+        "narration": "Big ideas deserve motion.",
+        "leadInFrames": 6
+      },
+      {
+        "narration": "Every word lands with weight.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Type sets the pace.",
+        "leadInFrames": 12
+      },
+      {
+        "narration": "Make ideas move.",
+        "leadInFrames": 12
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "Big ideas",
+      "startFrame": 0,
+      "durationFrames": 135,
+      "intent": "Open on the first narration beat: big ideas deserve motion.",
+      "layers": [
+        {
+          "id": "s1-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#091324"
+          }
+        },
+        {
+          "id": "s1-word-big",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "BIG"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 150,
+            "weight": 800,
+            "lineHeight": 1,
+            "tracking": 8,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 170,
+            "width": 1040,
+            "height": 180
+          },
+          "style": {
+            "color": "#F4F7FB"
+          },
+          "motion": {
+            "preset": "zoom",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s1-word-ideas",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "IDEAS"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 150,
+            "weight": 800,
+            "lineHeight": 1,
+            "tracking": 8,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 370,
+            "width": 1040,
+            "height": 180
+          },
+          "style": {
+            "color": "#72F2C2"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 24,
+            "delayFrames": 8
+          }
+        },
+        {
+          "id": "s1-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 126,
+            "y": 590,
+            "width": 252,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#72F2C2"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-02",
+      "name": "Words land",
+      "startFrame": 135,
+      "durationFrames": 135,
+      "intent": "Second beat: every word lands with weight — stacked kinetic words.",
+      "layers": [
+        {
+          "id": "s2-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#0E1E30"
+          }
+        },
+        {
+          "id": "s2-word-words",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "WORDS"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 104,
+            "weight": 800,
+            "lineHeight": 1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 130,
+            "width": 1040,
+            "height": 130
+          },
+          "style": {
+            "color": "#F4F7FB"
+          },
+          "motion": {
+            "preset": "zoom",
+            "durationFrames": 22
+          }
+        },
+        {
+          "id": "s2-word-that",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "THAT"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 104,
+            "weight": 800,
+            "lineHeight": 1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 280,
+            "width": 1040,
+            "height": 130
+          },
+          "style": {
+            "color": "#F4F7FB",
+            "opacity": 0.85
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 22,
+            "delayFrames": 6
+          }
+        },
+        {
+          "id": "s2-word-land",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "LAND."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 104,
+            "weight": 800,
+            "lineHeight": 1,
+            "tracking": 6,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 430,
+            "width": 1040,
+            "height": 130
+          },
+          "style": {
+            "color": "#72F2C2"
+          },
+          "motion": {
+            "preset": "rotate",
+            "durationFrames": 22
+          }
+        },
+        {
+          "id": "s2-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 126,
+            "y": 600,
+            "width": 180,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#72F2C2"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "Type sets the pace",
+      "startFrame": 270,
+      "durationFrames": 135,
+      "intent": "Third beat: type sets the pace — rhythm of stacked type.",
+      "layers": [
+        {
+          "id": "s3-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#091324"
+          }
+        },
+        {
+          "id": "s3-line-one",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "TYPE SETS"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 110,
+            "weight": 800,
+            "lineHeight": 1.05,
+            "tracking": 4,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 180,
+            "width": 1040,
+            "height": 140
+          },
+          "style": {
+            "color": "#F4F7FB"
+          },
+          "motion": {
+            "preset": "float",
+            "durationFrames": 22
+          }
+        },
+        {
+          "id": "s3-line-two",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "THE PACE."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 110,
+            "weight": 800,
+            "lineHeight": 1.05,
+            "tracking": 4,
+            "alignment": "left",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 340,
+            "width": 1040,
+            "height": 140
+          },
+          "style": {
+            "color": "#72F2C2"
+          },
+          "motion": {
+            "preset": "zoom",
+            "durationFrames": 22,
+            "delayFrames": 8
+          }
+        },
+        {
+          "id": "s3-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 126,
+            "y": 530,
+            "width": 200,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#72F2C2"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene-04",
+      "name": "Make ideas move",
+      "startFrame": 405,
+      "durationFrames": 135,
+      "intent": "Close on the studio motto with the accent underline.",
+      "layers": [
+        {
+          "id": "s4-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 720
+          },
+          "style": {
+            "backgroundColor": "#091324"
+          }
+        },
+        {
+          "id": "s4-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "MOTION STUDIO"
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 26,
+            "weight": 700,
+            "lineHeight": 1.1,
+            "tracking": 8,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 120,
+            "y": 240,
+            "width": 1040,
+            "height": 44
+          },
+          "style": {
+            "color": "#72F2C2",
+            "textAlign": "center"
+          },
+          "motion": {
+            "preset": "fade-up",
+            "durationFrames": 20
+          }
+        },
+        {
+          "id": "s4-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": {
+            "text": "Make ideas move."
+          },
+          "typography": {
+            "family": "Arial",
+            "sizePx": 96,
+            "weight": 800,
+            "lineHeight": 1.1,
+            "alignment": "center",
+            "maxLines": 1,
+            "safeArea": true
+          },
+          "transform": {
+            "x": 80,
+            "y": 300,
+            "width": 1120,
+            "height": 140
+          },
+          "style": {
+            "color": "#F4F7FB",
+            "textAlign": "center",
+            "verticalAlign": "middle"
+          },
+          "motion": {
+            "preset": "zoom",
+            "durationFrames": 24
+          }
+        },
+        {
+          "id": "s4-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": {
+            "x": 514,
+            "y": 470,
+            "width": 252,
+            "height": 8
+          },
+          "style": {
+            "backgroundColor": "#72F2C2"
+          },
+          "motion": {
+            "preset": "slide-left",
+            "durationFrames": 24
+          }
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1280,
+        "height": 720,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": true
+      }
+    ]
+  },
+  "audio": {
+    "tracks": [
+      {
+        "assetId": "generated-narration-001",
+        "kind": "narration",
+        "offsetFrames": 0,
+        "durationFrames": 64,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-002",
+        "kind": "narration",
+        "offsetFrames": 123,
+        "durationFrames": 59,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-003",
+        "kind": "narration",
+        "offsetFrames": 258,
+        "durationFrames": 36,
+        "volume": 1
+      },
+      {
+        "assetId": "generated-narration-004",
+        "kind": "narration",
+        "offsetFrames": 393,
+        "durationFrames": 56,
+        "volume": 1
+      }
+    ]
+  },
+  "captions": [
+    {
+      "id": "narration-caption-001",
+      "startFrame": 0,
+      "endFrame": 64,
+      "text": "Big ideas deserve motion."
+    },
+    {
+      "id": "narration-caption-002",
+      "startFrame": 123,
+      "endFrame": 182,
+      "text": "Every word lands with weight."
+    },
+    {
+      "id": "narration-caption-003",
+      "startFrame": 258,
+      "endFrame": 294,
+      "text": "Type sets the pace."
+    },
+    {
+      "id": "narration-caption-004",
+      "startFrame": 393,
+      "endFrame": 449,
+      "text": "Make ideas move."
+    }
+  ]
+}

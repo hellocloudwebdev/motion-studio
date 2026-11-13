@@ -1,0 +1,375 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": {
+    "id": "data-viz-acceptance",
+    "name": "The Renewable Decade — Data Brief",
+    "objective": "Visualize five years of global renewable power-capacity data from IRENA and close with the 2023 share takeaway.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "pixelAspectRatio": 1,
+      "safeAreaPercent": 5
+    },
+    "totalDurationFrames": 570,
+    "colorSpace": "Rec.709",
+    "revision": 1
+  },
+  "creative": {
+    "concept": "Global renewable capacity additions have climbed every year since 2019 and jumped to a record in 2023. Show the climb with two charts, then land the takeaway: renewables now dominate new power capacity.",
+    "audience": "Policy watchers, sustainability teams and general news audiences who follow energy trends.",
+    "message": "Renewable additions rose from 176 GW in 2019 to a record 473 GW in 2023, and renewables supplied 86% of all new power capacity in 2023.",
+    "visualDirection": "Deep navy editorial data brief with bright green chart marks, large headline typography and restrained caption text.",
+    "dataProvenance": {
+      "source": "IRENA, Renewable Capacity Statistics 2024 (International Renewable Energy Agency, published March 2024)",
+      "sourceUrl": "https://www.irena.org/Publications/2024/Mar/Renewable-capacity-statistics-2024",
+      "retrievedAt": "2026-11-13",
+      "figuresUsed": {
+        "annualCapacityAdditionsGigawatts": { "2019": 176, "2020": 261, "2021": 257, "2022": 295, "2023": 473 },
+        "yearEndInstalledRenewableCapacityGigawatts": { "2019": 2537, "2020": 2799, "2021": 3064, "2022": 3372, "2023": 3870 },
+        "shareOfAllNewPowerCapacityAddedIn2023Percent": 86
+      },
+      "note": "Charts show annual renewable capacity additions and year-end installed renewable capacity worldwide as reported by IRENA's Renewable Capacity Statistics 2024."
+    }
+  },
+  "brand": {
+    "colors": {
+      "background": "#0B1D2C",
+      "surface": "#10283A",
+      "accent": "#4ADE80",
+      "ink": "#0B2230",
+      "muted": "#A9C6D6",
+      "text": "#FFFFFF"
+    },
+    "fonts": {
+      "display": "Arial",
+      "body": "Arial"
+    }
+  },
+  "assets": [],
+  "provenance": {
+    "sources": [
+      {
+        "id": "irena-2024",
+        "title": "IRENA Renewable Capacity Statistics 2024",
+        "publisher": "International Renewable Energy Agency (IRENA)",
+        "url": "https://www.irena.org/Publications/2024/Mar/Renewable-capacity-statistics-2024",
+        "retrievedAt": "2026-11-13",
+        "usedFor": "Annual renewable capacity additions 2019-2023 (GW), year-end installed renewable capacity 2019-2023 (GW), 2023 renewable share of all new power capacity (86%)"
+      }
+    ],
+    "software": [],
+    "decisions": [
+      {
+        "decision": "Charts use IRENA 2024 reported figures for annual additions and year-end totals; the 86% share line quotes IRENA's 2024 release directly.",
+        "madeAt": "2026-11-13"
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "scene-01",
+      "name": "Title hook",
+      "startFrame": 0,
+      "durationFrames": 150,
+      "intent": "Open the data brief with the story: clean capacity is taking over the grid.",
+      "layers": [
+        {
+          "id": "s1-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+          "style": { "backgroundColor": "#0B1D2C" }
+        },
+        {
+          "id": "s1-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "DATA BRIEF — GLOBAL POWER" },
+          "typography": { "family": "Arial", "sizePx": 24, "weight": 700, "lineHeight": 1.1, "tracking": 5, "alignment": "left", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 120, "y": 116, "width": 640, "height": 40 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s1-accent",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 120, "y": 182, "width": 140, "height": 8 },
+          "style": { "backgroundColor": "#4ADE80" },
+          "motion": { "preset": "slide-left", "durationFrames": 24 }
+        },
+        {
+          "id": "s1-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Renewables took\nover the grid." },
+          "typography": { "family": "Arial", "sizePx": 84, "weight": 800, "lineHeight": 1.08, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 232, "width": 1000, "height": 220 },
+          "style": { "color": "#FFFFFF" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s1-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Five years of worldwide capacity data, visualized from IRENA's 2024 statistics." },
+          "typography": { "family": "Arial", "sizePx": 30, "weight": 400, "lineHeight": 1.25, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 500, "width": 1000, "height": 120 },
+          "style": { "color": "#A9C6D6" },
+          "motion": { "preset": "float", "durationFrames": 24, "delayFrames": 6 }
+        }
+      ]
+    },
+    {
+      "id": "scene-02",
+      "name": "Annual additions bar chart",
+      "startFrame": 150,
+      "durationFrames": 150,
+      "intent": "Show annual renewable capacity additions climbing from 176 GW (2019) to a record 473 GW (2023), per IRENA 2024.",
+      "layers": [
+        {
+          "id": "s2-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+          "style": { "backgroundColor": "#10283A" }
+        },
+        {
+          "id": "s2-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "ANNUAL ADDITIONS" },
+          "typography": { "family": "Arial", "sizePx": 24, "weight": 700, "lineHeight": 1.1, "tracking": 5, "alignment": "left", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 120, "y": 116, "width": 420, "height": 40 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s2-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "New renewable\ncapacity added\neach year (GW)" },
+          "typography": { "family": "Arial", "sizePx": 40, "weight": 800, "lineHeight": 1.12, "alignment": "left", "maxLines": 3, "safeArea": true },
+          "transform": { "x": 120, "y": 170, "width": 420, "height": 160 },
+          "style": { "color": "#FFFFFF" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s2-callout",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "473 GW in 2023 —\nthe record year." },
+          "typography": { "family": "Arial", "sizePx": 30, "weight": 700, "lineHeight": 1.25, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 400, "width": 380, "height": 110 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "fade-up", "durationFrames": 24, "delayFrames": 6 }
+        },
+        {
+          "id": "s2-source",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Source: IRENA, Renewable\nCapacity Statistics 2024" },
+          "typography": { "family": "Arial", "sizePx": 22, "weight": 400, "lineHeight": 1.15, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 560, "width": 420, "height": 64 },
+          "style": { "color": "#7FA3B8" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s2-chart",
+          "kind": "chart",
+          "engineHint": "hyperframes",
+          "content": {
+            "chartType": "bar",
+            "title": "Renewable capacity additions by year (GW)",
+            "xKey": "label",
+            "yKey": "value",
+            "data": [
+              { "label": "2019", "value": 176 },
+              { "label": "2020", "value": 261 },
+              { "label": "2021", "value": 257 },
+              { "label": "2022", "value": 295 },
+              { "label": "2023", "value": 473 }
+            ]
+          },
+          "transform": { "x": 560, "y": 140, "width": 640, "height": 360 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "float", "durationFrames": 32 }
+        },
+        {
+          "id": "s2-chart-caption",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Global renewable capacity additions, 2019–2023" },
+          "typography": { "family": "Arial", "sizePx": 22, "weight": 400, "lineHeight": 1.1, "alignment": "center", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 560, "y": 512, "width": 640, "height": 36 },
+          "style": { "color": "#A9C6D6", "textAlign": "center" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        }
+      ]
+    },
+    {
+      "id": "scene-03",
+      "name": "Installed capacity line chart",
+      "startFrame": 300,
+      "durationFrames": 150,
+      "intent": "Show the compounding year-end installed renewable base rising from 2,537 GW to 3,870 GW, per IRENA 2024.",
+      "layers": [
+        {
+          "id": "s3-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+          "style": { "backgroundColor": "#0B1D2C" }
+        },
+        {
+          "id": "s3-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "INSTALLED BASE" },
+          "typography": { "family": "Arial", "sizePx": 24, "weight": 700, "lineHeight": 1.1, "tracking": 5, "alignment": "left", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 120, "y": 116, "width": 420, "height": 40 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s3-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Total installed\ncapacity (GW)" },
+          "typography": { "family": "Arial", "sizePx": 40, "weight": 800, "lineHeight": 1.12, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 180, "width": 420, "height": 120 },
+          "style": { "color": "#FFFFFF" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s3-callout",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "2,537 GW grew to\n3,870 GW by 2023." },
+          "typography": { "family": "Arial", "sizePx": 30, "weight": 700, "lineHeight": 1.25, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 400, "width": 420, "height": 110 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "fade-up", "durationFrames": 24, "delayFrames": 6 }
+        },
+        {
+          "id": "s3-source",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Source: IRENA, Renewable\nCapacity Statistics 2024" },
+          "typography": { "family": "Arial", "sizePx": 22, "weight": 400, "lineHeight": 1.15, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 560, "width": 420, "height": 64 },
+          "style": { "color": "#7FA3B8" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s3-chart",
+          "kind": "chart",
+          "engineHint": "hyperframes",
+          "content": {
+            "chartType": "line",
+            "title": "Installed renewable capacity at year end (GW)",
+            "xKey": "label",
+            "yKey": "value",
+            "data": [
+              { "label": "2019", "value": 2537 },
+              { "label": "2020", "value": 2799 },
+              { "label": "2021", "value": 3064 },
+              { "label": "2022", "value": 3372 },
+              { "label": "2023", "value": 3870 }
+            ]
+          },
+          "transform": { "x": 560, "y": 140, "width": 640, "height": 360 },
+          "style": { "color": "#4ADE80" },
+          "motion": { "preset": "float", "durationFrames": 32 }
+        },
+        {
+          "id": "s3-chart-caption",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Worldwide installed renewable capacity, year end" },
+          "typography": { "family": "Arial", "sizePx": 22, "weight": 400, "lineHeight": 1.1, "alignment": "center", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 560, "y": 512, "width": 640, "height": 36 },
+          "style": { "color": "#A9C6D6", "textAlign": "center" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        }
+      ]
+    },
+    {
+      "id": "scene-04",
+      "name": "Takeaway",
+      "startFrame": 450,
+      "durationFrames": 120,
+      "intent": "Close on the 2023 share takeaway and the IRENA citation.",
+      "layers": [
+        {
+          "id": "s4-bg",
+          "kind": "shape",
+          "engineHint": "hyperframes",
+          "transform": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+          "style": { "backgroundColor": "#4ADE80" }
+        },
+        {
+          "id": "s4-eyebrow",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "THE TAKEAWAY" },
+          "typography": { "family": "Arial", "sizePx": 24, "weight": 700, "lineHeight": 1.1, "tracking": 5, "alignment": "left", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 120, "y": 130, "width": 420, "height": 40 },
+          "style": { "color": "#0B2230" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s4-headline",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "86% of all new power\ncapacity added in 2023\nwas renewable." },
+          "typography": { "family": "Arial", "sizePx": 62, "weight": 800, "lineHeight": 1.1, "alignment": "left", "maxLines": 3, "safeArea": true },
+          "transform": { "x": 120, "y": 210, "width": 1040, "height": 260 },
+          "style": { "color": "#0B2230" },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        },
+        {
+          "id": "s4-support",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Annual additions have nearly tripled since 2019 — and the installed base keeps compounding." },
+          "typography": { "family": "Arial", "sizePx": 28, "weight": 500, "lineHeight": 1.25, "alignment": "left", "maxLines": 2, "safeArea": true },
+          "transform": { "x": 120, "y": 500, "width": 1040, "height": 100 },
+          "style": { "color": "#0B2230", "opacity": 0.85 },
+          "motion": { "preset": "fade-up", "durationFrames": 24 }
+        },
+        {
+          "id": "s4-citation",
+          "kind": "text",
+          "engineHint": "hyperframes",
+          "content": { "text": "Data: IRENA, Renewable Capacity Statistics 2024 (retrieved 2026-11-13)" },
+          "typography": { "family": "Arial", "sizePx": 22, "weight": 500, "lineHeight": 1.1, "alignment": "left", "maxLines": 1, "safeArea": true },
+          "transform": { "x": 120, "y": 610, "width": 1000, "height": 36 },
+          "style": { "color": "#0B2230", "opacity": 0.8 },
+          "motion": { "preset": "float", "durationFrames": 24 }
+        }
+      ]
+    }
+  ],
+  "delivery": {
+    "primaryTargetId": "master-16x9",
+    "targets": [
+      {
+        "id": "master-16x9",
+        "format": "mp4",
+        "width": 1280,
+        "height": 720,
+        "frameRate": { "numerator": 30, "denominator": 1 },
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "colorSpace": "Rec.709",
+        "alpha": false,
+        "audioRequired": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "projectId": "data-viz-acceptance",
+  "runId": "run-data-viz-acceptance-1794586033043",
+  "status": "qa",
+  "revision": 1,
+  "repairCycles": 0,
+  "inputs": {
+    "projectIrSha256": "34ec40db24adfb1ee06037cf9676a20a7956aced64dd1c64adb24cf0e14b6799",
+    "projectFileSha256": "ee9ac3baeea136a564db67c2d3e285c383716c909fc765a0cf6db7c0ea094c4a",
+    "recordedAt": "2026-11-13T16:07:13.043Z"
+  },
+  "policy": {
+    "maxCycles": 2,
+    "targetedRerender": true,
+    "retestRequired": true,
+    "workers": 1,
+    "qualityGatesSha256": "e067e7c18d3c640e6a166eff1de0056381f29974b4f6715c0f23d35bc263d802"
+  },
+  "artifacts": [
+    {
+      "id": "master-34ec40db",
+      "kind": "master-render",
+      "path": "D:\\motions\\motion-studio\\projects\\data-viz-acceptance\\renders\\data-viz-acceptance-draft.mp4",
+      "sha256": "1c03d2fa9aa56e10cdd36d99f112c18b04e8fcc1197c28f8791621b173e7b22c",
+      "verified": true,
+      "projectIrSha256": "34ec40db24adfb1ee06037cf9676a20a7956aced64dd1c64adb24cf0e14b6799",
+      "recordedAt": "2026-11-13T16:08:27.550Z"
+    }
+  ],
+  "events": [
+    {
+      "revision": 1,
+      "from": "planned",
+      "to": "planned",
+      "at": "2026-11-13T16:07:13.043Z",
+      "type": "inputs-invalidated",
+      "metadata": {
+        "projectIrSha256": "34ec40db24adfb1ee06037cf9676a20a7956aced64dd1c64adb24cf0e14b6799",
+        "projectFileSha256": "ee9ac3baeea136a564db67c2d3e285c383716c909fc765a0cf6db7c0ea094c4a",
+        "droppedArtifacts": []
+      }
+    },
+    {
+      "revision": 0,
+      "from": null,
+      "to": "draft",
+      "at": "2026-11-13T16:07:13.044Z",
+      "metadata": {}
+    },
+    {
+      "revision": 1,
+      "from": "draft",
+      "to": "planned",
+      "at": "2026-11-13T16:07:13.045Z",
+      "metadata": {}
+    },
+    {
+      "revision": 2,
+      "from": "planned",
+      "to": "rendering",
+      "at": "2026-11-13T16:07:13.045Z",
+      "metadata": {}
+    },
+    {
+      "revision": 3,
+      "from": "rendering",
+      "to": "qa",
+      "at": "2026-11-13T16:08:27.544Z",
+      "metadata": {}
+    },
+    {
+      "revision": 4,
+      "from": "qa",
+      "to": "qa",
+      "at": "2026-11-13T16:08:27.550Z",
+      "metadata": {
+        "event": "artifact-recorded",
+        "artifactId": "master-34ec40db"
+      }
+    }
+  ],
+  "updatedAt": "2026-11-13T16:08:27.550Z",
+  "repair": {
+    "cycles": 0,
+    "maxCycles": 2,
+    "retestOutcomes": {}
+  }
+}

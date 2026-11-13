@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "projectId": "offline-narrated-explainer-18s-fish",
+  "runId": "run-offline-narrated-explainer-18s-fish-1794586664948",
+  "status": "qa",
+  "revision": 1,
+  "repairCycles": 0,
+  "inputs": {
+    "projectIrSha256": "2178755394fc539b5872b5102abb98a65c825c0b625f4c1bd4111001c2a14768",
+    "projectFileSha256": "99f491d9e6c70fbbf1dcad336627d4ffe4ee1a414545d747be834bcbb5183700",
+    "recordedAt": "2026-11-13T16:17:44.948Z"
+  },
+  "policy": {
+    "maxCycles": 2,
+    "targetedRerender": true,
+    "retestRequired": true,
+    "workers": 1,
+    "qualityGatesSha256": "e067e7c18d3c640e6a166eff1de0056381f29974b4f6715c0f23d35bc263d802"
+  },
+  "artifacts": [
+    {
+      "id": "master-21787553",
+      "kind": "master-render",
+      "path": "D:\\motions\\motion-studio\\projects\\offline-narrated-explainer-18s-fish\\renders\\offline-narrated-explainer-18s-fish-draft.mp4",
+      "sha256": "9429f5ab90611f732309b111278bfabaf5514bc7635317a63e075d1dcae5aef7",
+      "verified": true,
+      "projectIrSha256": "2178755394fc539b5872b5102abb98a65c825c0b625f4c1bd4111001c2a14768",
+      "recordedAt": "2026-11-13T16:18:40.024Z"
+    }
+  ],
+  "events": [
+    {
+      "revision": 1,
+      "from": "planned",
+      "to": "planned",
+      "at": "2026-11-13T16:17:44.948Z",
+      "type": "inputs-invalidated",
+      "metadata": {
+        "projectIrSha256": "2178755394fc539b5872b5102abb98a65c825c0b625f4c1bd4111001c2a14768",
+        "projectFileSha256": "99f491d9e6c70fbbf1dcad336627d4ffe4ee1a414545d747be834bcbb5183700",
+        "droppedArtifacts": []
+      }
+    },
+    {
+      "revision": 0,
+      "from": null,
+      "to": "draft",
+      "at": "2026-11-13T16:17:44.950Z",
+      "metadata": {}
+    },
+    {
+      "revision": 1,
+      "from": "draft",
+      "to": "planned",
+      "at": "2026-11-13T16:17:44.951Z",
+      "metadata": {}
+    },
+    {
+      "revision": 2,
+      "from": "planned",
+      "to": "rendering",
+      "at": "2026-11-13T16:17:44.951Z",
+      "metadata": {}
+    },
+    {
+      "revision": 3,
+      "from": "rendering",
+      "to": "qa",
+      "at": "2026-11-13T16:18:40.021Z",
+      "metadata": {}
+    },
+    {
+      "revision": 4,
+      "from": "qa",
+      "to": "qa",
+      "at": "2026-11-13T16:18:40.024Z",
+      "metadata": {
+        "event": "artifact-recorded",
+        "artifactId": "master-21787553"
+      }
+    }
+  ],
+  "updatedAt": "2026-11-13T16:18:40.024Z",
+  "repair": {
+    "cycles": 0,
+    "maxCycles": 2,
+    "retestOutcomes": {}
+  }
+}
