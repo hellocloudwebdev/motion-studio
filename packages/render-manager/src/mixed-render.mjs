@@ -8,14 +8,14 @@ import { assembleScenes, countVideoFrames, normalizeAssemblyAudioInputs, probeMe
 
 // Mixed-path v1 capability boundary (mirrors the receipt `limitations` entries):
 // whole scenes render on exactly one supported engine and single-scene engine
-// mixing, explicit scene start offsets are rejected instead of silently
-// dropped. The assembled master stays video-only unless the caller supplies
+// mixing is rejected instead of silently dropped. Scenes may declare an
+// explicit editorial origin (gap-free tiling from any non-negative frame).
+// The assembled master stays video-only unless the caller supplies
 // audioInputs, in which case cues are mixed in at assembly time (see
 // mixedRenderLimitations).
 const MIXED_SUPPORTED_ENGINES = new Set(['hyperframes', 'blender']);
 const MIXED_LIMITATIONS = [
   { code: 'SINGLE_SCENE_MULTI_ENGINE_UNSUPPORTED', reason: 'v1 renders every scene on exactly one engine; scenes mixing HyperFrames and Blender layers are rejected before rendering instead of being silently split.' },
-  { code: 'EXPLICIT_SCENE_START_OFFSETS_UNSUPPORTED', reason: 'Assembly v1 requires scenes to tile contiguously from frame 0; explicit startFrame offsets, gaps and overlaps are rejected.' },
   { code: 'ASSEMBLY_IS_VIDEO_ONLY', reason: 'Scene assembly concatenates video segments without audio; audio mixing happens at delivery through finalizeMedia.' }
 ];
 
@@ -44,17 +44,25 @@ export function classifyMixedScenes(plans) {
   return classification;
 }
 
-// Assembly v1 requires scenes to tile contiguously: scene N starts exactly
-// where scene N-1 ended, starting at frame 0. Declared startFrames equal to
-// the cumulative start are accepted; gaps, overlaps and offsets are rejected.
+// Mixed assembly tiles scenes gap-free and overlap-free. Scenes may declare
+// an explicit editorial origin: the first scene's startFrame fixes the origin
+// O ≥ 0 and every later scene must continue exactly where the previous ended
+// (declared startFrame === expected). Gaps and overlaps are rejected with an
+// explicit error; the timeline carries the declared origin so finding shifts,
+// evidence timestamps and editorial in-point references stay in
+// editorial-timeline coordinates.
 export function validateContiguousSceneTimeline(scenes) {
   const timeline = [];
-  let expectedStart = 0;
+  let expectedStart = null;
   for (const scene of Array.isArray(scenes) ? scenes : []) {
     if (!scene || typeof scene.id !== 'string' || !scene.id) throw new Error('Mixed assembly requires every scene to have a non-empty id.');
     if (!Number.isInteger(scene.durationFrames) || scene.durationFrames <= 0) throw new Error('Scene ' + scene.id + ' must declare a positive integer durationFrames for assembly.');
-    if (scene.startFrame !== undefined && scene.startFrame !== expectedStart) {
-      throw new Error('Scene ' + scene.id + ' declares startFrame ' + scene.startFrame + ' but assembly v1 expects contiguous tiling from frame ' + expectedStart + '. Explicit startFrame offsets, gaps and overlaps are unsupported for assembly; reorder scenes or fix durationFrames in the Canonical Video IR.');
+    if (expectedStart === null) {
+      expectedStart = scene.startFrame === undefined || scene.startFrame === null ? 0 : scene.startFrame;
+      if (!Number.isInteger(expectedStart) || expectedStart < 0) throw new Error('Scene ' + scene.id + ' declares startFrame ' + scene.startFrame + '; the editorial origin must be a non-negative integer.');
+    } else if (scene.startFrame !== undefined && scene.startFrame !== expectedStart) {
+      const kind = scene.startFrame > expectedStart ? 'gap' : 'overlap';
+      throw new Error('Scene ' + scene.id + ' declares startFrame ' + scene.startFrame + ' but mixed assembly requires gap-free tiling from editorial origin ' + timeline[0].startFrame + ': expected ' + expectedStart + '. ' + kind.charAt(0).toUpperCase() + kind.slice(1) + 's are rejected; fix durationFrames or startFrame in the Canonical Video IR.');
     }
     timeline.push({ sceneId: scene.id, startFrame: expectedStart, durationFrames: scene.durationFrames });
     expectedStart += scene.durationFrames;

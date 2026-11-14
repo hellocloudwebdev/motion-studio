@@ -29,7 +29,7 @@ test('classifies whole-scene engine tasks and rejects mixed-engine scenes for v1
   ]);
 });
 
-test('assembly v1 requires scenes to tile contiguously from frame 0', () => {
+test('mixed assembly tiles gap-free with an explicit editorial origin', () => {
   const timeline = validateContiguousSceneTimeline([
     { id: 'scene-01', durationFrames: 60 },
     { id: 'scene-02', startFrame: 60, durationFrames: 60 },
@@ -40,8 +40,20 @@ test('assembly v1 requires scenes to tile contiguously from frame 0', () => {
     { sceneId: 'scene-02', startFrame: 60, durationFrames: 60 },
     { sceneId: 'scene-03', startFrame: 120, durationFrames: 60 }
   ]);
-  assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 60 }, { id: 'b', durationFrames: 60, startFrame: 90 }]), /gap|offset|contiguous|startFrame 90/);
-  assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 60 }, { id: 'b', durationFrames: 60, startFrame: 30 }]), /startFrame 30/);
+  // An explicit non-zero editorial origin (e.g. a trimmed cut starting at
+  // frame 30 of the master timeline) is accepted when tiling stays gap-free.
+  const offset = validateContiguousSceneTimeline([
+    { id: 'scene-01', startFrame: 30, durationFrames: 45 },
+    { id: 'scene-02', startFrame: 75, durationFrames: 45 }
+  ]);
+  assert.deepEqual(offset, [
+    { sceneId: 'scene-01', startFrame: 30, durationFrames: 45 },
+    { sceneId: 'scene-02', startFrame: 75, durationFrames: 45 }
+  ]);
+  assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 60 }, { id: 'b', durationFrames: 60, startFrame: 90 }]), /gap-free tiling/);
+  assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 60 }, { id: 'b', durationFrames: 60, startFrame: 30 }]), /Overlap/);
+  assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 60, startFrame: -12 }]), /editorial origin/);
+  assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 60, startFrame: 30.5 }]), /editorial origin/);
   assert.throws(() => validateContiguousSceneTimeline([{ id: 'a', durationFrames: 0 }]), /positive integer durationFrames/);
   assert.throws(() => validateContiguousSceneTimeline([{ durationFrames: 60 }]), /non-empty id/);
   assert.throws(() => validateContiguousSceneTimeline([]), /at least one renderable scene/);
