@@ -75,6 +75,32 @@
         "export",
         "fcpxml-interchange"
       ]
+    },
+    "after-effects": {
+      "role": "specialist-compositing-and-vfx-licensed",
+      "mcpPackage": "@kumoproductions/mcp-aftereffects@0.3.2",
+      "capabilities": [
+        "compositing",
+        "vfx",
+        "tracking",
+        "roto",
+        "advanced-typography",
+        "motion-graphics",
+        "keyframing"
+      ],
+      "note": "Licensed Adobe stack, optional: requires a user Creative Cloud subscription; explicit engineHint 'after-effects' selects it over the free EffectCraft default."
+    },
+    "premiere-pro": {
+      "role": "editorial-assembly-licensed",
+      "mcpPackage": "premiere-pro-mcp@1.30.0",
+      "capabilities": [
+        "timeline-editing",
+        "audio-assembly",
+        "captions",
+        "final-cut",
+        "export"
+      ],
+      "note": "Licensed Adobe stack, optional: set MOTION_STUDIO_EDITORIAL_ENGINE=premiere-pro to route assembly through Premiere Pro instead of FilmCraft."
     }
   },
   "executionPolicy": {
@@ -82,6 +108,7 @@
     "draftPreview": true,
     "resumeFromCheckpoint": true,
     "allowArbitraryScript": false,
-    "readOnlyCraftOnboarding": true
+    "readOnlyCraftOnboarding": true,
+    "readOnlyAdobeOnboarding": true
   }
 }

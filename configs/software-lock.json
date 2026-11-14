@@ -13,7 +13,9 @@
     "gsap": "3.14.2",
     "three": "0.181.2",
     "@modelcontextprotocol/sdk": "1.32.1",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@kumoproductions/mcp-aftereffects": "0.3.2",
+    "premiere-pro-mcp": "1.30.0"
   },
   "craft": {
     "effectcraft": {
@@ -35,6 +37,28 @@
       "status": "alpha"
     }
   },
+  "adobe": {
+    "afterEffects": {
+      "supported": ["2024", "2025", "2026"],
+      "platforms": ["win32", "darwin"],
+      "mcpPackage": "@kumoproductions/mcp-aftereffects",
+      "readonlyOnFirstRun": true,
+      "evalEnabled": false
+    },
+    "premierePro": {
+      "supported": ["2020", "2021", "2022", "2023", "2024", "2025", "2026"],
+      "platforms": ["win32", "darwin"],
+      "mcpPackage": "premiere-pro-mcp",
+      "npmVersion": "1.30.0",
+      "uxpMinimum": "25.6",
+      "uxpReleaseTag": "v1.30.0",
+      "uxpAsset": "premiere-pro-mcp-uxp-1.30.0-direct.ccx",
+      "cepAsset": "MCPBridgeCEP.zxp",
+      "cepAllowed": true,
+      "unsafeScript": false
+    },
+    "note": "Licensed optional stack retained alongside the free craft tools; a scene's engineHint or MOTION_STUDIO_EDITORIAL_ENGINE selects which specialist/editorial engine a production uses."
+  },
   "externalBinaries": {
     "ffmpeg": {
       "required": true,
@@ -45,9 +69,10 @@
     }
   },
   "notes": [
-    "FilmCraft and EffectCraft are open source (MIT / Apache-2.0); install from GitHub releases or getartcraft.com.",
-    "Both expose headless MCP servers over stdio via their CLIs; Motion Studio registers them through scripts/craft-mcp-launcher.mjs.",
-    "Both tools are alpha: Motion Studio gates every mutation behind explicit producer approval.",
+    "Dual stacks: the free craft tools (FilmCraft + EffectCraft) are the default engines; the licensed Adobe stack stays fully supported for subscribed hosts.",
+    "FilmCraft and EffectCraft are open source (MIT / Apache-2.0); install from GitHub releases or getartcraft.com. They expose headless MCP servers over stdio via their CLIs (scripts/craft-mcp-launcher.mjs).",
+    "Both craft tools are alpha: Motion Studio gates every mutation behind explicit producer approval.",
+    "Adobe applications are licensed products; installers must use the user's Creative Cloud account and UI. Adobe MCPs run locally over stdio with read-only/inspect-only onboarding.",
     "No public network listener is enabled; all MCP traffic is local stdio."
   ]
 }

@@ -20,7 +20,7 @@ import { createProductionBrief, buildCreativeWorkflow, validateProductionBrief, 
 
 const server = new McpServer({ name: 'motion-studio', version: '1.0.0-alpha.1' });
 const projectSchema = z.record(z.string(), z.unknown());
-const engineList = z.array(z.enum(['hyperframes', 'effectcraft', 'blender', 'threejs', 'ffmpeg'])).optional();
+const engineList = z.array(z.enum(['hyperframes', 'effectcraft', 'after-effects', 'blender', 'threejs', 'ffmpeg'])).optional();
 function rationalFrameRate(fps) {
   for (const [decimal, numerator, denominator] of [[23.976, 24000, 1001], [29.97, 30000, 1001], [59.94, 60000, 1001]]) if (Math.abs(fps - decimal) < 0.001) return { numerator, denominator };
   if ([24, 25, 30, 50, 60].includes(fps)) return { numerator: fps, denominator: 1 };
@@ -78,7 +78,7 @@ server.tool('video.evaluate_host_readiness', 'Fail-closed preflight: require ver
 }, async ({ routePlan, hostChecks }) => ({ content: [{ type: 'text', text: JSON.stringify(evaluateHostReadiness(routePlan, hostChecks), null, 2) }] }));
 server.tool('video.authorize_production_stage', 'Validate a time-bounded, project/run/stage-scoped approval after host readiness has passed. This records governance intent; it is not a cryptographic identity system.', {
   projectId: z.string().min(1), runId: z.string().min(1),
-  stage: z.enum(['effectcraft-comp', 'filmcraft-assembly', 'final-export']),
+  stage: z.enum(['effectcraft-comp', 'filmcraft-assembly', 'after-effects-comp', 'premiere-assembly', 'final-export']),
   hostReadiness: projectSchema, approval: z.record(z.string(), z.unknown()), now: z.number().optional()
 }, async ({ projectId, runId, stage, hostReadiness, approval, now }) => ({
   content: [{ type: 'text', text: JSON.stringify(authorizeProductionStage({ projectId, runId, stage, hostReadiness, approval, now }), null, 2) }]
@@ -118,6 +118,16 @@ server.tool('video.validate_editorial_assembly', 'Validate a previously generate
   assembly: projectSchema
 }, async ({ assembly }) => ({
   content: [{ type: 'text', text: JSON.stringify(validateEditorialAssembly(assembly), null, 2) }]
+}));
+server.tool('video.export_premiere_interchange', 'Back-compat alias of video.export_editorial_interchange: export a validated editorial assembly to FCPXML (importable by Premiere Pro and FilmCraft) plus a provenance sidecar.', {
+  assembly: projectSchema,
+  assetRoot: z.string().optional(),
+  sequenceName: z.string().min(1).optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  allowUnsupportedClips: z.boolean().default(false)
+}, async ({ assembly, ...options }) => ({
+  content: [{ type: 'text', text: JSON.stringify(await exportEditorialInterchange(assembly, options), null, 2) }]
 }));
 server.tool('video.export_editorial_interchange', 'Export a validated editorial assembly to FCPXML (FilmCraft-importable) plus a provenance sidecar. This does not launch or modify any editorial engine.', {
   assembly: projectSchema,

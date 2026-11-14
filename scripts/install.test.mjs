@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { craftGuidance, installRecordPath, parseInstallerFlags, writeInstallRecord } from './install.mjs';
+import { adobeGuidance, craftGuidance, installRecordPath, parseInstallerFlags, writeInstallRecord } from './install.mjs';
 
 const INSTALLER = fileURLToPath(new URL('./install.mjs', import.meta.url));
 
@@ -19,6 +19,25 @@ const detectedBothInstalled = {
   supported: true,
   effectcraft: { installed: true, path: 'C:\\craft\\effectcraft-cli.exe' },
   filmcraft: { installed: true, path: 'C:\\craft\\filmcraft-cli.exe' }
+};
+
+const adobeAllMissing = {
+  supported: true,
+  creativeCloud: { installed: false },
+  afterEffects: { installed: false },
+  premierePro: { installed: false }
+};
+const adobeUxpPremiere = {
+  supported: true,
+  creativeCloud: { installed: true },
+  afterEffects: { installed: true, version: '26.0' },
+  premierePro: { installed: true, version: '2026.1' }
+};
+const adobeLegacyPremiere = {
+  supported: true,
+  creativeCloud: { installed: true },
+  afterEffects: { installed: true, version: '25.2' },
+  premierePro: { installed: true, version: '2024.4' }
 };
 
 test('parseInstallerFlags covers the documented option surface', () => {
@@ -66,6 +85,40 @@ test('craft guidance never references Adobe flows', () => {
   assert.ok(!serialized.includes('creative cloud'), 'no Creative Cloud guidance');
   assert.ok(!serialized.includes('cep'), 'no CEP connector guidance');
   assert.ok(!serialized.includes('uxp'), 'no UXP token guidance');
+});
+
+// Dual-stack: the licensed-Adobe guidance stays fully supported alongside.
+
+test('adobe guidance keeps the AE/PP status rows even without Creative Cloud', () => {
+  const guidance = adobeGuidance(adobeAllMissing, { installCep: false });
+  assert.ok(guidance.needsUserAction.some(item => item.includes('Creative Cloud Desktop')));
+  assert.ok(guidance.openUrls.some(url => url.includes('download-creative-cloud-apps')));
+  assert.equal(guidance.adobeMcp.afterEffects.status, 'needs-user-install');
+  assert.equal(guidance.adobeMcp.premiere.status, 'needs-user-install');
+  assert.equal(guidance.actions.premiereTokenSetup, false);
+  assert.equal(guidance.actions.runCepInstall, false);
+});
+
+test('adobe guidance routes Premiere 2026+ to the UXP token setup', () => {
+  const guidance = adobeGuidance(adobeUxpPremiere, { installCep: false });
+  assert.equal(guidance.actions.premiereTokenSetup, true);
+  assert.equal(guidance.actions.runCepInstall, false);
+  assert.equal(guidance.adobeMcp.afterEffects.mode, 'read-only-default');
+  assert.equal(guidance.adobeMcp.afterEffects.arbitraryEval, false);
+  assert.ok(guidance.needsUserAction.some(item => item.includes('Allow Scripts to Write Files')));
+  assert.ok(!guidance.needsUserAction.some(item => item.includes('CEP')));
+});
+
+test('adobe guidance routes legacy Premiere to the CEP compatibility decision and honors the opt-in', () => {
+  const legacy = adobeGuidance(adobeLegacyPremiere, { installCep: false });
+  assert.equal(legacy.actions.premiereTokenSetup, false);
+  assert.equal(legacy.adobeMcp.premiere.status, 'needs-user-action');
+  assert.match(legacy.adobeMcp.premiere.connector, /compatibility decision required/);
+  assert.ok(legacy.needsUserAction.some(item => item.includes('--install-premiere-cep')));
+  const optedIn = adobeGuidance(adobeLegacyPremiere, { installCep: true });
+  assert.equal(optedIn.actions.runCepInstall, true);
+  assert.equal(optedIn.adobeMcp.premiere.connector, 'CEP');
+  assert.equal(optedIn.adobeMcp.premiere.status, 'install-command-completed');
 });
 
 test('writeInstallRecord persists the failure record with a recovery hint', async () => {

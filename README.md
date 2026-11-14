@@ -1,8 +1,8 @@
 # Motion Studio
 
-**Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, FilmCraft/EffectCraft MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
+**Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, FilmCraft/EffectCraft MCP bridges, licensed Adobe MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
 
-> **Current milestone: 1.0.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning; 1.0 adds FCPXML interchange export with provenance. As of 2026-11-14 the specialist/editorial stack is **EffectCraft + FilmCraft** (open-source Rust tools), replacing the retired Adobe AE/Premiere integrations.
+> **Current milestone: 1.0.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning; 1.0 adds FCPXML interchange export with provenance. Since 2026-11-14 Motion Studio ships a **dual specialist/editorial stack**: the free open-source **EffectCraft + FilmCraft** tools are the default engines, and the licensed **Adobe After Effects/Premiere Pro** integrations remain fully supported for subscribed hosts — a scene's `engineHint` (or `MOTION_STUDIO_EDITORIAL_ENGINE`) picks which one a production uses.
 
 ## Install on a new PC
 
@@ -20,20 +20,22 @@ chmod +x install.sh
 
 The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP and Three.js, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
 
-The specialist/editorial engines are **free and open source**: install [EffectCraft](https://github.com/storytold/effectcraft) (motion graphics, compositing, VFX) and [FilmCraft](https://github.com/storytold/filmcraft) (editorial timeline, color, sound post, export) from their GitHub releases pages or getartcraft.com. Both are alpha Rust tools exposing headless MCP servers over stdio (`effectcraft-cli mcp`, `filmcraft-cli -- mcp`); Motion Studio detects the CLIs (or honors `EFFECTCRAFT_CLI` / `FILMCRAFT_CLI` overrides for portable installs) and registers them for your AI host.
+The default specialist/editorial engines are **free and open source**: install [EffectCraft](https://github.com/storytold/effectcraft) (motion graphics, compositing, VFX) and [FilmCraft](https://github.com/storytold/filmcraft) (editorial timeline, color, sound post, export) from their GitHub releases pages or getartcraft.com. Both are alpha Rust tools exposing headless MCP servers over stdio (`effectcraft-cli mcp`, `filmcraft-cli -- mcp`); Motion Studio detects the CLIs (or honors `EFFECTCRAFT_CLI` / `FILMCRAFT_CLI` overrides for portable installs) and registers them for your AI host.
+
+Licensed **Adobe** hosts remain fully supported: After Effects and Premiere Pro connect through their upstream npm MCP packages (read-only onboarding, exact-operation approvals), and Adobe products are still installed/activated by you through Creative Cloud — Motion Studio never automates licensing.
 
 See [Installation](docs/INSTALLATION.md), the [installer policy](docs/INSTALLER-CRAFT-POLICY.md) and [Host integration](docs/HOST-INTEGRATION.md).
 
-## Production stack
+## Production stack (dual: free default + licensed optional)
 
-| Responsibility | Engine |
-|---|---|
-| Programmable 2D, motion graphics, typography | HyperFrames + GSAP |
-| Advanced motion graphics, compositing, effects and VFX | EffectCraft via its MCP/CLI (alpha) |
-| Editorial timeline, color, sound post and final assembly | FilmCraft via its MCP/CLI (alpha) |
-| 3D, simulation and product visualization | Blender |
-| Procedural/WebGL 3D | Three.js |
-| Media processing, encoding and inspection | FFmpeg / FFprobe |
+| Responsibility | Free default engine | Licensed optional engine |
+|---|---|---|
+| Programmable 2D, motion graphics, typography | HyperFrames + GSAP | — |
+| Advanced motion graphics, compositing, effects and VFX | EffectCraft via its MCP/CLI (alpha) | After Effects via upstream MCP |
+| Editorial timeline, color, sound post and final assembly | FilmCraft via its MCP/CLI (alpha) | Premiere Pro via upstream MCP |
+| 3D, simulation and product visualization | Blender | — |
+| Procedural/WebGL 3D | Three.js | — |
+| Media processing, encoding and inspection | FFmpeg / FFprobe | — |
 
 ## Try the renderer and QA
 

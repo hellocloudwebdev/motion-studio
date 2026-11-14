@@ -2,7 +2,7 @@
 
 **Purpose:** Drive implementation against the Architecture Lock and the end-to-end production definition of done. This document is the master tracker for milestones 1.0–1.9. Update status and attach evidence in the PR that implements each item.
 
-> **2026-11-14 architecture pivot:** the specialist/editorial stack is now **EffectCraft** (github.com/storytold/effectcraft — replaces After Effects) and **FilmCraft** (github.com/storytold/filmcraft — replaces Premiere Pro/Media Encoder). Both are free open-source Rust tools (MIT OR Apache-2.0) with headless MCP CLIs. Milestone references to Adobe/AE/Premiere below read as EffectCraft/FilmCraft; the licensed-Adobe external gate is replaced by craft-CLI workstation validation (install from the releases pages, then verify MCP + render round-trips on a host with both CLIs).
+> **2026-11-14 dual-stack update:** Motion Studio now ships TWO supported specialist/editorial stacks — the free default **EffectCraft** (github.com/storytold/effectcraft) + **FilmCraft** (github.com/storytold/filmcraft) AND the retained licensed **After Effects + Premiere Pro/Media Encoder** Adobe stack. Both are first-class: `engineHint`/`MOTION_STUDIO_EDITORIAL_ENGINE` selects the stack per production, and milestone references to AE/Premiere below are valid on either stack. The external workstation gate is now craft-CLI validation (install the free CLIs, verify MCP + render round-trips) OR licensed-Adobe validation on subscribed hosts.
 
 ## Product acceptance target
 

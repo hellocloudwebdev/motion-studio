@@ -1,16 +1,23 @@
 const ENGINE_HOST = {
   hyperframes: 'hyperframes',
+  // Dual specialist/editorial stacks: free craft tools (default) and licensed Adobe.
   effectcraft: 'effectcraft',
+  'after-effects': 'afterEffects',
+  afterEffects: 'afterEffects',
+  filmcraft: 'filmcraft',
+  'premiere-pro': 'premiere',
+  premiere: 'premiere',
   blender: 'blender',
   threejs: 'threejs',
-  filmcraft: 'filmcraft',
   ffmpeg: 'ffmpeg'
 };
 
 function isHostReady(engine, check = {}) {
   // The craft CLIs are verified through their MCP surface (a connected server
-  // advertising tools); every other engine uses plain availability evidence.
+  // advertising tools); the Adobe engines keep their original evidence shapes.
   if (engine === 'effectcraft' || engine === 'filmcraft') return check.serverConnected === true && (check.toolCount ?? 0) > 0;
+  if (engine === 'after-effects') return check.serverConnected === true && check.contextAvailable === true;
+  if (engine === 'premiere-pro' || engine === 'premiere') return check.serverConnected === true && check.hostVerified === true;
   return check.available === true;
 }
 
@@ -42,15 +49,23 @@ export function evaluateHostReadiness(routePlan, hostChecks = {}) {
   };
 }
 
-const APPROVAL_STAGES = new Set(['effectcraft-comp', 'filmcraft-assembly', 'final-export']);
+const APPROVAL_STAGES = new Set([
+  // Craft stack (default, free).
+  'effectcraft-comp', 'filmcraft-assembly',
+  // Licensed Adobe stack (fully supported alongside).
+  'after-effects-comp', 'premiere-assembly',
+  'final-export'
+]);
 const STAGE_ENGINES = {
   'effectcraft-comp': ['effectcraft'],
   'filmcraft-assembly': ['filmcraft'],
+  'after-effects-comp': ['after-effects'],
+  'premiere-assembly': ['premiere-pro'],
   'final-export': ['filmcraft', 'ffmpeg']
 };
 
 export function validateStageApproval({ projectId, runId, stage, approval, now = Date.now() } = {}) {
-  if (!APPROVAL_STAGES.has(stage)) return { valid: false, reason: 'This stage does not accept a craft production approval.' };
+  if (!APPROVAL_STAGES.has(stage)) return { valid: false, reason: 'This stage does not accept a production approval.' };
   if (!projectId || !runId || !approval || typeof approval !== 'object') return { valid: false, reason: 'A project-scoped approval record is required.' };
   if (approval.approved !== true) return { valid: false, reason: 'Approval has not been granted.' };
   if (approval.projectId !== projectId || approval.runId !== runId || approval.stage !== stage) return { valid: false, reason: 'Approval scope does not match this project, run and stage.' };

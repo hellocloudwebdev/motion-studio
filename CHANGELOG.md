@@ -1,12 +1,12 @@
 # Changelog
 
-## Unreleased — Architecture pivot: FilmCraft + EffectCraft replace Adobe
-- Replaced the licensed Adobe AE/Premiere/Media-Encoder stack with the open-source Storytold tools: **EffectCraft** (specialist motion graphics/VFX, `effectcraft-cli mcp`) and **FilmCraft** (editorial assembly/color/sound/export, `filmcraft-cli -- mcp`) — both free, MIT OR Apache-2.0, alpha.
-- Renamed `packages/adobe-mcp-client` → `packages/craft-mcp-client` (approval gate kept; env hardened by approval rather than provider read-only switches).
-- Renamed `packages/premiere-interchange` → `packages/editorial-interchange`; the FCPXML 1.10 output imports into FilmCraft natively. CLI command `premiere export` → `interchange export`.
-- Engine vocabulary pivoted: `after-effects` → `effectcraft`, `premiere-pro` → `filmcraft` (routing, validation, host readiness, stage approvals, configs).
-- `scripts/software-detect.mjs` detects craft CLIs (env override → PATH → install roots); installer guidance rewritten with no Creative Cloud/CEP/UXP-token flows; doctor reports craft state.
-- Removed the `@kumoproductions/mcp-aftereffects` and `premiere-pro-mcp` npm dependencies.
+## Unreleased — Dual specialist/editorial stacks: free craft tools (default) + licensed Adobe (retained)
+- Added the open-source Storytold tools as the DEFAULT specialist/editorial engines: **EffectCraft** (motion graphics/VFX, `effectcraft-cli mcp`) and **FilmCraft** (editorial/color/sound/export, `filmcraft-cli -- mcp`) — both free, MIT OR Apache-2.0, alpha.
+- **Retained the licensed Adobe stack alongside**: `packages/adobe-mcp-client`, the upstream AE/Premiere MCP npm packages, `scripts/adobe-mcp-launcher.mjs`, Adobe detection/guidance (Creative Cloud, UXP/CEP flows) and the `after-effects`/`premiere-pro` engine vocabulary all stay fully supported.
+- Renamed `packages/premiere-interchange` → `packages/editorial-interchange` (one FCPXML 1.10 exporter for both stacks — FilmCraft imports it natively, Premiere imports FCPXML); CLI command is `interchange export` with `premiere export` kept as a back-compat alias.
+- New `packages/craft-mcp-client` + `scripts/craft-mcp-launcher.mjs` + `detectCraftApplications` + installer `craftGuidance` serve the craft stack; command resolution probes `FILMCRAFT_CLI`/`EFFECTCRAFT_CLI` → PATH → per-user install roots.
+- Engine selection: compositing/roto/VFX infers `effectcraft` (free default) and an explicit `engineHint: 'after-effects'` routes to Adobe; editorial assembly defaults to `filmcraft` with `MOTION_STUDIO_EDITORIAL_ENGINE=premiere-pro` (or `editorialEngine` option) routing to Premiere. Stage approvals accept both stacks' stage names.
+- Skills, agents and docs describe the dual stack; `engines.json` v5 and `software-lock.json` v2 register all engines; `mcp.json` registers five stdio servers (motion-studio, effectcraft, filmcraft, aftereffects, premiere-pro).
 
 ## Unreleased — Harness-first creative pipeline
 - Kept provider-neutral MCP planning and IR compilation independent of model credentials.

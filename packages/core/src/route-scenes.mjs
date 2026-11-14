@@ -1,6 +1,11 @@
 const DEFAULT_CAPABILITIES = {
   'hyperframes': ['2d-motion', 'kinetic-typography', 'charts', 'shapes', 'web-layout', 'image', 'video-clip', 'audio-clip'],
+  // Dual specialist stacks (2026-11-14): EffectCraft is the FREE default;
+  // After Effects remains fully supported for licensed Adobe hosts. An
+  // explicit engineHint picks one; inferred compositing work defaults to the
+  // free engine so open-source setups never require a paid product.
   'effectcraft': ['compositing', 'vfx', 'tracking', 'roto', 'advanced-typography', 'motion-graphics'],
+  'after-effects': ['compositing', 'vfx', 'tracking', 'roto', 'advanced-typography', 'motion-graphics'],
   'blender': ['3d', 'simulation', 'product-visualization', 'camera-animation', 'lighting'],
   'threejs': ['webgl', 'shader', 'procedural-3d', 'interactive-3d'],
   'ffmpeg': ['transcode', 'trim', 'scale', 'audio-mix', 'image-sequence', 'media-probe']
@@ -21,6 +26,10 @@ function inferEngine(layer) {
 export function routeScenes(project, options = {}) {
   const availableEngines = new Set(options.availableEngines || Object.keys(DEFAULT_CAPABILITIES));
   const resourcePolicy = { maxWorkers: 1, draftPreview: true, ...options.resourcePolicy };
+  // Editorial assembly defaults to the free FilmCraft engine; licensed Adobe
+  // hosts set MOTION_STUDIO_EDITORIAL_ENGINE=premiere-pro (or pass the option)
+  // to route assembly through Premiere Pro instead.
+  const editorialEngine = options.editorialEngine || (process.env.MOTION_STUDIO_EDITORIAL_ENGINE === 'premiere-pro' ? 'premiere-pro' : 'filmcraft');
   const plans = [];
   const issues = [];
   for (const scene of project.scenes || []) {
@@ -38,7 +47,7 @@ export function routeScenes(project, options = {}) {
       taskId: `${scene.id}:${engine}`, engine, layerIds, sequence: index,
       outputContract: scene.outputContract || { width: project.project.canvas.width, height: project.project.canvas.height, frameRate: project.project.frameRate, durationFrames: scene.durationFrames, colorSpace: project.project.colorSpace || 'Rec.709', alpha: false }
     }));
-    plans.push({ sceneId: scene.id, name: scene.name, durationFrames: scene.durationFrames, tasks, assembly: { engine: 'filmcraft', required: true }, delivery: { engine: 'ffmpeg', required: true } });
+    plans.push({ sceneId: scene.id, name: scene.name, durationFrames: scene.durationFrames, tasks, assembly: { engine: editorialEngine, required: true }, delivery: { engine: 'ffmpeg', required: true } });
   }
   return { plans, issues, executionPolicy: { maxWorkers: Math.max(1, Math.min(4, Number(resourcePolicy.maxWorkers) || 1)), draftPreview: Boolean(resourcePolicy.draftPreview), resumeFromCheckpoint: resourcePolicy.resumeFromCheckpoint !== false }, summary: { scenes: plans.length, engineTasks: plans.reduce((n, x) => n + x.tasks.length, 0), blockedTasks: issues.filter(x => x.code === 'ENGINE_UNAVAILABLE').length } };
 }

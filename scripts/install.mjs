@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { access, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, chmod, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { detectCraftApplications } from './software-detect.mjs';
+import { detectAdobeApplications, detectCraftApplications } from './software-detect.mjs';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -19,9 +20,51 @@ export function parseInstallerFlags(argv) {
     yes: flags.has('--yes') || flags.has('-y'),
     minimal: flags.has('--minimal') || flags.has('--skip-software'),
     skipHosts: flags.has('--skip-hosts'),
+    installCep: flags.has('--install-premiere-cep'),
     dryRun: flags.has('--dry-run'),
     help: flags.has('--help') || flags.has('-h')
   };
+}
+
+// Pure Adobe-guidance decision (P4.2): the exact messages, MCP status rows and
+// follow-up actions the installer produces for every detected-software shape.
+// Adobe stays an OPTIONAL licensed stack alongside the free craft tools; the
+// engineHint in the Canonical Video IR selects which one a scene uses.
+// main() performs the side effects (openUrl, CEP install, token setup) from
+// this decision, so tests can pin the guidance without touching a host.
+export function adobeGuidance(detected, { installCep = false } = {}) {
+  const needsUserAction = [];
+  const openUrls = [];
+  const adobeMcp = {};
+  const actions = { runCepInstall: false, premiereTokenSetup: false };
+  if (!detected?.creativeCloud?.installed) {
+    // Adobe status rows below still run without Creative Cloud: the guidance
+    // must record what is missing on the host, not only what to install next.
+    needsUserAction.push('Install Adobe Creative Cloud Desktop and sign in with an account that includes After Effects and Premiere Pro (optional: the free EffectCraft/FilmCraft stack is the default).');
+    openUrls.push('https://helpx.adobe.com/download-install/apps/download-install-apps/creative-cloud-apps/download-creative-cloud-apps.html');
+  } else {
+    if (!detected.afterEffects?.installed) needsUserAction.push('Install After Effects from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+    if (!detected.premierePro?.installed) needsUserAction.push('Install Premiere Pro from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+    if (!detected.afterEffects?.installed || !detected.premierePro?.installed) openUrls.push('https://creativecloud.adobe.com/apps/download/creative-cloud');
+  }
+  if (detected.afterEffects?.installed) {
+    adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, mode: 'read-only-default', arbitraryEval: false };
+    needsUserAction.push('In After Effects, enable Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network, then launch After Effects for MCP control.');
+  } else adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
+  if (detected.premierePro?.installed) {
+    const detectedYear = Number(detected.premierePro.version || 0);
+    if (detectedYear >= 2026) {
+      actions.premiereTokenSetup = true;
+    } else {
+      adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'compatibility decision required', status: 'needs-user-action' };
+      needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
+    }
+  } else adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', host: 'missing', status: 'needs-user-install' };
+  if (installCep && detected.premierePro?.installed) {
+    actions.runCepInstall = true;
+    adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'CEP', status: 'install-command-completed' };
+  }
+  return { needsUserAction, openUrls, adobeMcp, actions };
 }
 
 // Pure craft-guidance decision (P4.2, architecture pivot 2026-11-14): the
@@ -61,7 +104,7 @@ export async function writeInstallRecord(recordPath, report) {
 }
 
 const argv = process.argv.slice(2);
-const { flags, yes, minimal, skipHosts, dryRun, help } = parseInstallerFlags(argv);
+const { flags, yes, minimal, skipHosts, installCep, dryRun, help } = parseInstallerFlags(argv);
 const platform = process.platform;
 const home = os.homedir();
 const configRoot = platform === 'win32' ? (process.env.APPDATA || path.join(home, 'AppData', 'Roaming')) : (process.env.XDG_CONFIG_HOME || path.join(home, '.config'));
@@ -70,7 +113,7 @@ const appRoot = path.join(dataRoot, 'motion-studio', 'app');
 const version = (await readFile(path.join(sourceRoot, 'VERSION'), 'utf8')).trim();
 const report = {
   version, platform, architecture: os.arch(), node: process.version,
-  installed: [], detected: {}, stagedSkills: {}, hostIntegrations: [], craftMcp: {},
+  installed: [], detected: {}, stagedSkills: {}, hostIntegrations: [], craftMcp: {}, adobeMcp: {},
   needsUserAction: [], warnings: []
 };
 
@@ -148,7 +191,9 @@ function mcpServers() {
   return {
     'motion-studio': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'mcp-launcher.mjs')] },
     'effectcraft': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'craft-mcp-launcher.mjs'), 'effectcraft'] },
-    'filmcraft': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'craft-mcp-launcher.mjs'), 'filmcraft'] }
+    'filmcraft': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'craft-mcp-launcher.mjs'), 'filmcraft'] },
+    'aftereffects': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'adobe-mcp-launcher.mjs'), 'aftereffects'] },
+    'premiere-pro': { command: process.execPath, args: [path.join(appRoot, 'scripts', 'adobe-mcp-launcher.mjs'), 'premiere'] }
   };
 }
 function uniqueKey(map, base, desired) {
@@ -210,10 +255,27 @@ async function stageHosts() {
     }
   }
 }
+async function setupPremiereToken() {
+  const secretsDir = path.join(configRoot, 'motion-studio', 'secrets');
+  const tokenPath = path.join(secretsDir, 'premiere-uxp-token');
+  if (!dryRun) {
+    await mkdir(secretsDir, { recursive: true });
+    let exists = false;
+    try { await access(tokenPath); exists = true; } catch {}
+    if (!exists) {
+      await writeFile(tokenPath, randomBytes(32).toString('hex') + '\n', { mode: 0o600 });
+      if (platform !== 'win32') await chmod(tokenPath, 0o600);
+    }
+  }
+  report.adobeMcp.premiereUxpTokenPath = tokenPath;
+  report.needsUserAction.push('For Premiere Pro UXP 25.6+, install the pinned v1.30.0 CCX connector in Creative Cloud Desktop and paste the generated token into the UXP panel settings.');
+  report.adobeMcp.premiereUxpConnector = 'needs-user-install';
+  openUrl('https://github.com/leancoderkavy/premiere-pro-mcp/releases/download/v1.30.0/premiere-pro-mcp-uxp-1.30.0-direct.ccx');
+}
 async function main() {
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node.js 24 or newer is required for the craft-tool MCP integration.');
   if (flags.has('--help') || flags.has('-h')) {
-    console.log('Motion Studio installer options: --yes, --minimal, --skip-software, --skip-hosts, --dry-run');
+    console.log('Motion Studio installer options: --yes, --minimal, --skip-software, --skip-hosts, --dry-run, --install-premiere-cep');
     return;
   }
   console.log('Motion Studio ' + version + ' installer — ' + platform + '/' + os.arch());
@@ -234,7 +296,19 @@ async function main() {
     run(process.execPath, [hyperframesEntry, 'browser', 'ensure'], 'Preparing HyperFrames headless browser', true, appRoot);
   }
 
-  report.detected = detectCraftApplications();
+  // Dual-stack detection: the free craft tools are the default engines; the
+  // licensed Adobe stack stays fully supported for hosts with a subscription.
+  report.detected = { ...detectCraftApplications(), adobe: detectAdobeApplications() };
+  if (report.detected.adobe && report.detected.adobe.supported) {
+    const adobe = adobeGuidance(report.detected.adobe, { installCep });
+    report.needsUserAction.push(...adobe.needsUserAction);
+    report.adobeMcp = adobe.adobeMcp;
+    for (const url of adobe.openUrls) openUrl(url);
+    if (adobe.actions.premiereTokenSetup) await setupPremiereToken();
+    if (adobe.actions.runCepInstall) runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
+  } else if (report.detected.adobe) {
+    report.warnings.push(report.detected.adobe.note);
+  }
   if (!report.detected.supported) report.warnings.push(report.detected.note);
   else {
     const guidance = craftGuidance(report.detected);

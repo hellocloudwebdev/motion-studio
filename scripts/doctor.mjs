@@ -4,7 +4,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { detectCraftApplications } from './software-detect.mjs';
+import { detectAdobeApplications, detectCraftApplications } from './software-detect.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nodeMajor = Number(process.versions.node.split('.')[0]);
@@ -32,7 +32,10 @@ commandVersion('Blender', 'blender', ['--version']);
 
 const hyperframes = await packageVersion('hyperframes');
 const craftClient = await packageVersion('@motion-studio/craft-mcp-client');
+const afterEffectsMcp = await packageVersion('@kumoproductions/mcp-aftereffects');
+const premiereMcp = await packageVersion('premiere-pro-mcp');
 const software = detectCraftApplications();
+const adobeSoftware = detectAdobeApplications();
 
 // P4.3 additive checks. Credential checks report PRESENCE ONLY — key values
 // are never read into or printed by this output.
@@ -87,7 +90,7 @@ const result = {
   architecture: process.arch,
   runtime: { node: process.version, minimum: '24.0.0', compatible: nodeMajor >= 24 },
   checks,
-  npmPackages: { hyperframes, craftClient },
+  npmPackages: { hyperframes, craftClient, afterEffectsMcp, premiereMcp },
   envLocal: { present: envLocalText !== null, path: '.env.local' },
   credentials: {
     openRouterApiKey: credentialPresence('OPENROUTER_API_KEY'),
@@ -96,6 +99,7 @@ const result = {
   hyperframesBrowser,
   benchmarkResults: { present: benchmarkResultsPresent, path: 'work/benchmark-results.json' },
   craft: software,
+  adobe: adobeSoftware,
   policies: {
     craftMutationsRequireApproval: true,
     maxRenderWorkersDefault: 1

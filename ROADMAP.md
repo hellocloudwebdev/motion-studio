@@ -1,6 +1,6 @@
 # Motion Studio — Complete remaining implementation plan
 
-> **2026-11-14 architecture pivot:** every reference below to **After Effects** now means **EffectCraft** (github.com/storytold/effectcraft) and every reference to **Premiere Pro / Media Encoder** now means **FilmCraft** (github.com/storytold/filmcraft). Both are free open-source Rust tools with headless MCP CLIs; the FCPXML interchange they rely on is unchanged and imports into FilmCraft natively.
+> **2026-11-14 dual-stack note:** the plan below now has TWO supported specialist/editorial stacks — the free default **EffectCraft** (github.com/storytold/effectcraft) + **FilmCraft** (github.com/storytold/filmcraft), and the retained licensed **After Effects + Premiere Pro/Media Encoder** Adobe stack. Every **After Effects** reference below can be executed on either EffectCraft or After Effects, and every **Premiere/Media Encoder** reference on either FilmCraft or Premiere; the FCPXML interchange is unchanged and imports into both editorial engines natively.
 
 The plan should be driven by the official Architecture Lock and the product’s end-to-end definition of done, not simply by adding more milestone numbers or integrations.
 
