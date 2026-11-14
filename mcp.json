@@ -4,13 +4,13 @@
       "command": "node",
       "args": ["<MOTION_STUDIO_INSTALL>/scripts/mcp-launcher.mjs"]
     },
-    "aftereffects": {
+    "effectcraft": {
       "command": "node",
-      "args": ["<MOTION_STUDIO_INSTALL>/scripts/adobe-mcp-launcher.mjs", "aftereffects"]
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-mcp-launcher.mjs", "effectcraft"]
     },
-    "premiere-pro": {
+    "filmcraft": {
       "command": "node",
-      "args": ["<MOTION_STUDIO_INSTALL>/scripts/adobe-mcp-launcher.mjs", "premiere"]
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-mcp-launcher.mjs", "filmcraft"]
     }
   }
 }

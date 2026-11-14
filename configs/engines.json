@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "runtime": {
     "node": ">=24.0.0"
   },
@@ -14,30 +14,6 @@
         "shapes",
         "web-layout",
         "image-sequence"
-      ]
-    },
-    "after-effects": {
-      "role": "specialist-compositing-and-vfx",
-      "mcpPackage": "@kumoproductions/mcp-aftereffects@0.3.2",
-      "capabilities": [
-        "compositing",
-        "vfx",
-        "tracking",
-        "roto",
-        "advanced-typography",
-        "motion-graphics",
-        "keyframing"
-      ]
-    },
-    "premiere-pro": {
-      "role": "editorial-assembly",
-      "mcpPackage": "premiere-pro-mcp@1.30.0",
-      "capabilities": [
-        "timeline-editing",
-        "audio-assembly",
-        "captions",
-        "final-cut",
-        "export"
       ]
     },
     "blender": {
@@ -69,13 +45,43 @@
         "image-sequence",
         "media-probe"
       ]
+    },
+    "effectcraft": {
+      "role": "specialist-compositing-and-vfx",
+      "mcpCommand": "effectcraft-cli mcp",
+      "source": "https://github.com/storytold/effectcraft",
+      "capabilities": [
+        "compositing",
+        "vfx",
+        "tracking",
+        "roto",
+        "advanced-typography",
+        "motion-graphics",
+        "keyframing",
+        "expressions",
+        "lottie"
+      ]
+    },
+    "filmcraft": {
+      "role": "editorial-assembly",
+      "mcpCommand": "filmcraft-cli -- mcp",
+      "source": "https://github.com/storytold/filmcraft",
+      "capabilities": [
+        "timeline-editing",
+        "audio-assembly",
+        "captions",
+        "color",
+        "sound-post",
+        "export",
+        "fcpxml-interchange"
+      ]
     }
   },
   "executionPolicy": {
     "maxWorkers": 1,
     "draftPreview": true,
     "resumeFromCheckpoint": true,
-    "readOnlyAdobeOnboarding": true,
-    "allowArbitraryScript": false
+    "allowArbitraryScript": false,
+    "readOnlyCraftOnboarding": true
   }
 }

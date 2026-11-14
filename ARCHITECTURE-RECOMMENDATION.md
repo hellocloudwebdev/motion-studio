@@ -1,6 +1,9 @@
 Z Code — Professional Motion Graphics Production Architecture
 Recommended architecture
  HyperFrames-first, multi-engine, AI-orchestrated production system
+
+> **2026-11-14 architecture pivot (retrospective note on this original recommendation):** the production stack settled on **EffectCraft** (github.com/storytold/effectcraft) for specialist motion graphics/VFX and **FilmCraft** (github.com/storytold/filmcraft) for editorial assembly — both free open-source Rust tools with headless MCP CLIs — instead of Adobe After Effects/Premiere/Media Encoder. Every Adobe reference below is historical.
+
 My recommendation is to build a complete video-production pipeline around Z Code, with HyperFrames as the primary motion graphics engine.
 The important distinction: we are not building a system that generates animations from prompts alone. We are building an AI video-production system that behaves like a creative studio.
 It should take an idea and independently produce:

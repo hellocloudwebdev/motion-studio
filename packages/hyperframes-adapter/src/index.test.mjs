@@ -13,7 +13,7 @@ const project = {
   assets: [],
   scenes: [{ id: 'scene-1', name: 'Opening', intent: 'Title card', durationFrames: 90, layers: [
     { id: 'title', kind: 'text', engineHint: 'hyperframes', content: { text: '<Hello & world>' }, typography: { family: 'Inter', sizePx: 100 }, style: { color: '#ffffff' }, motion: { preset: 'fade-up' } },
-    { id: 'external-ae', kind: 'text', engineHint: 'after-effects', content: 'Handled in AE' }
+    { id: 'external-ec', kind: 'text', engineHint: 'effectcraft', content: 'Handled in EffectCraft' }
   ] }],
   delivery: { targets: [{ id: 'master', format: 'mp4', width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 } }] }
 };

@@ -1,8 +1,8 @@
 # Motion Studio
 
-**Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, Adobe MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
+**Motion Studio** is a cross-platform AI video-production system built around a versioned Canonical Video Project IR. It coordinates production agents, reusable skills, HyperFrames/GSAP rendering, FilmCraft/EffectCraft MCP bridges, FFmpeg, evidence-driven QA and bounded repair.
 
-> **Current milestone: 1.0.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning; 1.0 adds FCPXML interchange export with provenance.
+> **Current milestone: 1.0.0-alpha.1.** Milestones 0.5–0.8 added evidence-driven QA, verified production approvals, governed asset intake and local media derivatives; 0.9 adds frame-accurate editorial assembly planning; 1.0 adds FCPXML interchange export with provenance. As of 2026-11-14 the specialist/editorial stack is **EffectCraft + FilmCraft** (open-source Rust tools), replacing the retired Adobe AE/Premiere integrations.
 
 ## Install on a new PC
 
@@ -18,21 +18,19 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP, Three.js, `@kumoproductions/mcp-aftereffects@0.3.2` and `premiere-pro-mcp@1.29.0`, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
+The installer requires Node.js 24+. macOS/Linux bootstrap a checksum-verified Node 26 user-local runtime where needed; Windows uses WinGet. It installs pinned npm dependencies including HyperFrames, GSAP and Three.js, prepares the HyperFrames browser, and can install FFmpeg/Blender through the OS package manager.
 
-Adobe desktop apps are licensed: the user must sign into Creative Cloud and install/activate them. Motion Studio opens Adobe's official installation workflow and verifies the apps afterward; it does not automate login or licensing.
+The specialist/editorial engines are **free and open source**: install [EffectCraft](https://github.com/storytold/effectcraft) (motion graphics, compositing, VFX) and [FilmCraft](https://github.com/storytold/filmcraft) (editorial timeline, color, sound post, export) from their GitHub releases pages or getartcraft.com. Both are alpha Rust tools exposing headless MCP servers over stdio (`effectcraft-cli mcp`, `filmcraft-cli -- mcp`); Motion Studio detects the CLIs (or honors `EFFECTCRAFT_CLI` / `FILMCRAFT_CLI` overrides for portable installs) and registers them for your AI host.
 
-After Effects and Premiere have separate local stdio MCP servers. Onboarding uses read-only / inspect-only authority. Premiere 25.6+ can use the pinned authenticated UXP connector; older hosts can use CEP compatibility. The Premiere UXP token is stored in a user-only secret file and read by the local MCP launcher.
+See [Installation](docs/INSTALLATION.md), the [installer policy](docs/INSTALLER-CRAFT-POLICY.md) and [Host integration](docs/HOST-INTEGRATION.md).
 
-See [Installation](docs/INSTALLATION.md), [Adobe policy](docs/INSTALLER-ADOBE-POLICY.md) and [Host integration](docs/HOST-INTEGRATION.md).
-
-## Locked production stack
+## Production stack
 
 | Responsibility | Engine |
 |---|---|
 | Programmable 2D, motion graphics, typography | HyperFrames + GSAP |
-| Advanced motion, compositing, tracking and VFX | After Effects via upstream MCP |
-| Editorial timeline and final assembly | Premiere Pro via upstream MCP |
+| Advanced motion graphics, compositing, effects and VFX | EffectCraft via its MCP/CLI (alpha) |
+| Editorial timeline, color, sound post and final assembly | FilmCraft via its MCP/CLI (alpha) |
 | 3D, simulation and product visualization | Blender |
 | Procedural/WebGL 3D | Three.js |
 | Media processing, encoding and inspection | FFmpeg / FFprobe |
@@ -74,15 +72,15 @@ motion-studio assets attach ./project.json --registry ./asset-registry.json --ou
 
 Asset scans are read-only and stream SHA-256 hashing for large files. New media defaults to `needs-review`; an approval record is a producer's audit assertion, not legal clearance. Verification detects changed/missing bytes but does not validate license terms. See [Asset library](docs/ASSET-LIBRARY.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
 
-## Milestone 1.0: Premiere interchange export
+## Milestone 1.0: editorial interchange export
 
 Export a validated editorial manifest to FCPXML plus a provenance sidecar:
 
 ```bash
-motion-studio premiere export assembly.json --asset-root ./media --output sequence.fcpxml --manifest premiere-handoff.json
+motion-studio interchange export assembly.json --asset-root ./media --output sequence.fcpxml --manifest editorial-handoff.json
 ```
 
-Relative media paths are resolved only under the explicit asset root. The exporter preserves rational frame timing, source in-points, track lanes, source checksums and rights-review state. It fails closed on unresolved files and unsupported URI schemes. This writes an interchange file; it does not launch Premiere, import the sequence or perform edits. See [Premiere interchange](docs/PREMIERE-INTERCHANGE.md) and [Milestone 1.0](docs/MILESTONE-1.0-IMPLEMENTATION-PLAN.md).
+Relative media paths are resolved only under the explicit asset root. The exporter preserves rational frame timing, source in-points, track lanes, source checksums and rights-review state. It fails closed on unresolved files and unsupported URI schemes. This writes an interchange file — FilmCraft imports FCPXML natively — but does not launch FilmCraft, import the sequence or perform edits. See [Editorial interchange](docs/EDITORIAL-INTERCHANGE.md) and [Milestone 1.0](docs/MILESTONE-1.0-IMPLEMENTATION-PLAN.md).
 
 ## Milestone 0.9: editorial assembly planning
 
@@ -93,7 +91,7 @@ motion-studio editorial plan project.json --output assembly.json
 motion-studio editorial validate assembly.json
 ```
 
-The planner lays scenes sequentially in integer frames, places layers on deterministic overlap-aware video/audio/graphics tracks, and carries source URI, checksum and rights-review metadata into the manifest. It flags unresolved media and unreviewed rights. This is a planning handoff only; it does not create or modify Premiere projects. See [Editorial assembly](docs/EDITORIAL-ASSEMBLY.md) and [Milestone 0.9](docs/MILESTONE-0.9-IMPLEMENTATION-PLAN.md).
+The planner lays scenes sequentially in integer frames, places layers on deterministic overlap-aware video/audio/graphics tracks, and carries source URI, checksum and rights-review metadata into the manifest. It flags unresolved media and unreviewed rights. This is a planning handoff only; it does not create or modify editorial-engine projects. See [Editorial assembly](docs/EDITORIAL-ASSEMBLY.md) and [Milestone 0.9](docs/MILESTONE-0.9-IMPLEMENTATION-PLAN.md).
 
 ## Milestone 0.8: media derivatives and preview artifacts
 
@@ -120,15 +118,15 @@ Example:
 {
   "hyperframes": { "available": true },
   "blender": { "available": true },
-  "afterEffects": { "serverConnected": true, "contextAvailable": true },
-  "premiere": { "serverConnected": true, "hostVerified": true },
+  "effectcraft": { "serverConnected": true, "toolCount": 12 },
+  "filmcraft": { "serverConnected": true, "toolCount": 8 },
   "ffmpeg": { "available": true }
 }
 ```
 
-Preflight fails closed if any routed engine, Premiere assembly host or FFmpeg delivery tool lacks positive evidence. Do not mark a host available unless the check actually succeeded.
+Preflight fails closed if any routed engine, FilmCraft assembly host or FFmpeg delivery tool lacks positive evidence. Do not mark a host available unless the check actually succeeded.
 
-Edit-enabled Adobe MCP calls require a short-lived approval bound to the project, run, app, tool name and exact arguments. Production-run transitions into Premiere assembly and final export require matching approvals and verified host readiness. Approval records are audit/governance records, not cryptographic identity proof.
+Edit-enabled craft MCP calls require a short-lived approval bound to the project, run, app, tool name and exact arguments. Production-run transitions into FilmCraft assembly and final export require matching approvals and verified host readiness. Approval records are audit/governance records, not cryptographic identity proof.
 
 See [Milestone 0.5](docs/MILESTONE-0.5-IMPLEMENTATION-PLAN.md), [Milestone 0.6](docs/MILESTONE-0.6-IMPLEMENTATION-PLAN.md) and [Milestone 0.7](docs/MILESTONE-0.7-IMPLEMENTATION-PLAN.md).
 
@@ -139,10 +137,10 @@ See [Milestone 0.5](docs/MILESTONE-0.5-IMPLEMENTATION-PLAN.md), [Milestone 0.6](
 - **Orchestrator** manages dependencies, leases, host preflight, approval gates and bounded repair loops.
 - **Engine router** chooses per-layer renderers.
 - **Render manager** compiles and renders HyperFrames compositions and verifies output artifacts.
-- **Adobe MCP client** connects to upstream AE and Premiere servers over local stdio with read-only defaults and exact-operation approval gates.
+- **Craft MCP client** connects to the EffectCraft and FilmCraft headless MCP servers over local stdio with exact-operation approval gates for every mutation.
 - **QA and repair** inspect actual output evidence, create defects and request scoped rebuilds.
 - **Learning** proposes versioned workflow/skill improvements; it cannot silently change code or permissions.
 
 ## Capability boundary
 
-This is an alpha, not a production-ready one-click film studio. CI verifies synthetic media and deterministic orchestration logic. Real After Effects/Premiere connections, edit behavior, comp creation, sequence assembly and final exports still require live validation on a workstation with licensed Adobe applications. Milestone 0.6 does not claim to perform a full end-to-end Adobe edit/export automatically.
+This is an alpha, not a production-ready one-click film studio. CI verifies synthetic media and deterministic orchestration logic. EffectCraft and FilmCraft are themselves alpha tools: real comp creation, sequence assembly, color/sound work and final exports still require live validation on a workstation with both craft CLIs installed. Motion Studio does not claim to perform a full end-to-end craft edit/export automatically.

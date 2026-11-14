@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Architecture pivot: FilmCraft + EffectCraft replace Adobe
+- Replaced the licensed Adobe AE/Premiere/Media-Encoder stack with the open-source Storytold tools: **EffectCraft** (specialist motion graphics/VFX, `effectcraft-cli mcp`) and **FilmCraft** (editorial assembly/color/sound/export, `filmcraft-cli -- mcp`) — both free, MIT OR Apache-2.0, alpha.
+- Renamed `packages/adobe-mcp-client` → `packages/craft-mcp-client` (approval gate kept; env hardened by approval rather than provider read-only switches).
+- Renamed `packages/premiere-interchange` → `packages/editorial-interchange`; the FCPXML 1.10 output imports into FilmCraft natively. CLI command `premiere export` → `interchange export`.
+- Engine vocabulary pivoted: `after-effects` → `effectcraft`, `premiere-pro` → `filmcraft` (routing, validation, host readiness, stage approvals, configs).
+- `scripts/software-detect.mjs` detects craft CLIs (env override → PATH → install roots); installer guidance rewritten with no Creative Cloud/CEP/UXP-token flows; doctor reports craft state.
+- Removed the `@kumoproductions/mcp-aftereffects` and `premiere-pro-mcp` npm dependencies.
+
 ## Unreleased — Harness-first creative pipeline
 - Kept provider-neutral MCP planning and IR compilation independent of model credentials.
 - Retained OpenRouter as an optional standalone CLI provider, defaulting to its free-model router; web search remains explicit opt-in.

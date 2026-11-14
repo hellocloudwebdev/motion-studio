@@ -1,16 +1,16 @@
 const ENGINE_HOST = {
   hyperframes: 'hyperframes',
-  'after-effects': 'afterEffects',
+  effectcraft: 'effectcraft',
   blender: 'blender',
   threejs: 'threejs',
-  'premiere-pro': 'premiere',
-  premiere: 'premiere',
+  filmcraft: 'filmcraft',
   ffmpeg: 'ffmpeg'
 };
 
 function isHostReady(engine, check = {}) {
-  if (engine === 'after-effects') return check.serverConnected === true && check.contextAvailable === true;
-  if (engine === 'premiere-pro' || engine === 'premiere') return check.serverConnected === true && check.hostVerified === true;
+  // The craft CLIs are verified through their MCP surface (a connected server
+  // advertising tools); every other engine uses plain availability evidence.
+  if (engine === 'effectcraft' || engine === 'filmcraft') return check.serverConnected === true && (check.toolCount ?? 0) > 0;
   return check.available === true;
 }
 
@@ -19,8 +19,8 @@ export function evaluateHostReadiness(routePlan, hostChecks = {}) {
   for (const scene of routePlan?.plans || []) {
     for (const task of scene.tasks || []) if (task.engine) engines.add(task.engine);
   }
-  // The production graph always ends in Premiere editorial assembly and FFmpeg delivery.
-  engines.add('premiere-pro');
+  // The production graph always ends in FilmCraft editorial assembly and FFmpeg delivery.
+  engines.add('filmcraft');
   engines.add('ffmpeg');
   const checks = [...engines].sort().map(engine => {
     const host = ENGINE_HOST[engine];
@@ -42,15 +42,15 @@ export function evaluateHostReadiness(routePlan, hostChecks = {}) {
   };
 }
 
-const APPROVAL_STAGES = new Set(['after-effects-comp', 'premiere-assembly', 'final-export']);
+const APPROVAL_STAGES = new Set(['effectcraft-comp', 'filmcraft-assembly', 'final-export']);
 const STAGE_ENGINES = {
-  'after-effects-comp': ['after-effects'],
-  'premiere-assembly': ['premiere-pro'],
-  'final-export': ['premiere-pro', 'ffmpeg']
+  'effectcraft-comp': ['effectcraft'],
+  'filmcraft-assembly': ['filmcraft'],
+  'final-export': ['filmcraft', 'ffmpeg']
 };
 
 export function validateStageApproval({ projectId, runId, stage, approval, now = Date.now() } = {}) {
-  if (!APPROVAL_STAGES.has(stage)) return { valid: false, reason: 'This stage does not accept an Adobe production approval.' };
+  if (!APPROVAL_STAGES.has(stage)) return { valid: false, reason: 'This stage does not accept a craft production approval.' };
   if (!projectId || !runId || !approval || typeof approval !== 'object') return { valid: false, reason: 'A project-scoped approval record is required.' };
   if (approval.approved !== true) return { valid: false, reason: 'Approval has not been granted.' };
   if (approval.projectId !== projectId || approval.runId !== runId || approval.stage !== stage) return { valid: false, reason: 'Approval scope does not match this project, run and stage.' };

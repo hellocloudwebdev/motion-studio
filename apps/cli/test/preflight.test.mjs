@@ -9,10 +9,10 @@ const root = process.cwd();
 const cli = path.join(root, 'apps/cli/src/index.mjs');
 const project = JSON.parse(readFileSync(path.join(root, 'templates/startup-ad/project.json'), 'utf8'));
 // The acceptance template routes every layer to HyperFrames; the production
-// graph always adds Premiere editorial assembly and FFmpeg delivery.
+// graph always adds FilmCraft editorial assembly and FFmpeg delivery.
 const checks = {
   hyperframes: { available: true },
-  premiere: { serverConnected: true, hostVerified: true },
+  filmcraft: { serverConnected: true, toolCount: 6 },
   ffmpeg: { available: true }
 };
 

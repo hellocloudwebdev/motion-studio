@@ -35,7 +35,7 @@ async function resolveMediaUri(uri, assetRoot) {
   if (typeof uri !== 'string' || !uri.trim()) throw new Error('Media clip has no source URI.');
   if (/^[a-z][a-z0-9+.-]*:/i.test(uri)) {
     const parsed = new URL(uri);
-    if (parsed.protocol !== 'file:' || parsed.username || parsed.password) throw new Error('Premiere interchange accepts local file: media URIs only.');
+    if (parsed.protocol !== 'file:' || parsed.username || parsed.password) throw new Error('Editorial interchange accepts local file: media URIs only.');
     const resolved = await realpath(fileURLToPath(parsed));
     const info = await stat(resolved);
     if (!info.isFile()) throw new Error('Media source URI must resolve to a regular file.');
@@ -54,9 +54,11 @@ async function resolveMediaUri(uri, assetRoot) {
 
 /**
  * Export a validated editorial assembly as a deterministic FCPXML interchange document.
- * This creates XML and a provenance sidecar only; it does not launch or edit Premiere.
+ * FilmCraft imports FCPXML directly (alongside FCP7 XML, OTIO, EDL and AAF);
+ * this creates XML and a provenance sidecar only — it does not launch or edit
+ * any editorial engine.
  */
-export async function exportPremiereInterchange(assembly, options = {}) {
+export async function exportEditorialInterchange(assembly, options = {}) {
   const validation = validateEditorialAssembly(assembly);
   if (!validation.valid) return { valid: false, issues: validation.issues, xml: null, manifest: null };
   const rate = assembly.project?.frameRate;

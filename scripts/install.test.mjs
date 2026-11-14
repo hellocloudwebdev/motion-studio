@@ -6,80 +6,66 @@ import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { adobeGuidance, installRecordPath, parseInstallerFlags, writeInstallRecord } from './install.mjs';
+import { craftGuidance, installRecordPath, parseInstallerFlags, writeInstallRecord } from './install.mjs';
 
 const INSTALLER = fileURLToPath(new URL('./install.mjs', import.meta.url));
 
 const detectedAllMissing = {
   supported: true,
-  creativeCloud: { installed: false },
-  afterEffects: { installed: false },
-  premierePro: { installed: false }
+  effectcraft: { installed: false, path: null },
+  filmcraft: { installed: false, path: null }
 };
-const detectedUxpPremiere = {
+const detectedBothInstalled = {
   supported: true,
-  creativeCloud: { installed: true },
-  afterEffects: { installed: true, version: '26.0' },
-  premierePro: { installed: true, version: '2026.1' }
-};
-const detectedLegacyPremiere = {
-  supported: true,
-  creativeCloud: { installed: true },
-  afterEffects: { installed: true, version: '25.2' },
-  premierePro: { installed: true, version: '2024.4' }
+  effectcraft: { installed: true, path: 'C:\\craft\\effectcraft-cli.exe' },
+  filmcraft: { installed: true, path: 'C:\\craft\\filmcraft-cli.exe' }
 };
 
 test('parseInstallerFlags covers the documented option surface', () => {
-  const parsed = parseInstallerFlags(['--yes', '-y', '--minimal', '--skip-software', '--skip-hosts', '--install-premiere-cep', '--dry-run', '--help', '-h']);
+  const parsed = parseInstallerFlags(['--yes', '-y', '--minimal', '--skip-software', '--skip-hosts', '--dry-run', '--help', '-h']);
   assert.equal(parsed.yes, true);
   assert.equal(parsed.minimal, true);
   assert.equal(parsed.skipHosts, true);
-  assert.equal(parsed.installCep, true);
   assert.equal(parsed.dryRun, true);
   assert.equal(parsed.help, true);
   const defaults = parseInstallerFlags([]);
   assert.equal(defaults.yes, false);
   assert.equal(defaults.minimal, false);
   assert.equal(defaults.skipHosts, false);
-  assert.equal(defaults.installCep, false);
   assert.equal(defaults.dryRun, false);
   assert.equal(defaults.help, false);
 });
 
-test('adobeGuidance keeps the AE/PP status rows even without Creative Cloud', () => {
-  const guidance = adobeGuidance(detectedAllMissing, { installCep: false });
-  assert.ok(guidance.needsUserAction.some(item => item.includes('Creative Cloud Desktop')));
-  assert.ok(guidance.openUrls.some(url => url.includes('download-creative-cloud-apps')));
-  assert.equal(guidance.adobeMcp.afterEffects.status, 'needs-user-install');
-  assert.equal(guidance.adobeMcp.premiere.status, 'needs-user-install');
-  assert.equal(guidance.actions.premiereTokenSetup, false);
-  assert.equal(guidance.actions.runCepInstall, false);
+test('craft guidance keeps status rows for both tools even when one is missing', () => {
+  const guidance = craftGuidance(detectedAllMissing);
+  assert.ok(guidance.needsUserAction.some(item => item.includes('EffectCraft')));
+  assert.ok(guidance.needsUserAction.some(item => item.includes('FilmCraft')));
+  assert.ok(guidance.openUrls.some(url => url.includes('storytold/effectcraft')));
+  assert.ok(guidance.openUrls.some(url => url.includes('storytold/filmcraft')));
+  assert.equal(guidance.craftMcp.effectcraft.status, 'needs-user-install');
+  assert.equal(guidance.craftMcp.filmcraft.status, 'needs-user-install');
+  assert.deepEqual(guidance.actions, {});
 });
 
-test('adobeGuidance routes Premiere 2026+ to the UXP token setup', () => {
-  const guidance = adobeGuidance(detectedUxpPremiere, { installCep: false });
-  assert.equal(guidance.actions.premiereTokenSetup, true);
-  assert.equal(guidance.actions.runCepInstall, false);
-  assert.equal(guidance.adobeMcp.afterEffects.mode, 'read-only-default');
-  assert.equal(guidance.adobeMcp.afterEffects.arbitraryEval, false);
-  assert.ok(guidance.needsUserAction.some(item => item.includes('Allow Scripts to Write Files')));
-  assert.ok(!guidance.needsUserAction.some(item => item.includes('CEP')), 'a UXP-capable Premiere never suggests the CEP connector');
+test('craft guidance records ready MCP rows with exact CLI contracts', () => {
+  const guidance = craftGuidance(detectedBothInstalled);
+  assert.equal(guidance.needsUserAction.length, 0);
+  assert.equal(guidance.openUrls.length, 0);
+  assert.equal(guidance.craftMcp.effectcraft.status, 'ready');
+  assert.deepEqual(guidance.craftMcp.effectcraft.mcpArgs, ['mcp']);
+  assert.equal(guidance.craftMcp.effectcraft.command, 'C:\\craft\\effectcraft-cli.exe');
+  assert.equal(guidance.craftMcp.filmcraft.status, 'ready');
+  assert.deepEqual(guidance.craftMcp.filmcraft.mcpArgs, ['--', 'mcp']);
+  assert.match(guidance.craftMcp.filmcraft.note, /filmcraft-cli -- mcp/);
+  assert.match(guidance.craftMcp.effectcraft.note, /effectcraft-cli mcp/);
 });
 
-test('adobeGuidance routes legacy Premiere to the CEP compatibility decision', () => {
-  const guidance = adobeGuidance(detectedLegacyPremiere, { installCep: false });
-  assert.equal(guidance.actions.premiereTokenSetup, false);
-  assert.equal(guidance.adobeMcp.premiere.status, 'needs-user-action');
-  assert.match(guidance.adobeMcp.premiere.connector, /compatibility decision required/);
-  assert.ok(guidance.needsUserAction.some(item => item.includes('--install-premiere-cep')));
-  assert.ok(guidance.needsUserAction.some(item => item.includes('Creative Cloud Desktop')) === false, 'no CC install message when CC is present');
-});
-
-test('adobeGuidance honors the explicit CEP opt-in', () => {
-  const guidance = adobeGuidance(detectedLegacyPremiere, { installCep: true });
-  assert.equal(guidance.actions.runCepInstall, true);
-  assert.equal(guidance.adobeMcp.premiere.connector, 'CEP');
-  assert.equal(guidance.adobeMcp.premiere.status, 'install-command-completed');
+test('craft guidance never references Adobe flows', () => {
+  const guidance = craftGuidance(detectedAllMissing);
+  const serialized = JSON.stringify(guidance).toLowerCase();
+  assert.ok(!serialized.includes('creative cloud'), 'no Creative Cloud guidance');
+  assert.ok(!serialized.includes('cep'), 'no CEP connector guidance');
+  assert.ok(!serialized.includes('uxp'), 'no UXP token guidance');
 });
 
 test('writeInstallRecord persists the failure record with a recovery hint', async () => {
@@ -117,6 +103,7 @@ test('installer lifecycle smoke: --dry-run reports without writing any state', a
     assert.equal(report.status, undefined, 'a clean run does not carry the failure status');
     assert.ok(Array.isArray(report.needsUserAction));
     assert.ok(report.detected && typeof report.detected.supported === 'boolean');
+    assert.ok(report.craftMcp, 'the report carries craft MCP status rows');
     assert.ok(report.recordPath.startsWith(tempConfigRoot), 'the record path honors the platform config root');
     assert.equal(existsSync(report.recordPath), false, 'a dry run never writes the install record');
     assert.ok(result.stdout.includes('DRY RUN'));

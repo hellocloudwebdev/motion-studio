@@ -2,7 +2,7 @@
   "name": "motion-studio",
   "version": "1.0.0-alpha.1",
   "private": true,
-  "description": "Engine-independent AI video production system with governed Premiere interchange.",
+  "description": "Engine-independent AI video production system with governed editorial interchange.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -30,8 +30,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
-    "@kumoproductions/mcp-aftereffects": "0.3.2",
-    "premiere-pro-mcp": "1.30.0",
     "hyperframes": "0.8.86",
     "gsap": "3.14.2",
     "three": "0.181.2",

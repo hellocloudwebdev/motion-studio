@@ -32,7 +32,7 @@ export function mixedRenderLimitations(audioEnabled) {
 
 // Classify routeScenes plans into whole-scene engine buckets. Scenes whose
 // tasks span multiple engines, or that route to engines outside the v1 mixed
-// path (threejs, after-effects, ffmpeg-only), come back as `unsupported`.
+// path (threejs, effectcraft, ffmpeg-only), come back as `unsupported`.
 export function classifyMixedScenes(plans) {
   const classification = { hyperframes: [], blender: [], threejs: [], unsupported: [] };
   for (const plan of Array.isArray(plans) ? plans : []) {
@@ -143,7 +143,7 @@ export async function renderMixedProject(project, options = {}) {
   const audioEnabled = audioInputs.length > 0;
 
   // IR is the only source of truth: route scenes, then fail closed on anything
-  // outside the v1 mixed path (mixed-engine scenes, threejs/after-effects).
+  // outside the v1 mixed path (mixed-engine scenes, threejs/effectcraft).
   const routing = routeScenes(project, { availableEngines: [...MIXED_SUPPORTED_ENGINES] });
   const classification = classifyMixedScenes(routing.plans);
   if (classification.unsupported.length) {

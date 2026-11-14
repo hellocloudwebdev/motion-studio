@@ -87,8 +87,9 @@ acceptance hosts** and are intentionally out of CI scope:
 - **Blender** — not installed in CI. 3D rendering is gated on real hosts with
   Blender (the roadmap's 3D milestone records runtime evidence from an actual
   Blender 5.3 render; CI has no such gate).
-- **Adobe After Effects / Premiere Pro / their MCP integrations** — user-installed,
-  user-licensed software; never installed or activated by CI.
+- **EffectCraft / FilmCraft (craft CLIs and their MCP integrations)** — user-installed
+  alpha tools; never installed or launched by CI (browser-adjacent renders skip
+  via `MOTION_STUDIO_SKIP_BROWSER_TESTS=1`).
 - **HyperFrames headless browser** — `scripts/install.mjs:206` runs
   `node <hyperframes-entry> browser ensure` as an *optional* host-setup step
   (it warns, not fails, if it cannot). CI does not run it: the affected tests
@@ -129,10 +130,10 @@ The roadmap defines an evidence ladder
 matrix.** It does not mean:
 
 - a renderer produced real frames (that is *runtime verified*, needs a host
-  with the actual Blender/Adobe/HyperFrames browser environment);
+  with the actual Blender/craft-CLI/HyperFrames browser environment);
 - a milestone is production-accepted (needs rendered, independently verified
   delivery evidence and producer review);
-- the suite covered the paths that skip in CI (Blender, Adobe, HyperFrames
+- the suite covered the paths that skip in CI (Blender, craft tools, HyperFrames
   browser, platform speech engines — see "What CI deliberately does NOT run").
 
 Mark work packages at the evidence level actually achieved (roadmap rule).

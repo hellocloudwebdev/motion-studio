@@ -21,4 +21,4 @@ The JSON manifest records the absolute source path, source SHA-256, source MIME 
 - Source symlinks and output directory symlinks are rejected.
 - Existing outputs are not overwritten by default.
 - A derivative is not a delivery master and does not imply rights clearance.
-- The process does not alter source media or automatically relink Adobe projects.
+- The process does not alter source media or automatically relink editorial-engine projects.

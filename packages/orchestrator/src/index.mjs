@@ -19,7 +19,7 @@ export function transitionRun(run, nextStatus, metadata = {}) {
   if (!run || !TRANSITIONS[run.status]) throw new Error('Invalid production run state.');
   if (!TRANSITIONS[run.status].has(nextStatus)) throw new Error(`Illegal run transition: ${run.status} -> ${nextStatus}.`);
   if (nextStatus === 'repair' && run.repairCycles >= run.maxRepairCycles) throw new Error(`Repair limit reached (${run.maxRepairCycles}). Fail the run or request human intervention.`);
-  const approvalStage = nextStatus === 'assembling' ? 'premiere-assembly' : nextStatus === 'exporting' ? 'final-export' : null;
+  const approvalStage = nextStatus === 'assembling' ? 'filmcraft-assembly' : nextStatus === 'exporting' ? 'final-export' : null;
   if (approvalStage) {
     const authorization = authorizeProductionStage({
       projectId: run.projectId, runId: run.id, stage: approvalStage,
@@ -53,7 +53,7 @@ export function buildExecutionGraph(routePlan) {
     for (const renderId of renderIds) edges.push({ from: renderId, to: composeId });
     sceneComposeIds.push(composeId);
   }
-  const assemblyId = 'timeline:premiere-assembly'; nodes.push({ id: assemblyId, kind: 'editorial-assembly', engine: 'premiere-pro', requiresApproval: true });
+  const assemblyId = 'timeline:filmcraft-assembly'; nodes.push({ id: assemblyId, kind: 'editorial-assembly', engine: 'filmcraft', requiresApproval: true });
   for (const id of sceneComposeIds) edges.push({ from: id, to: assemblyId });
   const deliveryId = 'delivery:ffmpeg'; nodes.push({ id: deliveryId, kind: 'delivery', engine: 'ffmpeg', requiresApproval: true }); edges.push({ from: assemblyId, to: deliveryId });
   return { nodes, edges, executionPolicy: { ...(routePlan.executionPolicy || {}), maxWorkers: 1, requireVerifiedHosts: true, requireStageApprovals: true } };

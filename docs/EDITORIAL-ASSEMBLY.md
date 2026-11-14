@@ -11,4 +11,4 @@ Scenes are laid sequentially in project order. Layer `startFrame` and `durationF
 
 The manifest preserves rational frame rate, integer frame positions, scene and clip identifiers, source asset URI/checksum, and rights-review status. Unresolved assets, missing media references, and assets awaiting rights review are explicit warnings. Structural errors such as invalid layer ranges or total scene duration exceeding the project duration make the plan invalid.
 
-This is a planning and interchange artifact. It does not create or modify Premiere projects, write to Adobe applications, or constitute legal rights clearance. Source project files and media remain unchanged.
+This is a planning and interchange artifact. It does not create or modify editorial-engine projects (`.fcproj`/`.ecproj`), write to craft applications, or constitute legal rights clearance. Source project files and media remain unchanged.

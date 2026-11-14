@@ -80,7 +80,7 @@ function assetMap(project) {
 
 /**
  * Build a deterministic, frame-accurate editorial assembly plan from Canonical Video IR.
- * This is a planning/interchange artifact; it does not mutate IR or control Premiere.
+ * This is a planning/interchange artifact; it does not mutate IR or control the editorial engine.
  */
 export function createEditorialAssembly(project, options = {}) {
   const issues = validProject(project);

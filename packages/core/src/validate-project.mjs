@@ -1,4 +1,4 @@
-const ENGINE_HINTS = new Set(['after-effects', 'hyperframes', 'blender', 'threejs', 'ffmpeg', 'auto']);
+const ENGINE_HINTS = new Set(['effectcraft', 'hyperframes', 'blender', 'threejs', 'ffmpeg', 'auto']);
 // Roadmap P3.3: how each delivery target derives its canvas from the render
 // master. 'contain' fits with black pad bars, 'cover' fills and crops the
 // overflow, 'stretch' fills exactly (may distort).

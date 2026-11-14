@@ -4,7 +4,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { detectAdobeApplications } from './software-detect.mjs';
+import { detectCraftApplications } from './software-detect.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nodeMajor = Number(process.versions.node.split('.')[0]);
@@ -31,9 +31,8 @@ commandVersion('FFprobe', 'ffprobe', ['-version']);
 commandVersion('Blender', 'blender', ['--version']);
 
 const hyperframes = await packageVersion('hyperframes');
-const afterEffectsMcp = await packageVersion('@kumoproductions/mcp-aftereffects');
-const premiereMcp = await packageVersion('premiere-pro-mcp');
-const software = detectAdobeApplications();
+const craftClient = await packageVersion('@motion-studio/craft-mcp-client');
+const software = detectCraftApplications();
 
 // P4.3 additive checks. Credential checks report PRESENCE ONLY — key values
 // are never read into or printed by this output.
@@ -88,7 +87,7 @@ const result = {
   architecture: process.arch,
   runtime: { node: process.version, minimum: '24.0.0', compatible: nodeMajor >= 24 },
   checks,
-  npmPackages: { hyperframes, afterEffectsMcp, premiereMcp },
+  npmPackages: { hyperframes, craftClient },
   envLocal: { present: envLocalText !== null, path: '.env.local' },
   credentials: {
     openRouterApiKey: credentialPresence('OPENROUTER_API_KEY'),
@@ -96,19 +95,16 @@ const result = {
   },
   hyperframesBrowser,
   benchmarkResults: { present: benchmarkResultsPresent, path: 'work/benchmark-results.json' },
-  adobe: software,
+  craft: software,
   policies: {
-    afterEffectsReadonlyDefault: true,
-    afterEffectsArbitraryEval: false,
-    premiereUnsafeScript: false,
+    craftMutationsRequireApproval: true,
     maxRenderWorkersDefault: 1
   },
   missing: [
     ...(nodeMajor < 24 ? ['Node.js 24+'] : []),
     ...checks.filter(x => ['FFmpeg','FFprobe'].includes(x.name) && !x.available).map(x => x.name),
     ...(!hyperframes.installed ? ['HyperFrames npm package'] : []),
-    ...(!afterEffectsMcp.installed ? ['After Effects MCP package'] : []),
-    ...(!premiereMcp.installed ? ['Premiere MCP package'] : [])
+    ...(!craftClient.installed ? ['craft-mcp-client package'] : [])
   ]
 };
 console.log(JSON.stringify(result, null, 2));

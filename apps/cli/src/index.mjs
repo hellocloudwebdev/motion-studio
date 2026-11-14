@@ -12,7 +12,7 @@ import { runRepairLoop } from '../../../packages/repair-executor/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
-import { exportPremiereInterchange } from '../../../packages/premiere-interchange/src/index.mjs';
+import { exportEditorialInterchange } from '../../../packages/editorial-interchange/src/index.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
 import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
@@ -92,11 +92,11 @@ if (command === 'assets') {
   const result = validateEditorialAssembly(await load(assemblyFile));
   print(result);
   if (!result.valid) process.exitCode = 2;
-} else if (command === 'premiere' && file === 'export') {
+} else if (command === 'interchange' && file === 'export') {
   const assemblyFile = args.find(x => !x.startsWith('--'));
-  if (!assemblyFile) throw new Error('Usage: motion-studio premiere export <assembly.json> --output <sequence.fcpxml> [--asset-root <directory>] [--manifest <handoff.json>] [--allow-unsupported]');
+  if (!assemblyFile) throw new Error('Usage: motion-studio interchange export <assembly.json> --output <sequence.fcpxml> [--asset-root <directory>] [--manifest <handoff.json>] [--allow-unsupported]');
   const assembly = await load(assemblyFile);
-  const result = await exportPremiereInterchange(assembly, {
+  const result = await exportEditorialInterchange(assembly, {
     assetRoot: option('--asset-root', undefined),
     sequenceName: option('--sequence-name', undefined),
     width: Number(option('--width', '1920')),
@@ -107,7 +107,7 @@ if (command === 'assets') {
   else {
     const output = option('--output', 'sequence.fcpxml');
     await writeFile(path.resolve(output), result.xml, 'utf8');
-    const manifestPath = option('--manifest', 'premiere-handoff.json');
+    const manifestPath = option('--manifest', 'editorial-handoff.json');
     await writeFile(path.resolve(manifestPath), JSON.stringify(result.manifest, null, 2) + '\n', 'utf8');
     print({ valid: true, output: path.resolve(output), manifest: path.resolve(manifestPath), warnings: result.issues });
   }
@@ -407,8 +407,8 @@ if (command === 'assets') {
     const result = spawnSync(executable, cmdArgs, { encoding: 'utf8', stdio: 'pipe', shell: false });
     return { name, available: result.status === 0, version: (result.stdout || result.stderr || '').trim().split(/\r?\n/)[0] || null };
   });
-  print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
+  print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, craftMcpClient: '@motion-studio/craft-mcp-client', note: 'Run scripts/doctor.mjs for installed craft-tool (FilmCraft/EffectCraft) state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>] [--locale en-US] [--pronunciation "Term=Phonetic"]…, render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>] [--locale en-US] [--pronunciation "Term=Phonetic"]…, render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, interchange export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

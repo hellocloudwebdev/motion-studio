@@ -2,21 +2,23 @@
 
 **Purpose:** Drive implementation against the Architecture Lock and the end-to-end production definition of done. This document is the master tracker for milestones 1.0–1.9. Update status and attach evidence in the PR that implements each item.
 
+> **2026-11-14 architecture pivot:** the specialist/editorial stack is now **EffectCraft** (github.com/storytold/effectcraft — replaces After Effects) and **FilmCraft** (github.com/storytold/filmcraft — replaces Premiere Pro/Media Encoder). Both are free open-source Rust tools (MIT OR Apache-2.0) with headless MCP CLIs. Milestone references to Adobe/AE/Premiere below read as EffectCraft/FilmCraft; the licensed-Adobe external gate is replaced by craft-CLI workstation validation (install from the releases pages, then verify MCP + render round-trips on a host with both CLIs).
+
 ## Product acceptance target
 
 A user provides a video idea; Motion Studio autonomously turns it into a professional, narrated, edited, quality-checked video with its Canonical Video IR, source project, assets, captions, provenance and delivery evidence.
 
 ## Locked production flow
 
-Canonical Video IR → per-scene engine routing → scene rendering → specialist After Effects work where required → Premiere editorial assembly → Media Encoder / FFmpeg delivery → independent output inspection.
+Canonical Video IR → per-scene engine routing → scene rendering → specialist EffectCraft work where required → FilmCraft editorial assembly → FFmpeg delivery → independent output inspection.
 
-Keep the locked roles: HyperFrames + GSAP (programmable 2D), After Effects (specialist VFX/compositing), Premiere (editorial), Blender (3D), Three.js (procedural/WebGL 3D), FFmpeg/FFprobe (media processing and validation). DaVinci Resolve is out of scope; Remotion is optional, not a primary engine. Adobe products remain user-installed and user-licensed.
+Keep the locked roles (2026-11-14 pivot): HyperFrames + GSAP (programmable 2D), EffectCraft (specialist VFX/compositing), FilmCraft (editorial), Blender (3D), Three.js (procedural/WebGL 3D), FFmpeg/FFprobe (media processing and validation). DaVinci Resolve is out of scope; Remotion is optional, not a primary engine. The craft tools are free and open source; both are alpha, so every render is independently verified.
 
 ## Baseline and evidence rules
 
-The repository already contains the Canonical Video IR, agent/orchestration foundations, installer, HyperFrames compiler/render path, asset registry, media derivatives, editorial assembly, initial Premiere FCPXML interchange, deterministic render QA, bounded-repair scaffolding and Adobe MCP governance. Retain and extend these packages.
+The repository already contains the Canonical Video IR, agent/orchestration foundations, installer, HyperFrames compiler/render path, asset registry, media derivatives, editorial assembly, the FCPXML editorial interchange (FilmCraft-importable), deterministic render QA, bounded-repair scaffolding and craft MCP governance. Retain and extend these packages.
 
-PRs #4–#9 were the dependency chain for milestones 0.5–1.0; their work is integrated in the current `main` baseline. Revalidate the combined chain in CI and on target hosts. A real licensed Adobe workstation test remains a separate acceptance gate.
+PRs #4–#9 were the dependency chain for milestones 0.5–1.0; their work is integrated in the current `main` baseline. Revalidate the combined chain in CI and on target hosts. A real craft-CLI workstation test (EffectCraft comp render + FilmCraft import/assemble/export round-trip) remains a separate acceptance gate.
 
 Use these evidence states consistently:
 - **Implemented:** code exists.
@@ -258,30 +260,30 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 **Exit gate:** Scene renders + narration + music + captions produce one verified MP4 matching the requested profile.
 
-## Milestone 1.4 — After Effects, Premiere and Media Encoder production integration
+## Milestone 1.4 — EffectCraft and FilmCraft production integration (2026-11-14 pivot)
 
-**Goal:** Turn Adobe connection scaffolding into governed, verifiable workstation operations.
+**Goal:** Turn craft-CLI connection scaffolding into governed, verifiable workstation operations.
 
-**After Effects**
-- [ ] Verify live host connection and capabilities.
-- [ ] Checkpoint/copy project before writes.
+**EffectCraft**
+- [ ] Verify live host connection and capabilities (`effectcraft-cli mcp` tool surface).
+- [ ] Checkpoint/copy the `.ecproj` before writes.
 - [ ] Create editable compositions from approved scene specs; configure dimensions/frame rate.
-- [ ] Import approved assets; create/modify layers; apply supported effects/animation and specialist VFX/compositing.
-- [ ] Save, render, read back composition/render state and return artifact paths plus operation evidence.
+- [ ] Import approved assets; create/modify layers; apply supported effects/expressions and specialist VFX/compositing.
+- [ ] Save, render (`effectcraft-cli render`), read back composition/render state and return artifact paths plus operation evidence.
 
-**Premiere**
-- [ ] Import verified scene renders and AE outputs; create/import sequences and organize tracks.
-- [ ] Position clips precisely; apply supported transitions; add narration/music/SFX/captions.
-- [ ] Read back sequence structure after edits; save checkpoints; export through the supported Adobe workflow.
+**FilmCraft**
+- [ ] Import verified scene renders and EffectCraft outputs via FCPXML interchange; create/import sequences and organize tracks.
+- [ ] Position clips precisely; apply supported transitions; add narration/music/SFX/captions; color and sound post where supported.
+- [ ] Read back sequence structure after edits; save checkpoints; export through the supported FilmCraft workflow.
 - [ ] Independently inspect exported media.
 
-**Governance and Media Encoder**
-- [ ] Read-only by default; exact-operation approvals for writes; project/sequence scope; pre-edit checkpoints; post-edit readback.
+**Governance**
+- [ ] Exact-operation approvals for writes; project/sequence scope; pre-edit checkpoints; post-edit readback.
 - [ ] No blind retries after uncertain operations and no arbitrary script execution by default.
-- [ ] Integrate Adobe export queue where supported; manage explicit presets and queue state; verify outputs independently; explicit approved fallback only.
-- [ ] Preserve upstream mcp-aftereffects as editor-control layer; Motion Studio owns orchestration, approvals, contracts and validation.
+- [ ] Integrate the EffectCraft render queue / FilmCraft export for queued renders; manage explicit presets and queue state; verify outputs independently.
+- [ ] Preserve the craft CLIs as the editor-control layer; Motion Studio owns orchestration, approvals, contracts and validation.
 
-**Exit gate:** A licensed workstation performs a real AE composition operation, Premiere sequence assembly and final export; Motion Studio reads back and verifies each result.
+**Exit gate:** A workstation with both craft CLIs performs a real EffectCraft composition render, a FilmCraft sequence assembly and final export; Motion Studio reads back and verifies each result.
 
 ## Milestone 1.5 — Blender 3D renderer
 
@@ -372,9 +374,9 @@ delivery/
 - [ ] Configuration-preserving install/remove; do not assume a shared manifest lifecycle.
 
 **Installer/software doctor**
-- [ ] Fresh Windows/macOS/Linux setup; dependency/version, disk/memory, FFmpeg/browser, Blender, Adobe and MCP health checks.
+- [ ] Fresh Windows/macOS/Linux setup; dependency/version, disk/memory, FFmpeg/browser, Blender, craft-CLI and MCP health checks.
 - [ ] Repairable diagnostics, safe upgrade/uninstall and machine-readable report.
-- [ ] Adobe apps are user-installed/user-licensed; guide setup but never bypass sign-in, subscription or activation.
+- [ ] The craft tools are free open source; guide install from the official releases but never download or replace user-installed binaries silently.
 
 **Security/reliability**
 - [x] Local-first, loopback-only protected runtime and authenticated operations (runtime test verifies loopback endpoint, bearer auth, payload limit and strong-token requirement). Secure token storage integration remains open.

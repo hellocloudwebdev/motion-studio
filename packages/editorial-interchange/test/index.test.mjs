@@ -5,10 +5,10 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { exportPremiereInterchange } from '../src/index.mjs';
+import { exportEditorialInterchange } from '../src/index.mjs';
 
 async function fixture(fn) {
-  const root = await mkdtemp(path.join(tmpdir(), 'motion-studio-premiere-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'motion-studio-interchange-'));
   try { await fn(root); } finally { await rm(root, { recursive: true, force: true }); }
 }
 function assembly(uri, checksum = 'a'.repeat(64)) {
@@ -29,7 +29,7 @@ test('exports frame-accurate FCPXML and preserves provenance in a sidecar', asyn
   const source = path.join(root, 'hero.mp4');
   await writeFile(source, 'media');
   const checksum = createHash('sha256').update('media').digest('hex');
-  const result = await exportPremiereInterchange(assembly(pathToFileURL(source).href, checksum));
+  const result = await exportEditorialInterchange(assembly(pathToFileURL(source).href, checksum));
   assert.equal(result.valid, true);
   assert.match(result.xml, /version="1\.10"/);
   assert.match(result.xml, /offset="1001\/1000s"/);
@@ -42,17 +42,17 @@ test('exports frame-accurate FCPXML and preserves provenance in a sidecar', asyn
 test('requires explicit asset root for relative paths and rejects path traversal', async () => fixture(async root => {
   const source = path.join(root, 'hero.mp4');
   await writeFile(source, 'media');
-  const missingRoot = await exportPremiereInterchange(assembly('hero.mp4'));
+  const missingRoot = await exportEditorialInterchange(assembly('hero.mp4'));
   assert.equal(missingRoot.valid, false);
-  const traversal = await exportPremiereInterchange(assembly('../outside.mp4'), { assetRoot: root });
+  const traversal = await exportEditorialInterchange(assembly('../outside.mp4'), { assetRoot: root });
   assert.equal(traversal.valid, false);
   assert.ok(traversal.issues.some(item => item.code === 'MEDIA_SOURCE_UNRESOLVED'));
 }));
 
 test('fails closed when media checksum or source file is unresolved', async () => fixture(async root => {
-  const noHash = await exportPremiereInterchange(assembly('file:///missing.mp4', 'bad'));
+  const noHash = await exportEditorialInterchange(assembly('file:///missing.mp4', 'bad'));
   assert.equal(noHash.valid, false);
-  const noSource = await exportPremiereInterchange(assembly('file:///missing.mp4'));
+  const noSource = await exportEditorialInterchange(assembly('file:///missing.mp4'));
   assert.equal(noSource.valid, false);
 }));
 
@@ -75,10 +75,10 @@ test('preserves multi-track overlaps, source in-points and exact rational ranges
       { clipId: 'title', sceneId: 's1', name: 'Title card', kind: 'text', track: 'G1', startFrame: 0, endFrame: 48, durationFrames: 48, sourceInFrame: 0, media: false }
     ]
   };
-  const blocked = await exportPremiereInterchange(input, { width: 1920, height: 1080 });
+  const blocked = await exportEditorialInterchange(input, { width: 1920, height: 1080 });
   assert.equal(blocked.valid, false);
   assert.equal(blocked.xml, null);
-  const result = await exportPremiereInterchange(input, { width: 1920, height: 1080, allowUnsupportedClips: true });
+  const result = await exportEditorialInterchange(input, { width: 1920, height: 1080, allowUnsupportedClips: true });
   assert.equal(result.valid, true);
   const clipRows = [...result.xml.matchAll(/<asset-clip ref="([^"]+)" name="([^"]+)" lane="([^"]+)" offset="([^"]+)" start="([^"]+)" duration="([^"]+)"\/>/g)].map(match => match.slice(1));
   assert.deepEqual(clipRows, [
