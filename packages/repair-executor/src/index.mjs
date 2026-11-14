@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import {
   PatchError, applyRepairPatch, classifyDefects, createPatchFromDefects,
   createRepairPlan, evaluateRenderEvidence, persistQaRecord, projectIrSha256,
-  runProjectQA, routeScenes, validateProject
+  runProjectQA, routeScenes, validateProject,
+  runCreativeCritique, heuristicCreativeCritique, CREATIVE_DIMENSIONS, REPAIRABLE_CREATIVE_CODES
 } from '../../core/src/index.mjs';
 import { createProductionRun, recordArtifact, transitionRun } from '../../orchestrator/src/index.mjs';
 import { computeRepairCyclesFromLedger, defaultRunState, invalidateOnInputChange, loadRunState, saveRunState } from '../../orchestrator/src/run-state.mjs';
@@ -464,6 +465,82 @@ async function escalateLoop({ projectRoot, run, defects, project, attempt, maxCy
   return { failedRun, escalation: { jsonPath, markdownPath, report } };
 }
 
+// P3.4 creative critique stage. Advisory by construction: findings never flip
+// deterministic gates, and repairable ones ride the same bounded cycle
+// machinery as deterministic defects. A critique-stage failure is recorded,
+// never fatal.
+
+function advisoryQaResultFromFindings(findings) {
+  const defects = findings.map(finding => ({
+    defectId: finding.id,
+    code: finding.repairHint.defectCode,
+    severity: finding.severity,
+    sceneId: finding.repairHint.sceneId ?? finding.evidence?.sceneId ?? null,
+    advisory: true,
+    // Advisory findings cannot ride the deterministic decode-retest machinery;
+    // their re-verification is the (single) next critique pass. The render
+    // therefore runs whole-project and the retest checks the baseline output
+    // contract only.
+    retestRequired: false,
+    summary: finding.summary,
+    evidence: finding.evidence ?? null,
+    timeRangeFrames: finding.evidence?.timeRangeFrames ?? null
+  }));
+  const summary = { total: defects.length };
+  for (const level of ['critical', 'high', 'medium', 'low']) summary[level] = defects.filter(defect => defect.severity === level).length;
+  return { passed: true, productionReady: true, defects, summary, advisoryOnly: true };
+}
+
+async function persistCritiqueReport(projectRoot, critique) {
+  await atomicWriteJson(path.join(projectRoot, 'creative-critique.json'), critique);
+}
+
+// Model-backed critique provider (opt-in). Returns null when no key is
+// configured so the caller can fall back to the deterministic provider with a
+// recorded note instead of failing the run.
+function createModelCritiqueProvider({ apiKey = process.env.OPENROUTER_API_KEY, model = process.env.MOTION_STUDIO_MODEL || 'openrouter/free', fetchImpl = fetch } = {}) {
+  if (!apiKey) return null;
+  const schema = {
+    type: 'object', additionalProperties: false, required: ['verdict', 'findings'],
+    properties: {
+      verdict: { type: 'string', enum: ['pass', 'review', 'fail'] },
+      findings: {
+        type: 'array', maxItems: 20, items: {
+          type: 'object', additionalProperties: false, required: ['dimension', 'severity', 'summary'],
+          properties: {
+            dimension: { type: 'string', enum: [...CREATIVE_DIMENSIONS] },
+            severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+            summary: { type: 'string' },
+            sceneId: { type: 'string' },
+            suggestion: { type: 'string' },
+            evidence: { type: 'object', additionalProperties: true },
+            repairHint: { type: 'object', additionalProperties: false, required: ['defectCode'], properties: { defectCode: { type: 'string', enum: [...REPAIRABLE_CREATIVE_CODES] } } }
+          }
+        }
+      }
+    }
+  };
+  return async ({ project, signal }) => {
+    const response = await fetchImpl('https://openrouter.ai/api/v1/responses', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + apiKey, 'content-type': 'application/json', 'X-OpenRouter-Title': 'Motion Studio' },
+      body: JSON.stringify({
+        model, store: false,
+        input: [
+          { role: 'system', content: 'You are the creative critique stage of a video production system. Review the provided Canonical Video IR cut against its brief across the dimensions brief-alignment, hook, pacing, continuity, art-direction and cta. Findings are advisory-only: they can never waive rights, timing, media integrity or renderer checks. Only set repairHint.defectCode for consistency repairs (typography family outside declared brand fonts, missing declared motion preset); all subjective notes stay hint-free.' },
+          { role: 'user', content: JSON.stringify({ project }) }
+        ],
+        text: { format: { type: 'json_schema', name: 'motion_studio_creative_critique', strict: true, schema } }
+      }),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error('OpenRouter Responses API returned ' + response.status + ': ' + (data.error?.message || 'request failed'));
+    const text = typeof data.output_text === 'string' && data.output_text.trim() ? data.output_text : (data.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\n');
+    try { return JSON.parse(text); } catch (error) { throw new Error('Provider returned malformed critique output: ' + error.message); }
+  };
+}
+
 export async function runRepairLoop({
   projectFile, configPath, maxCyclesOverride, quality = 'draft', dryRun = false,
   targetedRerender, projectRoot, render, mediaAnalysis, timeoutMs = DEFAULT_RENDER_TIMEOUT_MS, signal, onLine
@@ -485,6 +562,10 @@ export async function runRepairLoop({
   // their own render).
   let carriedManifest = null;
   const retestOutcomes = new Map();
+  // P3.4: the opt-in creative critique runs at most once per loop, only when
+  // the deterministic gates are clean, so advisory findings cannot loop.
+  let creativeCritiqueDone = false;
+  let critiqueResult = null;
   // --dry-run stops at step 6 without persisting anything: run state stays a
   // pure in-memory projection for the preview.
   const persistState = async () => {
@@ -574,11 +655,64 @@ export async function runRepairLoop({
       const qa = mergedQaResult(current, manifest, manifest.output ? manifest.output + '.render.json' : null);
       const plan = createRepairPlan(qa, { attempt: run.repairCycles, maxAttempts: maxCycles });
       if (plan.status === 'no-action') {
+        // P3.4 creative critique: opt-in via gates.creativeCritique. Runs once
+        // when deterministic gates are clean. Repairable findings drive at
+        // most one bounded advisory cycle; subjective findings are recorded
+        // and surfaced, never blocking production-ready. The result lands in
+        // the loop-scoped critiqueResult so the master-refresh re-entry
+        // returns it.
+        if (gates.creativeCritique?.enabled && !creativeCritiqueDone) {
+          creativeCritiqueDone = true;
+          try {
+            const provider = gates.creativeCritique.provider === 'model'
+              ? (createModelCritiqueProvider() || (() => { throw new Error('creativeCritique.provider is "model" but no OPENROUTER_API_KEY is configured; falling back to deterministic heuristics.'); }))
+              : (({ project, signal }) => heuristicCreativeCritique({ project }));
+            const evaluated = await runCreativeCritique({ provider, project: current, signal: context.signal });
+            const repairable = evaluated.findings.filter(finding => finding.repairHint);
+            const subjective = evaluated.findings.filter(finding => !finding.repairHint);
+            if (dryRun) {
+              critiqueResult = { ...evaluated, repairsApplied: null, unresolvedAdvisory: subjective, wouldRepair: repairable.length > 0, wouldRepairFindings: repairable };
+            } else if (repairable.length && run.repairCycles < maxCycles) {
+              const cycle = await executeRepairCycle({
+                projectFile: projectFileAbs, project: current, run, gates: effectiveGates,
+                qaResult: advisoryQaResultFromFindings(repairable),
+                options: { ...context, maxCycles }
+              });
+              if (cycle.outcome === 'retested-pass' || cycle.outcome === 'retry-pass') {
+                current = cycle.project;
+                run = cycle.run;
+                run.repairCycles = computeRepairCyclesFromLedger(current, runId);
+                critiqueResult = { ...evaluated, repairsApplied: cycle.artifacts.appliedOps ?? null, unresolvedAdvisory: subjective, advisoryCycleOutcome: cycle.outcome };
+                carriedManifest = null;
+                state = syncRunState(state, run, current, runId, retestOutcomes);
+                await persistState();
+                await persistCritiqueReport(projectRootAbs, critiqueResult);
+                continue;
+              }
+              // Advisory repairs never escalate the loop: record and finish clean.
+              critiqueResult = {
+                ...evaluated, repairsApplied: null, unresolvedAdvisory: [...subjective, ...repairable],
+                advisoryCycleOutcome: cycle.outcome,
+                ...(cycle.artifacts?.patchError ? { patchError: cycle.artifacts.patchError } : {})
+              };
+            } else {
+              critiqueResult = {
+                ...evaluated, repairsApplied: null, unresolvedAdvisory: [...subjective, ...repairable],
+                ...(repairable.length ? { advisoryCycleSkipped: 'repair-cycle budget exhausted' } : {})
+              };
+            }
+            if (!dryRun) await persistCritiqueReport(projectRootAbs, critiqueResult);
+          } catch (error) {
+            // A critique-stage failure is advisory too: record it and finish clean.
+            critiqueResult = { provider: gates.creativeCritique.provider, error: error?.message ?? String(error), findings: [], repairsApplied: null, unresolvedAdvisory: [] };
+            if (!dryRun) await persistCritiqueReport(projectRootAbs, critiqueResult);
+          }
+        }
         const recorded = await recordMasterArtifact(run, state, manifest, current);
         run = recorded.run;
         state = syncRunState(recorded.state, run, current, runId, retestOutcomes);
         await persistState();
-        return finish(manifest.productionReady === true ? 'production-ready' : 'no-action', 0);
+        return finish(manifest.productionReady === true ? 'production-ready' : 'no-action', 0, critiqueResult ? { creativeCritique: critiqueResult } : {});
       }
       if (plan.status === 'escalate') {
         const { failedRun, escalation } = await escalateLoop({

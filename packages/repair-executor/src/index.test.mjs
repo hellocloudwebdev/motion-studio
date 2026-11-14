@@ -433,3 +433,110 @@ test('executeRepairCycle returns no-patch without rendering or writing the IR', 
     await assert.rejects(() => writeEscalationReport('', { run, defects: [] }), /project workspace/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+// P3.4 creative critique wiring: opt-in via quality gates, advisory-only,
+// repairable consistency findings ride one bounded cycle.
+
+function critiqueGatesFixture(root, critique = { enabled: true, provider: 'heuristic' }) {
+  const configFile = path.join(root, 'quality-gates.json');
+  const config = { version: 1, repair: { maxCycles: 2, targetedRerender: true, retestRequired: true }, creativeCritique: critique };
+  return { configFile, configJson: JSON.stringify(config, null, 2) + '\n' };
+}
+
+test('creative critique repairs a brand-font inconsistency through one bounded advisory cycle', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-repair-critique-'));
+  try {
+    const { configFile, configJson } = critiqueGatesFixture(root);
+    await writeFile(configFile, configJson, 'utf8');
+    const project = cleanFixture();
+    project.scenes[1].layers.find(layer => layer.id === 's2-caption').typography.family = 'Comic Sans MS';
+    const { projectFile } = await writeFixtureProject(root, project);
+    const stub = stubRender();
+    const result = await runRepairLoop({ projectFile, projectRoot: root, render: stub.render, configPath: configFile });
+    assert.equal(result.status, 'production-ready');
+    assert.equal(result.exitCode, 0);
+    assert.ok(result.creativeCritique, 'the critique is surfaced on the loop result');
+    assert.equal(result.creativeCritique.provider, 'deterministic-heuristics');
+    assert.equal(result.creativeCritique.canOverrideDeterministicGates, false);
+    assert.ok(result.creativeCritique.repairsApplied?.length >= 1, 'the advisory cycle applied the font repair');
+    assert.equal(result.creativeCritique.advisoryCycleOutcome, 'retested-pass');
+    // Subjective findings ride along recorded, never blocking.
+    assert.ok(result.creativeCritique.unresolvedAdvisory.some(finding => finding.dimension === 'hook'));
+    const onDisk = JSON.parse(await readFile(projectFile, 'utf8'));
+    assert.equal(onDisk.scenes[1].layers.find(layer => layer.id === 's2-caption').typography.family, 'Arial', 'the patched IR persisted');
+    assert.equal(computeRepairCyclesFromLedger(onDisk, result.run.id), 1, 'the advisory cycle consumed exactly one ledger entry');
+    const report = JSON.parse(await readFile(path.join(root, 'creative-critique.json'), 'utf8'));
+    assert.equal(report.provider, 'deterministic-heuristics');
+    assert.ok(report.repairsApplied.length >= 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('creative critique defaults to off and never runs without the gate', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-repair-critique-off-'));
+  try {
+    const { projectFile } = await writeFixtureProject(root, cleanFixture());
+    const stub = stubRender();
+    const result = await runRepairLoop({ projectFile, projectRoot: root, render: stub.render });
+    assert.equal(result.status, 'production-ready');
+    assert.equal(result.creativeCritique, undefined, 'no critique key on the result');
+    assert.equal(existsSync(path.join(root, 'creative-critique.json')), false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('creative critique with provider "model" and no key degrades to a recorded error, not a failure', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-repair-critique-model-'));
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+  try {
+    const { configFile, configJson } = critiqueGatesFixture(root, { enabled: true, provider: 'model' });
+    await writeFile(configFile, configJson, 'utf8');
+    const { projectFile } = await writeFixtureProject(root, cleanFixture());
+    const stub = stubRender();
+    const result = await runRepairLoop({ projectFile, projectRoot: root, render: stub.render, configPath: configFile });
+    assert.equal(result.status, 'production-ready', 'an advisory-stage failure never fails the run');
+    assert.match(result.creativeCritique.error, /OPENROUTER_API_KEY/);
+    assert.equal(result.creativeCritique.repairsApplied, null);
+  } finally {
+    if (previousKey !== undefined) process.env.OPENROUTER_API_KEY = previousKey;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('unrepairable advisory findings are recorded without escalating or burning renders', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-repair-critique-nopatch-'));
+  try {
+    const { configFile, configJson } = critiqueGatesFixture(root);
+    await writeFile(configFile, configJson, 'utf8');
+    const project = cleanFixture();
+    // The design-system preset is not one the adapter implements: the finding
+    // fires, but the registry builder yields no ops, so no patch exists.
+    project.production = { designSystem: { motionPreset: 'bounce' } };
+    project.scenes[0].layers.find(layer => layer.id === 's1-title').motion = { preset: 'none', durationFrames: 24 };
+    const { projectFile, bytes } = await writeFixtureProject(root, project);
+    const stub = stubRender();
+    const result = await runRepairLoop({ projectFile, projectRoot: root, render: stub.render, configPath: configFile });
+    assert.equal(result.status, 'production-ready', 'advisory findings never escalate');
+    assert.equal(result.creativeCritique.advisoryCycleOutcome, 'no-patch');
+    assert.ok(result.creativeCritique.unresolvedAdvisory.some(finding => finding.repairHint?.defectCode === 'CREATIVE_MOTION_PRESET_MISSING'));
+    assert.equal(result.cycles, 0, 'no ledger entry was consumed');
+    assert.equal(await readFile(projectFile, 'utf8'), bytes, 'the IR is untouched');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('dry-run surfaces the would-be advisory repair without touching anything', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-repair-critique-dry-'));
+  try {
+    const { configFile, configJson } = critiqueGatesFixture(root);
+    await writeFile(configFile, configJson, 'utf8');
+    const project = cleanFixture();
+    project.scenes[1].layers.find(layer => layer.id === 's2-caption').typography.family = 'Comic Sans MS';
+    const { projectFile, bytes } = await writeFixtureProject(root, project);
+    const stub = stubRender();
+    const result = await runRepairLoop({ projectFile, projectRoot: root, render: stub.render, configPath: configFile, dryRun: true });
+    assert.equal(result.status, 'production-ready');
+    assert.equal(result.creativeCritique.wouldRepair, true);
+    assert.equal(existsSync(path.join(root, 'creative-critique.json')), false, 'dry-run persists no critique report');
+    assert.equal(await readFile(projectFile, 'utf8'), bytes);
+    assert.equal(stub.calls.length, 1, 'only the evaluation render ran');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

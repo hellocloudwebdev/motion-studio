@@ -374,6 +374,7 @@ if (command === 'assets') {
     wouldEscalate: result.wouldEscalate ?? null,
     escalationReasons: result.escalationReasons ?? [],
     escalations: result.escalations.map(item => ({ jsonPath: item.jsonPath, markdownPath: item.markdownPath })),
+    creativeCritique: result.creativeCritique ? { provider: result.creativeCritique.provider, verdict: result.creativeCritique.verdict, findings: result.creativeCritique.findings?.length ?? 0, repairsApplied: result.creativeCritique.repairsApplied ?? null, unresolvedAdvisory: result.creativeCritique.unresolvedAdvisory?.length ?? 0, error: result.creativeCritique.error ?? null } : null,
     renderManifests: result.renderManifests.map(manifest => ({ output: manifest.output, verified: manifest.verified, productionReady: manifest.productionReady, resumed: manifest.resumed === true })),
     errors: result.errors
   });

@@ -642,6 +642,30 @@ export const DEFECT_REPAIR_REGISTRY = {
       return ops;
     }
   },
+  // Creative-critique consistency repairs (P3.4): the two advisory codes a
+  // creative finding may request. Both repair *consistency* against declared
+  // brand state — never creative intent itself — and stay COND: without the
+  // declared brand reference the finding degrades to subjective report.
+  CREATIVE_TYPOGRAPHY_INCONSISTENT: {
+    policy: 'COND', op: 'set_typography', reason: 'Text layers whose family sits outside the declared brand fonts are aligned to the brand display font.',
+    build(defect, { project }) {
+      const family = declaredFontFamily(project);
+      if (!family) return [];
+      return layersInScope(defect, project, layer => layer.kind === 'text'
+        && typeof layer.typography?.family === 'string' && layer.typography.family.trim()
+        && layer.typography.family.trim() !== family)
+        .map(({ scene, layer }) => ({ type: 'set_typography', target: { sceneId: scene.id, layerId: layer.id }, value: { family } }));
+    }
+  },
+  CREATIVE_MOTION_PRESET_MISSING: {
+    policy: 'COND', op: 'set_motion', reason: 'Text layers without a motion preset gain the declared design-system preset when one exists.',
+    build(defect, { project }) {
+      const preset = project?.production?.designSystem?.motionPreset;
+      if (typeof preset !== 'string' || !MOTION_PRESETS.has(preset)) return [];
+      return layersInScope(defect, project, layer => layer.kind === 'text' && (!layer.motion?.preset || layer.motion.preset === 'none'))
+        .map(({ scene, layer }) => ({ type: 'set_motion', target: { sceneId: scene.id, layerId: layer.id }, value: { preset, durationFrames: Math.min(24, Math.max(1, Number(scene.durationFrames) || 24)) } }));
+    }
+  },
   BLACK_FRAME_SEGMENT: {
     policy: 'COND', op: 'set_timing',
     reason: 'Interior black frames are covered by extending or shifting the single layer adjacent to the coverage gap when layer timings explain the range; black frames at clip edges may be intentional fades and are reported.',

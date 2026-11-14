@@ -7,6 +7,10 @@ import path from 'node:path';
 // repair.maxCycles inside 1..3 and both rerender/retest flags boolean.
 
 const DEFAULT_REPAIR = { maxCycles: 2, targetedRerender: true, retestRequired: true };
+// Creative critique (P3.4) is opt-in and advisory-only: findings never flip
+// deterministic gates. 'heuristic' runs the deterministic offline provider;
+// 'model' requires an explicitly configured model provider and a key.
+const DEFAULT_CREATIVE_CRITIQUE = { enabled: false, provider: 'heuristic' };
 
 function fail(message) {
   throw new Error(message);
@@ -23,7 +27,7 @@ export async function loadQualityGates(configPath) {
     }
   }
   if (raw === null) {
-    return { version: 1, repair: { ...DEFAULT_REPAIR }, sourcePath, sha256: null };
+    return { version: 1, repair: { ...DEFAULT_REPAIR }, creativeCritique: { ...DEFAULT_CREATIVE_CRITIQUE }, sourcePath, sha256: null };
   }
   let parsed;
   try {
@@ -41,9 +45,17 @@ export async function loadQualityGates(configPath) {
     if (typeof value !== 'boolean') fail('Quality gates repair.' + flag + ' must be a boolean (received ' + JSON.stringify(value ?? null) + '): ' + sourcePath);
     repair[flag] = value;
   }
+  const critiqueInput = parsed.creativeCritique && typeof parsed.creativeCritique === 'object' && !Array.isArray(parsed.creativeCritique) ? parsed.creativeCritique : {};
+  const creativeCritique = {
+    enabled: typeof critiqueInput.enabled === 'boolean' ? critiqueInput.enabled : DEFAULT_CREATIVE_CRITIQUE.enabled,
+    provider: critiqueInput.provider ?? DEFAULT_CREATIVE_CRITIQUE.provider
+  };
+  if (typeof creativeCritique.enabled !== 'boolean') fail('Quality gates creativeCritique.enabled must be a boolean (received ' + JSON.stringify(critiqueInput.enabled ?? null) + '): ' + sourcePath);
+  if (!['heuristic', 'model'].includes(creativeCritique.provider)) fail('Quality gates creativeCritique.provider must be "heuristic" or "model" (received ' + JSON.stringify(creativeCritique.provider) + '): ' + sourcePath);
   return {
     version: Number.isInteger(parsed.version) ? parsed.version : 1,
     repair,
+    creativeCritique,
     sourcePath,
     sha256: createHash('sha256').update(raw).digest('hex')
   };
