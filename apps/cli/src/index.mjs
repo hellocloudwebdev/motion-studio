@@ -6,7 +6,7 @@ import { buildExecutionGraph, validateExecutionGraph } from '../../../packages/o
 import { evaluateHostReadiness } from '../../../packages/orchestrator/src/host-readiness.mjs';
 import { loadQualityGates } from '../../../packages/orchestrator/src/quality-gates.mjs';
 import { compileHyperFramesProject } from '../../../packages/hyperframes-adapter/src/index.mjs';
-import { renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
+import { renderDeliveryVariants, renderHyperFramesProject } from '../../../packages/render-manager/src/index.mjs';
 import { renderMixedProject } from '../../../packages/render-manager/src/mixed-render.mjs';
 import { runRepairLoop } from '../../../packages/repair-executor/src/index.mjs';
 import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAssetRegistry, probeAsset } from '../../../packages/asset-registry/src/index.mjs';
@@ -281,12 +281,22 @@ if (command === 'assets') {
     }
   } else if (command === 'deliver') {
     const sourceVideo = args.find(x => !x.startsWith('--'));
-    if (!sourceVideo) throw new Error('Usage: motion-studio deliver <project.json> <rendered.mp4>');
+    if (!sourceVideo) throw new Error('Usage: motion-studio deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high]');
     const target = paths(project, file);
     let renderManifest = null;
     try { renderManifest = JSON.parse(await readFile(path.resolve(sourceVideo) + '.render.json', 'utf8')); } catch {}
     const assembly = createEditorialAssembly(project);
-    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, editorialAssembly: assembly, operationHistory: project.qa?.repairHistory || [], audioInputs: await audioInputsFromProject(project, file) });
+    // --reflow: aspect-mismatched targets are re-rendered from a reflowed IR
+    // (true per-profile layout) instead of pad-barring the master.
+    const variantSources = flags().has('--reflow')
+      ? await renderDeliveryVariants(project, {
+          targets: project.delivery.targets,
+          projectRoot: target.projectRoot,
+          sourceRoot: target.sourceRoot,
+          quality: option('--quality', 'draft')
+        })
+      : {};
+    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, editorialAssembly: assembly, operationHistory: project.qa?.repairHistory || [], audioInputs: await audioInputsFromProject(project, file), variantSources });
     print(delivery);
     if (!delivery.acceptance.passed) process.exitCode = 2;
   } else if (command === 'compile' || command === 'render') {
@@ -392,5 +402,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4>, qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

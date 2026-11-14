@@ -193,3 +193,70 @@ test('delivery rejects an unknown per-target fit mode', async () => {
     );
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+// P3.3 true reflow: per-target re-rendered variants delivered from their own
+// layout instead of pad-barring the master.
+
+async function makeVerticalVideo(file, width = 160, height = 284, durationSeconds = 2) {
+  await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=' + width + 'x' + height + ':rate=30:duration=' + durationSeconds, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file]);
+}
+
+test('a reflowed variant source delivers from its own layout with no pad-bar limitation', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-reflow-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.delivery.targets = [
+      { id: 'master', format: 'mp4', width: 320, height: 180, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false },
+      { id: 'vertical-9x16', format: 'mp4', width: 160, height: 284, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false },
+      { id: 'square-1x1', format: 'mp4', width: 320, height: 320, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false }
+    ];
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4'), reflowedFile = path.join(root, 'reflow', 'vertical-9x16', 'variant.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    await mkdir(path.dirname(reflowedFile), { recursive: true });
+    await makeVerticalVideo(reflowedFile);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const result = await buildDeliveryPackage({
+      project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'),
+      renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha },
+      variantSources: { 'vertical-9x16': { file: reflowedFile, manifest: { verified: true, projectIrSha256: 'reflowed-ir-sha' } } }
+    });
+    assert.equal(result.status, 'accepted');
+    const reflowed = result.variants.find(variant => variant.target.id === 'vertical-9x16');
+    assert.equal(reflowed.fit, 'reflow');
+    assert.equal(reflowed.reflowed, true);
+    assert.equal(reflowed.verified, true);
+    assert.deepEqual([reflowed.media.width, reflowed.media.height], [160, 284]);
+    assert.equal(reflowed.mediaAnalysis.passed, true);
+    assert.equal(result.variants.find(variant => variant.target.id === 'master').fit, 'contain');
+    // The pad-bar limitation now covers only the aspect-mismatched target that
+    // was NOT reflowed.
+    assert.deepEqual(result.limitations.filter(item => item.kind === 'layout-reflow-pending').map(item => item.targetId), ['square-1x1']);
+    assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery'))).passed, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a reflowed variant source with mismatching dimensions fails closed', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-reflow-dims-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.delivery.targets = [
+      { id: 'master', format: 'mp4', width: 320, height: 180, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false },
+      { id: 'vertical-9x16', format: 'mp4', width: 160, height: 284, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: false }
+    ];
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4'), reflowedFile = path.join(root, 'wrong-dims.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    await makeVerticalVideo(reflowedFile, 200, 300);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    await assert.rejects(() => buildDeliveryPackage({
+      project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'),
+      renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha },
+      variantSources: { 'vertical-9x16': { file: reflowedFile, manifest: { verified: true } } }
+    }), /but the target requires/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

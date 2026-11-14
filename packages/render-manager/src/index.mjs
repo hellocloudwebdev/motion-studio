@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileHyperFramesProject } from '../../hyperframes-adapter/src/index.mjs';
 import { parseProbeOutput } from '../../ffmpeg/src/index.mjs';
-import { evaluateRenderEvidence, createRepairPlan, persistQaRecord, runVisualCritic, projectIrSha256 } from '../../core/src/index.mjs';
+import { evaluateRenderEvidence, createRepairPlan, persistQaRecord, runVisualCritic, projectIrSha256, reflowProjectForTarget, auditReflowedLayout, validateProject } from '../../core/src/index.mjs';
 import { analyzeRenderedMedia } from './media-analysis.mjs';
 
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -358,4 +358,43 @@ export async function renderHyperFramesProject(project, options = {}) {
   // inspect manifest.qa / manifest.repairPlan instead of catching the throw.
   if (throwOnQaFailure && !manifest.productionReady) throw new Error('Rendered media failed deterministic QA. See QA report: ' + path.join(outputRoot, 'qa-report.json'));
   return manifest;
+}
+
+// True per-target delivery variants (roadmap P3.3): reflow the Canonical Video
+// IR for each target canvas, audit the reflowed layout, render it through the
+// standard HyperFrames path into a per-target workspace and return verified
+// variant sources keyed by target id. A variant whose reflowed layout fails
+// the readability audit fails loudly here instead of delivering an overflowing
+// cut. Same project + target → same reflowed layout, same change record.
+export async function renderDeliveryVariants(project, { targets, projectRoot, sourceRoot, quality = 'draft', signal, onLine } = {}) {
+  if (!project?.project?.id) throw new Error('renderDeliveryVariants requires a Canonical Video IR project.');
+  const list = Array.isArray(targets) ? targets : [];
+  if (!list.length) throw new Error('renderDeliveryVariants requires at least one delivery target.');
+  const root = path.resolve(projectRoot || process.cwd());
+  const variants = {};
+  for (const target of list) {
+    if (!target?.id || !Number.isInteger(Number(target.width)) || !Number.isInteger(Number(target.height))) throw new Error('Delivery target ' + (target?.id || '(unnamed)') + ' must carry an id and integer dimensions.');
+    const { project: reflowed, changes, reflowed: didReflow } = reflowProjectForTarget(project, { width: Number(target.width), height: Number(target.height) });
+    if (!didReflow) continue;
+    const validation = validateProject(reflowed);
+    if (!validation.valid) throw new Error('Reflowed IR for target ' + target.id + ' failed validation: ' + validation.issues.map(issue => issue.code + ' ' + issue.path).join('; '));
+    const audit = auditReflowedLayout(reflowed);
+    if (!audit.passed) throw new Error('Reflowed layout for target ' + target.id + ' fails the readability audit: ' + audit.findings.map(finding => finding.code + ' ' + finding.layerId).join('; '));
+    const variantRoot = path.join(root, 'reflow', String(target.id).replace(/[^a-zA-Z0-9_-]/g, '-'));
+    await mkdir(variantRoot, { recursive: true });
+    const manifest = await renderHyperFramesProject(reflowed, {
+      projectRoot: variantRoot,
+      engineRoot: path.join(variantRoot, 'engines', 'hyperframes'),
+      outputRoot: path.join(variantRoot, 'renders'),
+      sourceRoot: path.resolve(sourceRoot || root),
+      installRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
+      workers: 1, quality,
+      throwOnQaFailure: true,
+      allowMissingAssetsAsPlaceholders: false,
+      renderLabel: 'reflow-' + String(target.id).replace(/[^a-zA-Z0-9_-]/g, '-'),
+      signal, onLine
+    });
+    variants[target.id] = { manifest, file: manifest.output, changes, reflowedIrSha256: projectIrSha256(reflowed) };
+  }
+  return variants;
 }

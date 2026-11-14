@@ -1,8 +1,8 @@
-import { access, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { access, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { finalizeMedia, renderCaptions, runMediaCommand, validateCaptionTimeline } from '../../ffmpeg/src/index.mjs';
+import { finalizeMedia, parseProbeOutput, renderCaptions, runMediaCommand, validateCaptionTimeline } from '../../ffmpeg/src/index.mjs';
 import { analyzeRenderedMedia } from '../../render-manager/src/media-analysis.mjs';
 
 function hashFile(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
@@ -82,7 +82,7 @@ async function resolveAssetFile(sourceProjectDir, uri) {
   return resolved;
 }
 
-export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], signal } = {}) {
+export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], variantSources = {}, signal } = {}) {
   if (!project?.project?.id || !project?.delivery?.targets?.length) throw new Error('A valid project and at least one output profile are required.');
   const source = path.resolve(sourceVideo), root = path.resolve(projectRoot);
   let packageRoot = path.resolve(outputRoot || path.join(root, 'deliverables'));
@@ -99,6 +99,21 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     const defaultAudioCodec = target.format === 'webm' ? 'libopus' : target.format === 'prores' ? 'pcm_s16le' : 'aac';
     const durationSeconds = project.project.totalDurationFrames * project.project.frameRate.denominator / project.project.frameRate.numerator;
     const fit = resolveDeliveryFit(target);
+    // P3.3 true reflow: a per-target re-rendered variant supplied through
+    // variantSources is delivered from its own layout (no pad bars, no
+    // layout-reflow-pending limitation). The file is copied into the package,
+    // probed and verified against the target dimensions before acceptance.
+    const variantSource = variantSources[target.id];
+    if (variantSource?.file) {
+      await access(variantSource.file);
+      await copyFile(variantSource.file, output);
+      const probe = await runMediaCommand('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { signal });
+      const media = parseProbeOutput(probe.stdout);
+      if (Number(media.width) !== target.width || Number(media.height) !== target.height) throw new Error('Reflowed variant for target ' + target.id + ' is ' + media.width + 'x' + media.height + ' but the target requires ' + target.width + 'x' + target.height + '.');
+      const mediaAnalysis = await analyzeRenderedMedia({ input: output, media, options: { ocr: false }, signal });
+      variants.push({ target, fit: 'reflow', output, bytes: (await stat(output)).size, verified: variantSource.manifest?.verified === true, media, mediaAnalysis, reflowed: true, ...(variantSource.manifest?.projectIrSha256 ? { reflowedIrSha256: variantSource.manifest.projectIrSha256 } : {}) });
+      continue;
+    }
     const finalizeOptions = { output, width: target.width, height: target.height, fps, durationSeconds, videoCodec: target.videoCodec || defaultVideoCodec, audioCodec: target.audioCodec || defaultAudioCodec, crf: target.crf ?? 18, audioInputs, audioRequired: Boolean(target.audioRequired), signal };
     let receipt;
     if (fit === 'contain') {
@@ -218,9 +233,9 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   const renderSourceMatches = renderManifest?.projectIrSha256 === canonicalIrSha256;
   const mediaAnalysisPassed = variants.every(variant => variant.mediaAnalysis?.passed === true);
   const productionAccepted = renderManifest?.productionReady === true && renderManifest?.verified === true && renderSourceMatches && rightsCleared && assetsPackaged && mediaAnalysisPassed;
-  // Roadmap P3.3 (v1): aspect ratios that differ from the render canvas are
-  // delivered by scaling the master to fit with black pad bars; typography and
-  // graphics are not reflowed per profile yet, so record that honestly.
+  // Roadmap P3.3: aspect-mismatched targets delivered without a reflowed
+  // variant source (renderDeliveryVariants + CLI --reflow) still scale the
+  // master to fit with black pad bars; record that honestly per variant.
   const canvas = project.project.canvas && Number.isInteger(project.project.canvas.width) && Number.isInteger(project.project.canvas.height) ? project.project.canvas : null;
   const layoutLimitations = canvas ? variants
     .filter(variant => variant.fit === 'contain' && variant.target.width * canvas.height !== variant.target.height * canvas.width)
