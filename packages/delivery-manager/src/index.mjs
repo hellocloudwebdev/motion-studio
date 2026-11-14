@@ -187,11 +187,13 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   if (frameEvidence.length) {
     await mkdir(qaFramesDirectory, { recursive: true });
     await assertNoSymlinkPath(packageRoot, qaFramesDirectory);
-    const allowedRoots = [path.resolve(root), path.resolve(path.dirname(source))];
+    // Realpath both sides before containment: Windows 8.3 short names
+    // (RUNNER~1) and the macOS /var → /private/var symlink otherwise make
+    // raw-path comparisons false-reject legitimate render outputs.
+    const allowedRoots = [await realpath(path.resolve(root)), await realpath(path.resolve(path.dirname(source)))];
     for (const [index, frame] of frameEvidence.entries()) {
       if (typeof frame?.path !== 'string') continue;
       const sourceFrame = path.resolve(frame.path);
-      if (!allowedRoots.some(allowed => contained(allowed, sourceFrame))) throw new Error('QA frame evidence path escapes the render workspace.');
       const realFrame = await realpath(sourceFrame);
       if (!allowedRoots.some(allowed => contained(allowed, realFrame))) throw new Error('Resolved QA frame evidence escapes the render workspace.');
       const frameBytes = await readFile(realFrame);

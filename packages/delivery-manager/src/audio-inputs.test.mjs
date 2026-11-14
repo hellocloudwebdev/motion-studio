@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { audioInputsFromProject, audioInputsFromProjectRange } from './audio-inputs.mjs';
@@ -59,7 +59,10 @@ test('re-bases intersecting cues onto a frame range and skips cues outside it', 
     // Voice cue starts at frame 130, so 30 frames have already played inside the range.
     assert.ok(Math.abs(voice.offsetSeconds - 0) < 1e-12 || voice.offsetSeconds === 0);
     assert.ok(Math.abs(voice.offsetSeconds) < 1e-12);
-    assert.equal(voice.path, path.resolve(root, 'voice.wav'));
+    // audioInputsFromProject returns the realpath'd asset path; the expected
+    // side must be realpath'd too — os.tmpdir() is an 8.3 short path on the
+    // Windows CI runner and a /var symlink on macOS.
+    assert.equal(voice.path, await realpath(path.resolve(root, 'voice.wav')));
     // Clipped to the 90 frames inside [160, 250); the first 20 fade-in frames already played.
     assert.ok(Math.abs(voice.durationSeconds - 90 / 30) < 1e-12);
     assert.ok(!voice.fadeInSeconds, 'a fully played fade-in must not be re-applied on the segment');

@@ -21,16 +21,21 @@ async function withTempAudio(name, lavfi, extraArgs = []) {
 const DYNAMIC_SINE = "sine=frequency=440:duration=4,volume=volume='0.05+0.85*abs(sin(2*PI*t))':eval=frame";
 
 test('audio envelope probe plan escapes the amovie path per ffmpeg filtergraph rules', () => {
-  const plan = buildAudioEnvelopeProbePlan({ audioPath: 'C:\\audio\\beat.wav', fps: 30, windowFrames: 1, sampleRate: 48000, durationSeconds: 4 });
+  // The escaper is a pure string transform, so the Windows drive-colon case is
+  // asserted directly on every platform; only Windows can resolve a C:\ path
+  // as absolute, so the plan-level fixture picks an absolute path per OS.
+  assert.equal(escapeAmovieFilename('C:\\audio\\beat.wav'), 'C\\:/audio/beat.wav');
+  const audioPath = path.sep === '\\' ? 'C:\\audio\\beat.wav' : '/audio/beat.wav';
+  const plan = buildAudioEnvelopeProbePlan({ audioPath, fps: 30, windowFrames: 1, sampleRate: 48000, durationSeconds: 4 });
   assert.equal(plan.executable, 'ffprobe');
-  assert.equal(plan.filter, "amovie='C\\:/audio/beat.wav',asetnsamples=n=1600:p=0,astats=metadata=1:reset=1");
+  assert.equal(plan.filter, "amovie='" + escapeAmovieFilename(audioPath) + "',asetnsamples=n=1600:p=0,astats=metadata=1:reset=1");
   assert.equal(plan.durationFrames, 120);
   assert.equal(plan.expectedWindows, 120);
-  const grouped = buildAudioEnvelopeProbePlan({ audioPath: 'C:\\audio\\beat.wav', fps: 30, windowFrames: 4, sampleRate: 48000, durationSeconds: 4 });
+  const grouped = buildAudioEnvelopeProbePlan({ audioPath, fps: 30, windowFrames: 4, sampleRate: 48000, durationSeconds: 4 });
   assert.equal(grouped.expectedWindows, 30);
   assert.match(grouped.filter, /astats=metadata=1:reset=4/);
   // 4.033333s of audio at 30fps rounds to 121 frames; fractional fps accepts rationals.
-  const odd = buildAudioEnvelopeProbePlan({ audioPath: 'C:\\audio\\beat.wav', fps: { numerator: 30, denominator: 1 }, sampleRate: 44100, durationSeconds: 4.0333333 });
+  const odd = buildAudioEnvelopeProbePlan({ audioPath, fps: { numerator: 30, denominator: 1 }, sampleRate: 44100, durationSeconds: 4.0333333 });
   assert.equal(odd.durationFrames, 121);
   assert.equal(odd.samplesPerFrame, Math.round(44100 / 30));
 });
