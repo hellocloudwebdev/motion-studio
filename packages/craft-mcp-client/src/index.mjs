@@ -56,28 +56,35 @@ export function validateCraftOperationApproval({ approval, projectId, runId, app
 // returns the bare name so spawn surfaces a clear PATH error.
 export function craftCommandCandidates({ app, env = process.env, platform = process.platform, home = null } = {}) {
   if (!CRAFT_APPS.has(app)) throw new Error('app must be effectcraft or filmcraft.');
+  const join = platform === 'win32' ? path.win32.join : path.posix.join;
   const homeDir = home || env.USERPROFILE || env.HOME || '';
   const list = [];
   const override = app === 'filmcraft' ? env.FILMCRAFT_CLI : env.EFFECTCRAFT_CLI;
   if (override?.trim()) list.push(override.trim());
   list.push(app + '-cli' + (platform === 'win32' ? '.exe' : ''));
   if (platform === 'win32') {
-    for (const root of [env.LOCALAPPDATA, homeDir ? path.join(homeDir, 'AppData', 'Local') : '', homeDir ? path.join(homeDir, 'AppData', 'Roaming') : ''].filter(Boolean)) {
-      list.push(path.join(root, 'Programs', app, 'bin', app + '-cli.exe'));
+    for (const root of [env.LOCALAPPDATA, homeDir ? join(homeDir, 'AppData', 'Local') : '', homeDir ? join(homeDir, 'AppData', 'Roaming') : ''].filter(Boolean)) {
+      list.push(join(root, 'Programs', app, 'bin', app + '-cli.exe'));
     }
   } else if (platform === 'darwin') {
-    list.push('/Applications/' + app.charAt(0).toUpperCase() + app.slice(1) + '.app/Contents/MacOS/' + app + '-cli', '/usr/local/bin/' + app + '-cli', '/usr/bin/' + app + '-cli');
+    list.push(join('/Applications', capitalized(app) + '.app', 'Contents', 'MacOS', app + '-cli'), '/usr/local/bin/' + app + '-cli', '/usr/bin/' + app + '-cli');
   } else {
     list.push('/usr/local/bin/' + app + '-cli', '/usr/bin/' + app + '-cli');
   }
   return list;
 }
 
+function capitalized(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export async function resolveCraftCommand({ app, env = process.env, platform = process.platform, home = null, probe = null } = {}) {
   const candidates = craftCommandCandidates({ app, env, platform, home });
   const exists = probe || (async candidate => { try { await access(candidate); return true; } catch { return false; } });
   for (const candidate of candidates) if (await exists(candidate)) return candidate;
-  return candidates[1] ?? candidates[0];
+  // With nothing on disk, fall back to the bare PATH-resolvable name so the
+  // eventual spawn surfaces a clear, honest "command not found" error.
+  return app + '-cli' + (platform === 'win32' ? '.exe' : '');
 }
 
 export function craftMcpArgs(app) {
