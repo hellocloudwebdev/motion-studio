@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const WINDOWS_SAPI_SCRIPT = path.join(MODULE_ROOT, 'scripts', 'windows-sapi-speech.ps1');
 
+export { applyPronunciationToText, parsePronunciationSpecs, validateLocaleTag, validateNarrationDirection } from './direction.mjs';
+
 export function inside(root, target) {
   const relative = path.relative(root, target);
   return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
@@ -96,7 +98,17 @@ export function narrationTextFromProject(project) {
 
 export function narrationSegmentsFromProject(project) {
   const sources = [project?.production?.script, project?.planning?.script, project?.script].filter(Boolean);
-  const segment = (text, item = {}) => ({ text: text.trim(), ...(Number.isInteger(item.leadInFrames) && item.leadInFrames > 0 ? { leadInFrames: item.leadInFrames } : {}) });
+  // Provider-independent narration direction rides the IR: per-segment
+  // locale/pronunciation/voiceId join leadInFrames and are honored by every
+  // provider path (rewritten text for pronunciation; recorded metadata for
+  // locale).
+  const segment = (text, item = {}) => ({
+    text: text.trim(),
+    ...(Number.isInteger(item.leadInFrames) && item.leadInFrames > 0 ? { leadInFrames: item.leadInFrames } : {}),
+    ...(typeof item.locale === 'string' && item.locale.trim() ? { locale: item.locale.trim() } : {}),
+    ...(Array.isArray(item.pronunciation) && item.pronunciation.length ? { pronunciation: item.pronunciation } : {}),
+    ...(typeof item.voiceId === 'string' && item.voiceId.trim() ? { voiceId: item.voiceId.trim() } : {})
+  });
   for (const source of sources) {
     if (Array.isArray(source)) {
       const segments = source.filter(item => typeof item?.narration === 'string' && item.narration.trim()).map(item => segment(item.narration, item));

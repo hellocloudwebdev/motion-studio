@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assertValidSpeechText, inside, probeAudio, run } from './index.mjs';
+import { applyPronunciationToText, parsePronunciationSpecs, validateLocaleTag } from './direction.mjs';
 
 const FISH_AUDIO_TTS_URL = 'https://api.fish.audio/v1/tts';
 export const FISH_AUDIO_DEFAULT_MODEL = 's2.1-pro-free';
@@ -18,7 +19,7 @@ export function resolveFishAudioOptions(env = process.env, { apiKey, model, voic
 
 // The narration pipeline expects probeable PCM wav, and the shared silence trim
 // re-encodes to pcm_s16le, so request wav from the provider rather than mp3/opus.
-export async function generateFishAudioSpeech(text, { outputPath, projectRoot, signal, timeoutMs = 120_000, apiKey, model, voiceId, speed, fetchImpl = fetch, env = process.env } = {}) {
+export async function generateFishAudioSpeech(text, { outputPath, projectRoot, signal, timeoutMs = 120_000, apiKey, model, voiceId, speed, locale, pronunciation, fetchImpl = fetch, env = process.env } = {}) {
   assertValidSpeechText(text);
   if (typeof projectRoot !== 'string' || !projectRoot.trim() || typeof outputPath !== 'string' || !outputPath.trim()) throw new Error('A projectRoot and outputPath are required for isolated speech generation.');
   const root = path.resolve(projectRoot), output = path.resolve(outputPath);
@@ -28,7 +29,13 @@ export async function generateFishAudioSpeech(text, { outputPath, projectRoot, s
   if (!inside(realRoot, realDirectory) && realRoot !== realDirectory) throw new Error('Speech output directory escapes the project workspace.');
   const credentials = resolveFishAudioOptions(env, { apiKey, model, voiceId });
   if (speed !== undefined && (!Number.isFinite(speed) || speed < 0.5 || speed > 2)) throw new Error('prosody speed must be a number between 0.5 and 2.');
-  const requestBody = { text: text.trim(), format: 'wav', sample_rate: 44100 };
+  if (locale !== undefined) validateLocaleTag(locale);
+  const pronunciationSpecs = parsePronunciationSpecs(pronunciation);
+  // Provider-independent direction: pronunciation travels as rewritten text
+  // (word-boundary, longest-first), locale as recorded metadata — the voice
+  // reference itself carries the spoken language for Fish Audio.
+  const rewritten = applyPronunciationToText(text, pronunciationSpecs);
+  const requestBody = { text: rewritten.text.trim(), format: 'wav', sample_rate: 44100 };
   if (credentials.voiceId) requestBody.reference_id = credentials.voiceId;
   if (speed !== undefined) requestBody.prosody = { speed };
   const runId = process.pid + '-' + Date.now();
@@ -58,7 +65,7 @@ export async function generateFishAudioSpeech(text, { outputPath, projectRoot, s
     if (!outputStat.isFile() || outputStat.size === 0) throw new Error('Silence-trimmed Fish Audio output is empty.');
     await rename(trimmedOutput, output);
     const digest = createHash('sha256').update(await readFile(output)).digest('hex');
-    return { provider: 'fish-audio', model: credentials.model, voiceId: credentials.voiceId ?? null, speed: speed ?? null, output, sha256: digest, byteSize: outputStat.size, audio, sourceAudioDurationSeconds: sourceAudio.durationSeconds, trailingSilenceTrimmed: Math.max(0, sourceAudio.durationSeconds - audio.durationSeconds), verified: true, providerTerms: { free: true, noTTFA_or_DPA: true, note: FISH_AUDIO_TERMS_NOTE } };
+    return { provider: 'fish-audio', model: credentials.model, voiceId: credentials.voiceId ?? null, speed: speed ?? null, locale: locale ?? null, pronunciationApplied: rewritten.applied, output, sha256: digest, byteSize: outputStat.size, audio, sourceAudioDurationSeconds: sourceAudio.durationSeconds, trailingSilenceTrimmed: Math.max(0, sourceAudio.durationSeconds - audio.durationSeconds), verified: true, providerTerms: { free: true, noTTFA_or_DPA: true, note: FISH_AUDIO_TERMS_NOTE } };
   } finally {
     await Promise.all([rm(rawOutput, { force: true }), rm(trimmedOutput, { force: true })]);
   }

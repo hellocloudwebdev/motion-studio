@@ -17,7 +17,7 @@ import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/ind
 import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
-import { generateSpeech, narrationSegmentsFromProject, resolveSpeechCommand } from '../../../packages/speech-adapter/src/index.mjs';
+import { generateSpeech, narrationSegmentsFromProject, resolveSpeechCommand, validateLocaleTag, validateNarrationDirection } from '../../../packages/speech-adapter/src/index.mjs';
 import { generateFishAudioSpeech, resolveFishAudioOptions } from '../../../packages/speech-adapter/src/fish-audio.mjs';
 
 const [command, file, ...args] = process.argv.slice(2);
@@ -135,7 +135,7 @@ if (command === 'assets') {
   print(receipt);
   if (!receipt.verified) process.exitCode = 2;
 } else if (command === 'narration-generate') {
-  if (!file) throw new Error('Usage: motion-studio narration-generate <project.json> [--project-root <projects/project-id>] [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <fish-audio-voice-id>] [--speech-speed <0.5-2>]');
+  if (!file) throw new Error('Usage: motion-studio narration-generate <project.json> [--project-root <projects/project-id>] [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <fish-audio-voice-id>] [--speech-speed <0.5-2>] [--locale en-US] [--pronunciation "Term=Phonetic"]…');
   const speechProvider = option('--speech-provider', 'local');
   if (speechProvider !== 'local' && speechProvider !== 'fish-audio') throw new Error('--speech-provider must be "local" or "fish-audio".');
   const speechModel = option('--speech-model', undefined);
@@ -145,6 +145,14 @@ if (command === 'assets') {
   const speechSpeedNumber = speechSpeed === undefined ? undefined : Number(speechSpeed);
   if ((speechVoice !== undefined || speechSpeedNumber !== undefined) && speechProvider !== 'fish-audio') throw new Error('--speech-voice and --speech-speed only apply when --speech-provider is fish-audio.');
   if (speechSpeed !== undefined && (!Number.isFinite(speechSpeedNumber) || speechSpeedNumber < 0.5 || speechSpeedNumber > 2)) throw new Error('--speech-speed must be a number between 0.5 and 2.');
+  const locale = option('--locale', undefined);
+  if (locale !== undefined) validateLocaleTag(locale);
+  const pronunciationSpecs = [];
+  for (let index = args.indexOf('--pronunciation'); index >= 0; index = args.indexOf('--pronunciation', index + 1)) {
+    if (!args[index + 1] || args[index + 1].startsWith('--')) throw new Error('--pronunciation requires a "Term=Phonetic" value.');
+    pronunciationSpecs.push(args[index + 1]);
+  }
+  const direction = validateNarrationDirection({ locale, speed: speechSpeedNumber, pronunciation: pronunciationSpecs });
   const fishOptions = speechProvider === 'fish-audio' ? resolveFishAudioOptions(process.env, { model: speechModel, voiceId: speechVoice }) : null;
   const sourceProject = await load(file);
   const projectId = sourceProject.project?.id;
@@ -181,13 +189,13 @@ if (command === 'assets') {
     const assetId = 'generated-narration-' + String(index + 1).padStart(3, '0');
     const audioFile = path.join(realProjectRoot, 'assets', 'narration', 'segment-' + String(index + 1).padStart(3, '0') + speechInfo.extension);
     const receipt = speechProvider === 'fish-audio'
-      ? await generateFishAudioSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')), apiKey: fishOptions.apiKey, model: fishOptions.model, voiceId: fishOptions.voiceId, speed: speechSpeedNumber })
+      ? await generateFishAudioSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')), apiKey: fishOptions.apiKey, model: fishOptions.model, voiceId: segment.voiceId ?? fishOptions.voiceId, speed: speechSpeedNumber, locale: segment.locale ?? direction.locale, pronunciation: segment.pronunciation ?? direction.pronunciation })
       : await generateSpeech(segment.text, { outputPath: audioFile, projectRoot: realProjectRoot, timeoutMs: Number(option('--timeout-ms', '120000')) });
     const durationFrames = Math.max(1, Math.ceil(receipt.audio.durationSeconds / secondsPerFrame));
     const endFrame = startFrame + durationFrames;
     if (endFrame > project.project.totalDurationFrames) throw new Error('Generated narration segment ' + (index + 1) + ' extends beyond the project duration; revise the script or increase the target duration before attaching audio.');
     const relativeUri = path.relative(realProjectRoot, audioFile).split(path.sep).join('/');
-    const assetMetadata = { generated: true, provider: receipt.provider, ...(speechProvider === 'fish-audio' ? { model: receipt.model, voiceId: receipt.voiceId, speed: receipt.speed, providerFreeTier: true, terms: receipt.providerTerms.note } : {}), sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds, trailingSilenceTrimmedSeconds: receipt.trailingSilenceTrimmed };
+    const assetMetadata = { generated: true, provider: receipt.provider, ...(speechProvider === 'fish-audio' ? { model: receipt.model, voiceId: receipt.voiceId, speed: receipt.speed, locale: receipt.locale, pronunciationApplied: receipt.pronunciationApplied, providerFreeTier: true, terms: receipt.providerTerms.note } : {}), sampleRate: receipt.audio.sampleRate, channels: receipt.audio.channels, durationSeconds: receipt.audio.durationSeconds, trailingSilenceTrimmedSeconds: receipt.trailingSilenceTrimmed };
     project.assets = [...(project.assets || []).filter(item => item.id !== assetId), { id: assetId, kind: 'audio', uri: relativeUri, sha256: receipt.sha256, byteSize: receipt.byteSize, source: speechProvider === 'fish-audio' ? 'fish-audio' : 'generated-local-speech', rightsStatus: 'unknown', metadata: assetMetadata }];
     assetIds.push(assetId); receipts.push(receipt);
     cues.push({ assetId, kind: 'narration', offsetFrames: startFrame, durationFrames, volume: Number(option('--gain', '1')) });
@@ -402,5 +410,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, adobeMcpPackages: ['@kumoproductions/mcp-aftereffects', 'premiere-pro-mcp'], note: 'Run scripts/doctor.mjs for installed Adobe application and connector state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>], render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>] [--locale en-US] [--pronunciation "Term=Phonetic"]…, render-threejs <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, premiere export, doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }
