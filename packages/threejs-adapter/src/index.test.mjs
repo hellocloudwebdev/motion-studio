@@ -120,15 +120,18 @@ test('model layers compile the GLTFLoader and copy the model into composition as
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-// Runtime renders need the HyperFrames CLI and headless browser; environments
-// without them skip instead of failing the suite (same contract as the
-// blender-adapter fixture tests).
+// Runtime renders need the HyperFrames CLI and a usable headless browser;
+// environments without them skip instead of failing the suite (same contract
+// as the blender-adapter fixture tests). CI sets MOTION_STUDIO_SKIP_BROWSER_
+// TESTS=1 because docs/CI.md scopes browser rendering to developer hosts.
+const browserTestsSkipped = process.env.MOTION_STUDIO_SKIP_BROWSER_TESTS === '1';
 async function hyperframesToolchainAvailable() {
+  if (browserTestsSkipped) return false;
   try { await resolveHyperFramesCli(); return true; }
   catch { return false; }
 }
 
-test('alpha scene renders a verified transparent PNG sequence', { skip: await hyperframesToolchainAvailable() ? false : 'HyperFrames toolchain is required.' }, async () => {
+test('alpha scene renders a verified transparent PNG sequence', { skip: await hyperframesToolchainAvailable() ? false : 'HyperFrames browser toolchain is required (CI sets MOTION_STUDIO_SKIP_BROWSER_TESTS=1).' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-three-alpha-render-'));
   try {
     const input = project({ alpha: true });

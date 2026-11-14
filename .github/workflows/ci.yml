@@ -63,6 +63,10 @@ jobs:
 
       - name: Run test suite
         run: npm test
+        env:
+          # docs/CI.md scope: browser rendering is runtime-gated on developer
+          # hosts, not CI-gated — skip headless-browser tests in CI.
+          MOTION_STUDIO_SKIP_BROWSER_TESTS: '1'
 
       # Advisory only: tracked in the roadmap, reported in the job log, never
       # blocks the pipeline and nothing is uploaded. See docs/CI.md.
