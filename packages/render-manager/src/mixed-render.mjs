@@ -3,6 +3,7 @@ import path from 'node:path';
 import { renderHyperFramesProject, rationalFps, safeSceneId, compilerBlockerWarnings, createMediaQaContext } from './index.mjs';
 import { analyzeRenderedMedia } from './media-analysis.mjs';
 import { renderBlenderScene } from '../../blender-adapter/src/index.mjs';
+import { renderThreeJsScene } from '../../threejs-adapter/src/index.mjs';
 import { routeScenes, projectIrSha256, evaluateRenderEvidence, createRepairPlan, persistQaRecord } from '../../core/src/index.mjs';
 import { assembleScenes, countVideoFrames, normalizeAssemblyAudioInputs, probeMedia, runMediaCommand } from '../../ffmpeg/src/index.mjs';
 
@@ -13,7 +14,7 @@ import { assembleScenes, countVideoFrames, normalizeAssemblyAudioInputs, probeMe
 // The assembled master stays video-only unless the caller supplies
 // audioInputs, in which case cues are mixed in at assembly time (see
 // mixedRenderLimitations).
-const MIXED_SUPPORTED_ENGINES = new Set(['hyperframes', 'blender']);
+const MIXED_SUPPORTED_ENGINES = new Set(['hyperframes', 'blender', 'threejs']);
 const MIXED_LIMITATIONS = [
   { code: 'SINGLE_SCENE_MULTI_ENGINE_UNSUPPORTED', reason: 'v1 renders every scene on exactly one engine; scenes mixing HyperFrames and Blender layers are rejected before rendering instead of being silently split.' },
   { code: 'ASSEMBLY_IS_VIDEO_ONLY', reason: 'Scene assembly concatenates video segments without audio; audio mixing happens at delivery through finalizeMedia.' }
@@ -33,7 +34,7 @@ export function mixedRenderLimitations(audioEnabled) {
 // tasks span multiple engines, or that route to engines outside the v1 mixed
 // path (threejs, after-effects, ffmpeg-only), come back as `unsupported`.
 export function classifyMixedScenes(plans) {
-  const classification = { hyperframes: [], blender: [], unsupported: [] };
+  const classification = { hyperframes: [], blender: [], threejs: [], unsupported: [] };
   for (const plan of Array.isArray(plans) ? plans : []) {
     const engines = [...new Set((plan.tasks || []).map(task => task.engine))];
     if (!engines.length) classification.unsupported.push({ sceneId: plan.sceneId, reason: 'no-engine-tasks', engines });
@@ -146,7 +147,7 @@ export async function renderMixedProject(project, options = {}) {
   const routing = routeScenes(project, { availableEngines: [...MIXED_SUPPORTED_ENGINES] });
   const classification = classifyMixedScenes(routing.plans);
   if (classification.unsupported.length) {
-    throw new Error('Mixed render v1 supports only whole-scene HyperFrames or whole-scene Blender renders. Unsupported scenes: '
+    throw new Error('Mixed render v1 supports only whole-scene HyperFrames, Blender or Three.js renders. Unsupported scenes: '
       + classification.unsupported.map(item => item.sceneId + ' [' + item.reason + ': ' + item.engines.join(', ') + ']').join('; ')
       + '. Scenes mixing 2D and 3D layers in one composition cannot be composited in v1; split them into separate scenes in the Canonical Video IR.');
   }
@@ -229,6 +230,52 @@ export async function renderMixedProject(project, options = {}) {
       durationFrames: timelineEntry.durationFrames, media, frameCount,
       verified: true, passed: analysis.passed === true, findings: shiftedFindings,
       qa: null, blender: { renderer: blenderReceipt.renderer, blenderVersion: blenderReceipt.blenderVersion, threads: blenderReceipt.threads, framesDirectory: blenderReceipt.framesDirectory, frameCount: blenderReceipt.frameCount, retriedFrames: blenderReceipt.retriedFrames, frameEvidenceDigest: blenderReceipt.frameEvidenceDigest }
+    });
+    findings.push(...shiftedFindings);
+  }
+
+  // 2c. Three.js scenes: WebGL scenes render through the threejs adapter and
+  //     enter assembly as independently verified MP4 segments. Alpha
+  //     (PNG-sequence) scenes have no video segment and stay unsupported in
+  //     the mixed path — they are rejected before any render work.
+  for (const sceneId of classification.threejs) {
+    const scene = (project.scenes || []).find(item => item.id === sceneId);
+    if (!scene) throw new Error('Three.js scene ' + sceneId + ' is missing from the Canonical Video IR.');
+    if (scene?.production?.alpha === true) throw new Error('Mixed assembly cannot include alpha Three.js scene ' + sceneId + ' (PNG-sequence output); render it separately and attach it in editorial assembly.');
+    const timelineEntry = timelineById.get(sceneId);
+    const adapterQuality = quality === 'delivery' || quality === 'looks' ? 'high' : quality;
+    const receipt = await renderThreeJsScene(project, sceneId, {
+      projectRoot,
+      outputRoot: path.join(outputRoot, renderLabel, 'threejs', safeSceneId(sceneId)),
+      quality: adapterQuality,
+      sourceRoot: options.sourceRoot ?? projectRoot,
+      ...(options.installRoot !== undefined ? { installRoot: options.installRoot } : {}),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      signal, ...(options.onLine ? { onLine } : {})
+    });
+    const segmentPath = receipt.artifact.path;
+    const media = await probeMedia(segmentPath, { signal });
+    const frameCount = await countVideoFrames(segmentPath, { signal });
+    const expectedSeconds = timelineEntry.durationFrames / fps.value;
+    const checks = {
+      dimensionsMatch: media.width === canvas.width && media.height === canvas.height,
+      frameRateMatch: frameRateMatches(media, fps.value),
+      frameCountMatchesIr: frameCount === timelineEntry.durationFrames,
+      durationWithinOneFrame: Math.abs(media.durationSeconds - expectedSeconds) <= 1 / fps.value + 0.02,
+      nonEmpty: receipt.artifact.byteSize > 0
+    };
+    if (!Object.values(checks).every(Boolean)) throw new Error('Three.js scene segment failed verification for scene ' + sceneId + ': ' + JSON.stringify({ checks, media }));
+    const midpoint = Math.max(0, expectedSeconds / 2 - 1 / fps.value);
+    const framePath = path.join(outputRoot, 'qa-frames', 'mixed-' + safeSceneId(sceneId) + '.png');
+    const frameInfo = await extractQaFrame(segmentPath, midpoint, framePath, signal);
+    const analysis = await analyzeRenderedMedia({ input: segmentPath, media, frameEvidence: [{ sceneId, atSeconds: midpoint, path: framePath, bytes: frameInfo.size, decoded: frameInfo.size > 0 }], options: mediaAnalysisOptions, signal });
+    const shiftedFindings = analysis.findings.map(finding => ({ ...shiftFindingToTimeline(finding, timelineEntry.startFrame, fps.value), sceneId }));
+    segmentByScene.set(sceneId, segmentPath);
+    sceneReceipts.push({
+      sceneId, engine: 'threejs', output: segmentPath, bytes: receipt.artifact.byteSize,
+      durationFrames: timelineEntry.durationFrames, media, frameCount,
+      verified: receipt.verified === true, passed: analysis.passed === true, findings: shiftedFindings,
+      qa: null, threejs: { artifact: receipt.artifact, hyperframesVersion: receipt.hyperframesVersion || null }
     });
     findings.push(...shiftedFindings);
   }

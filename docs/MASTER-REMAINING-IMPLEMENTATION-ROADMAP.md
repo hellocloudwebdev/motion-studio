@@ -306,7 +306,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 **Deliverable:** `@motion-studio/threejs-adapter`, compiler, shader/preset library, browser render integration and tests.
 
-**Status:** Core adapter and the local 3-second runtime fixture are implemented and runtime verified on 2026-11-10 (HyperFrames lint/check/snapshot/render passed; FFprobe verified 1280×720, 30 fps, 90 frames, H.264; rendered frame visually inspected). Model imports, custom shaders, particles, alpha/image-sequence output, and mixed-scene editorial inclusion remain open.
+**Status:** Core adapter and the local 3-second runtime fixture are implemented and runtime verified on 2026-11-10 (HyperFrames lint/check/snapshot/render passed; FFprobe verified 1280×720, 30 fps, 90 frames, H.264; rendered frame visually inspected). **Status (2026-11-14): GLB imports, alpha PNG-sequence output and mixed-scene editorial inclusion DONE.** Model layers resolve .glb/.gltf assets inside the workspace (fail-closed on missing/mis-typed/escaping URIs), compile through an import-map + GLTFLoader with the absolute path kept out of the browser; `scene.production.alpha` renders a verified transparent PNG sequence (one HyperFrames snapshot per frame, IHDR color-type 6 asserted, ≤600 frames); mixed assembly renders Three.js scenes as independently verified MP4 segments (alpha scenes rejected before render). Custom shaders and particles remain open. Also fixed: the snapshot PNG signature check was a 7-byte prefix (missing the 'G' byte) and could never have matched.
 
 **Exit gate:** An IR-defined procedural 3D scene renders frame-accurately and appears in a final video.
 
@@ -356,7 +356,7 @@ delivery/
 
 **Exit gate:** A successful production creates a self-describing, integrity-checked delivery package with all required source and evidence artifacts.
 
-**Status:** Local FFmpeg integration tests create a package from a real two-second MP4, verify portable asset remapping and hashes, reject a path escape, and detect post-package tampering. Full acceptance still needs the narrated production bundle, editorial manifest/source projects, reproducibility comparison, and production-ready render evidence.
+**Status (2026-11-14): DONE for the locally-verifiable scope.** Local FFmpeg integration tests create a package from a real two-second MP4, verify portable asset remapping and hashes, reject a path escape, and detect post-package tampering. The full acceptance bundle test now covers the narrated production bundle (user-owned generated narration mixed into the master variant), editorial-manifest evidence, and reproducibility (captions/portable IR/asset manifest/editorial evidence byte-identical across two independent deliveries); production-ready render evidence stays gated by the same acceptance predicate. Encoder-threaded variant bytes are intentionally not compared (scheduling-dependent).
 
 ## Milestone 1.9 — Learning, portability, security and release hardening
 

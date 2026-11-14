@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProject } from '../../core/src/index.mjs';
@@ -10,12 +10,26 @@ import { resolveHyperFramesCli } from '../../render-manager/src/index.mjs';
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const PRIMITIVES = new Set(['box', 'sphere', 'icosahedron', 'cylinder', 'cone', 'torus', 'plane']);
 const HEX = /^#[\da-f]{6}$/i;
+const MODEL_EXTENSIONS = /\.(glb|gltf)$/i;
+// Alpha sequences snapshot one frame per HyperFrames invocation; the cap keeps
+// the runtime bounded on low-power hosts.
+const MAX_ALPHA_SEQUENCE_FRAMES = 600;
 
 function inside(root, target, label) {
   const resolvedRoot = path.resolve(root), resolvedTarget = path.resolve(target);
   const relative = path.relative(resolvedRoot, resolvedTarget);
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error(label + ' must be a child path inside the project workspace.');
   return resolvedTarget;
+}
+
+function resolveModelAsset(sourceRoot, asset, layerId) {
+  const uri = typeof asset?.uri === 'string' ? asset.uri : '';
+  if (!MODEL_EXTENSIONS.test(uri)) throw new Error('Three.js model import supports .glb and .gltf assets only; asset ' + asset.id + ' points at ' + (uri || '(no uri)') + '.');
+  const resolvedRoot = path.resolve(sourceRoot);
+  const candidate = path.resolve(resolvedRoot, uri);
+  const relative = path.relative(resolvedRoot, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Layer ' + layerId + ' model asset ' + asset.id + ' must stay inside the project workspace.');
+  return candidate;
 }
 
 function vector(value, fallback, field) {
@@ -30,10 +44,11 @@ function vector(value, fallback, field) {
   return result;
 }
 
-function sceneSpec(project, scene) {
+function sceneSpec(project, scene, sourceRoot) {
   if (!scene || !Array.isArray(scene.layers) || scene.layers.length === 0) throw new Error('Three.js scene must contain at least one authored layer.');
   const durationFrames = scene.durationFrames;
   if (!Number.isInteger(durationFrames) || durationFrames < 1) throw new Error('Three.js scene duration must be a positive integer frame count.');
+  const alpha = scene?.production?.alpha === true;
   const objects = [];
   let camera = scene.camera || {};
   for (const layer of scene.layers) {
@@ -42,12 +57,7 @@ function sceneSpec(project, scene) {
       continue;
     }
     if (layer.kind !== '3d') throw new Error('Three.js adapter does not support layer kind ' + layer.kind + '; route mixed 2D content through its own engine and editorial assembly.');
-    if (layer.assetId) throw new Error('Three.js model asset import is not implemented yet; refusing to replace it with placeholder geometry.');
     const content = layer.content && typeof layer.content === 'object' && !Array.isArray(layer.content) ? layer.content : {};
-    const primitive = content.primitive;
-    if (!PRIMITIVES.has(primitive)) throw new Error('Layer ' + layer.id + ' needs a supported explicit Three.js primitive.');
-    const color = content.material?.color || layer.style?.color || project.brand?.colors?.accent || '#ffffff';
-    if (!HEX.test(color)) throw new Error('Layer ' + layer.id + ' has an invalid material color.');
     const keyframes = content.keyframes || [];
     if (!Array.isArray(keyframes)) throw new Error('Layer ' + layer.id + ' keyframes must be an array.');
     let previousFrame = -1;
@@ -61,6 +71,27 @@ function sceneSpec(project, scene) {
         scale: keyframe.scale === undefined ? null : vector(keyframe.scale, {}, 'keyframe.scale')
       };
     });
+    if (layer.assetId) {
+      // GLB/GLTF model import (roadmap Three.js extensions): the asset must
+      // exist in the IR and resolve to a real model file inside the project
+      // workspace at compile time — placeholder geometry is never substituted.
+      const asset = (Array.isArray(project.assets) ? project.assets : []).find(item => item?.id === layer.assetId);
+      if (!asset) throw new Error('Layer ' + layer.id + ' references model asset ' + layer.assetId + ', which is missing from the Canonical Video IR.');
+      const modelFile = resolveModelAsset(sourceRoot, asset, layer.id);
+      objects.push({
+        id: layer.id,
+        model: { assetId: asset.id, source: modelFile, format: MODEL_EXTENSIONS.exec(asset.uri)[1].toLowerCase() },
+        position: vector(content.position ?? layer.transform, { x: 0, y: 0, z: 0 }, 'layer.position'),
+        rotation: vector(content.rotation, { x: 0, y: 0, z: 0 }, 'layer.rotation'),
+        scale: vector(content.scale, { x: 1, y: 1, z: 1 }, 'layer.scale'),
+        frames
+      });
+      continue;
+    }
+    const primitive = content.primitive;
+    if (!PRIMITIVES.has(primitive)) throw new Error('Layer ' + layer.id + ' needs a supported explicit Three.js primitive or a .glb/.gltf model asset.');
+    const color = content.material?.color || layer.style?.color || project.brand?.colors?.accent || '#ffffff';
+    if (!HEX.test(color)) throw new Error('Layer ' + layer.id + ' has an invalid material color.');
     objects.push({
       id: layer.id,
       primitive,
@@ -76,6 +107,7 @@ function sceneSpec(project, scene) {
   const lookAt = vector(camera.lookAt, { x: 0, y: 0, z: 0 }, 'camera.lookAt');
   const fov = Number(camera.fov ?? 45);
   if (!Number.isFinite(fov) || fov < 10 || fov > 120) throw new Error('Camera fov must be between 10 and 120 degrees.');
+  if (alpha && durationFrames > MAX_ALPHA_SEQUENCE_FRAMES) throw new Error('Alpha PNG-sequence output supports scenes up to ' + MAX_ALPHA_SEQUENCE_FRAMES + ' frames (scene ' + scene.id + ' declares ' + durationFrames + ').');
   return {
     projectId: project.project.id,
     projectRevision: project.project.revision || 1,
@@ -85,6 +117,7 @@ function sceneSpec(project, scene) {
     height: project.project.canvas.height,
     frameRate: project.project.frameRate,
     durationFrames,
+    alpha,
     background: project.brand?.colors?.background || '#101010',
     camera: { position, lookAt, fov },
     objects
@@ -97,30 +130,50 @@ function htmlFor(spec) {
   const encodedSpec = Buffer.from(JSON.stringify(spec), 'utf8').toString('base64');
   const duration = spec.durationFrames * spec.frameRate.denominator / spec.frameRate.numerator;
   if (!HEX.test(spec.background)) throw new Error('Three.js scene background must be a #RRGGBB color.');
+  const hasModels = spec.objects.some(item => item.model);
+  // Alpha output composites over nothing: the renderer clears to transparent
+  // and the scene carries no background color.
+  const alpha = spec.alpha === true;
+  const backgroundCss = alpha ? 'transparent' : spec.background;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${spec.sceneName.replace(/[&<>"']/g, '')}</title>
-<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${spec.background}} [data-composition-id]{position:relative;overflow:hidden;width:${spec.width}px;height:${spec.height}px;transform-origin:50% 50%;background:${spec.background}} canvas{display:block;width:100%;height:100%}</style>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${backgroundCss}} [data-composition-id]{position:relative;overflow:hidden;width:${spec.width}px;height:${spec.height}px;transform-origin:50% 50%;background:${backgroundCss}} canvas{display:block;width:100%;height:100%}</style>
+<script type="importmap">{"imports":{"three":"./assets/three.module.js"}}</script>
 <script src="./assets/gsap.min.js"></script></head><body>
 <div id="${compositionId}" data-composition-id="${compositionId}" data-start="0" data-duration="${duration}" data-width="${spec.width}" data-height="${spec.height}"><canvas id="render"></canvas></div>
 <script type="module">
-import * as THREE from './assets/three.module.js';
+import * as THREE from 'three';
+${hasModels ? "import { GLTFLoader } from './assets/GLTFLoader.js';" : ''}
 const spec=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob('${encodedSpec}'),c=>c.charCodeAt(0))));
 const compositionId=${JSON.stringify(compositionId)};
 const canvas=document.getElementById('render');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'low-power'});
-renderer.setPixelRatio(1);renderer.setSize(spec.width,spec.height,false);renderer.setClearColor(spec.background,1);
-const scene=new THREE.Scene();scene.background=new THREE.Color(spec.background);
+const renderer=new THREE.WebGLRenderer({canvas,antialias:false,alpha:${alpha},powerPreference:'low-power'});
+renderer.setPixelRatio(1);renderer.setSize(spec.width,spec.height,false);renderer.setClearColor(0x000000,${alpha ? '0' : '1'});
+const scene=new THREE.Scene();${alpha ? '' : 'scene.background=new THREE.Color(spec.background);'}
 const camera=new THREE.PerspectiveCamera(spec.camera.fov,spec.width/spec.height,0.1,10000);
 camera.position.set(spec.camera.position.x,spec.camera.position.y,spec.camera.position.z);camera.lookAt(spec.camera.lookAt.x,spec.camera.lookAt.y,spec.camera.lookAt.z);
 scene.add(new THREE.AmbientLight(0xffffff,1.6));
 const keyLight=new THREE.DirectionalLight(0xffffff,2.2);keyLight.position.set(-3,5,7);scene.add(keyLight);
 function geometry(primitive){switch(primitive){case'box':return new THREE.BoxGeometry(1,1,1);case'sphere':return new THREE.SphereGeometry(.5,32,24);case'icosahedron':return new THREE.IcosahedronGeometry(.62,1);case'cylinder':return new THREE.CylinderGeometry(.5,.5,1,32);case'cone':return new THREE.ConeGeometry(.55,1,32);case'torus':return new THREE.TorusGeometry(.48,.18,16,48);case'plane':return new THREE.PlaneGeometry(1,1);default:throw new Error('Unsupported primitive');}}
-const instances=spec.objects.map(item=>{const object=new THREE.Mesh(geometry(item.primitive),new THREE.MeshStandardMaterial({color:item.color,metalness:.15,roughness:.55}));object.name=item.id;scene.add(object);return{spec:item,object};});
+const instances=[];
+for(const item of spec.objects){
+  let object;
+  if(item.model){object=new THREE.Group();object.name=item.id;}
+  else{object=new THREE.Mesh(geometry(item.primitive),new THREE.MeshStandardMaterial({color:item.color,metalness:.15,roughness:.55}));object.name=item.id;}
+  scene.add(object);instances.push({spec:item,object});
+}
 function mix(a,b,t){return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};}
 function transformAt(item,frame){const keys=item.frames;if(!keys.length)return{position:item.position,rotation:item.rotation,scale:item.scale};let left={frame:0,position:item.position,rotation:item.rotation,scale:item.scale},right=null;for(const key of keys){right={frame:key.frame,position:key.position||left.position,rotation:key.rotation||left.rotation,scale:key.scale||left.scale};if(frame<=right.frame)break;left=right;right=null;}if(!right)return{position:left.position,rotation:left.rotation,scale:left.scale};const t=right.frame===left.frame?0:Math.max(0,Math.min(1,(frame-left.frame)/(right.frame-left.frame)));return{position:mix(left.position,right.position,t),rotation:mix(left.rotation,right.rotation,t),scale:mix(left.scale,right.scale,t)};}
 function renderAtFrame(frame){for(const {spec:item,object} of instances){const t=transformAt(item,frame);object.position.set(t.position.x,t.position.y,t.position.z);object.rotation.set(t.rotation.x,t.rotation.y,t.rotation.z);object.scale.set(t.scale.x,t.scale.y,t.scale.z);}renderer.render(scene,camera);}
-const playhead={frame:0};const timeline=gsap.timeline({paused:true});timeline.fromTo(document.getElementById(compositionId),{scale:.99},{scale:1,duration:${duration},ease:'none'},0);timeline.to(playhead,{frame:spec.durationFrames,duration:${duration},ease:'none',onUpdate:()=>renderAtFrame(playhead.frame)},0);window.__timelines=window.__timelines||{};window.__timelines[compositionId]=timeline;window.renderAtFrame=renderAtFrame;renderAtFrame(0);window.__threeReady=true;
+const playhead={frame:0};const timeline=gsap.timeline({paused:true});timeline.fromTo(document.getElementById(compositionId),{scale:.99},{scale:1,duration:${duration},ease:'none'},0);timeline.to(playhead,{frame:spec.durationFrames,duration:${duration},ease:'none',onUpdate:()=>renderAtFrame(playhead.frame)},0);window.__timelines=window.__timelines||{};window.__timelines[compositionId]=timeline;window.renderAtFrame=renderAtFrame;
+${hasModels ? `const loader=new GLTFLoader();
+const modelItems=spec.objects.filter(item=>item.model);
+Promise.all(modelItems.map(item=>new Promise((resolve,reject)=>loader.load(item.model.file,resolve,undefined,reject)))).then(gltfs=>{
+  for(const [index,gltf] of gltfs.entries()){instances.find(entry=>entry.spec===modelItems[index]).object.add(gltf.scene);}
+  window.__threeReady=true;
+}).catch(error=>{window.__threeError=String(error&&error.message||error);});` : 'window.__threeReady=true;'}
+renderAtFrame(0);
 </script></body></html>`;
 }
 
@@ -143,17 +196,17 @@ function execute(executable, args, { cwd, env = process.env, timeoutMs = 600_000
   });
 }
 
-export function validateThreeJsScene(project, sceneId) {
+export function validateThreeJsScene(project, sceneId, { sourceRoot } = {}) {
   const validation = validateProject(project);
   if (!validation.valid) return { valid: false, issues: validation.issues };
   const scene = project.scenes.find(item => item.id === sceneId);
   if (!scene) return { valid: false, issues: [{ code: 'SCENE_NOT_FOUND', sceneId }] };
-  try { return { valid: true, scene: sceneSpec(project, scene), issues: [] }; }
+  try { return { valid: true, scene: sceneSpec(project, scene, sourceRoot ?? process.cwd()), issues: [] }; }
   catch (error) { return { valid: false, issues: [{ code: 'THREEJS_SCENE_UNSUPPORTED', message: error.message }] }; }
 }
 
 export async function compileThreeJsScene(project, sceneId, options = {}) {
-  const validation = validateThreeJsScene(project, sceneId);
+  const validation = validateThreeJsScene(project, sceneId, { sourceRoot: options.sourceRoot });
   if (!validation.valid) throw new Error('Cannot render Three.js scene: ' + JSON.stringify(validation.issues));
   const spec = validation.scene;
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
@@ -163,17 +216,35 @@ export async function compileThreeJsScene(project, sceneId, options = {}) {
   const threeCoreSource = path.resolve(options.installRoot || MODULE_ROOT, 'node_modules', 'three', 'build', 'three.core.js');
   const gsapSource = path.resolve(options.installRoot || MODULE_ROOT, 'node_modules', 'gsap', 'dist', 'gsap.min.js');
   await Promise.all([access(threeSource), access(threeCoreSource), access(gsapSource)]);
-  await Promise.all([
+  const hasModels = spec.objects.some(item => item.model);
+  const gltfLoaderSource = path.resolve(options.installRoot || MODULE_ROOT, 'node_modules', 'three', 'examples', 'jsm', 'loaders', 'GLTFLoader.js');
+  if (hasModels) await access(gltfLoaderSource);
+  const browserSpec = structuredClone(spec);
+  const copies = [
     copyFile(threeSource, path.join(outputDir, 'assets', 'three.module.js')),
     copyFile(threeCoreSource, path.join(outputDir, 'assets', 'three.core.js')),
-    copyFile(gsapSource, path.join(outputDir, 'assets', 'gsap.min.js')),
-    writeFile(path.join(outputDir, 'index.html'), htmlFor(spec), 'utf8')
-  ]);
+    copyFile(gsapSource, path.join(outputDir, 'assets', 'gsap.min.js'))
+  ];
+  if (hasModels) {
+    copies.push(copyFile(gltfLoaderSource, path.join(outputDir, 'assets', 'GLTFLoader.js')));
+    for (const object of browserSpec.objects) {
+      if (!object.model) continue;
+      // The browser loads models from the composition's assets directory; the
+      // spec's absolute workspace path stays compile-only provenance.
+      const fileName = String(object.model.assetId).replace(/[^a-zA-Z0-9_-]/g, '-') + '.' + object.model.format;
+      await access(object.model.source);
+      copies.push(copyFile(object.model.source, path.join(outputDir, 'assets', fileName)));
+      object.model.file = './assets/' + fileName;
+      delete object.model.source;
+    }
+  }
+  copies.push(writeFile(path.join(outputDir, 'index.html'), htmlFor(browserSpec), 'utf8'));
+  await Promise.all(copies);
   return { outputDir, htmlPath: path.join(outputDir, 'index.html'), spec };
 }
 
 export async function renderThreeJsScene(project, sceneId, options = {}) {
-  const validation = validateThreeJsScene(project, sceneId);
+  const validation = validateThreeJsScene(project, sceneId, { sourceRoot: options.sourceRoot });
   if (!validation.valid) throw new Error('Cannot render Three.js scene: ' + JSON.stringify(validation.issues));
   const spec = validation.scene;
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
@@ -198,6 +269,47 @@ export async function renderThreeJsScene(project, sceneId, options = {}) {
   };
   await run('lint', ['lint', outputDir, '--json']);
   await run('check', ['check', outputDir, '--json']);
+  // Alpha output (roadmap Three.js extensions): transparent PNG image sequence,
+  // one HyperFrames snapshot per frame, verified RGBA before the receipt.
+  if (spec.alpha === true) {
+    const framesDir = path.join(outputDir, 'frames');
+    await mkdir(framesDir, { recursive: true });
+    const frames = [];
+    for (let frame = 0; frame < spec.durationFrames; frame += 1) {
+      const perFrameDir = path.join(framesDir, 'capture-' + String(frame).padStart(4, '0'));
+      await rm(perFrameDir, { recursive: true, force: true });
+      await run('snapshot', ['snapshot', outputDir, '--at', String(frame), '--output', perFrameDir, '--describe', 'false']);
+      // The snapshot emits the requested frame first plus a next-step extra
+      // and a contact sheet; the earliest frame-*.png is the requested one.
+      const produced = (await readdir(perFrameDir)).filter(name => /^frame-.*\.png$/i.test(name)).sort();
+      if (!produced.length) throw new Error('Alpha snapshot for frame ' + frame + ' produced no PNG evidence.');
+      const pngBytes = await readFile(path.join(perFrameDir, produced[0]));
+      // PNG IHDR color type: byte 25 of a standard PNG; 6 = RGBA (truecolor
+      // with alpha). RGB (2) or palette (3) means the transparency was lost.
+      if (pngBytes.length < 26 || pngBytes[25] !== 6) throw new Error('Alpha snapshot for frame ' + frame + ' lost transparency (PNG color type ' + (pngBytes.length > 25 ? pngBytes[25] : 'unknown') + ', expected 6/RGBA).');
+      const canonical = path.join(framesDir, 'frame-' + String(frame).padStart(4, '0') + '.png');
+      await writeFile(canonical, pngBytes);
+      frames.push(canonical);
+      // A just-closed headless browser can keep directory handles busy for a
+      // moment on Windows; retry the transient lock codes briefly.
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        try { await rm(perFrameDir, { recursive: true, force: true }); break; }
+        catch (error) {
+          if (attempt === 5 || !['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error.code)) throw error;
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+    }
+    const receipt = {
+      schemaVersion: '1.0.0', engine: 'threejs', projectId: spec.projectId, projectRevision: spec.projectRevision,
+      sceneId: spec.sceneId, sceneName: spec.sceneName, sourceSha256,
+      artifact: { container: 'png-sequence', alpha: true, framesDirectory: framesDir, frameCount: frames.length,
+        width: spec.width, height: spec.height, frameRate: spec.frameRate, durationFrames: spec.durationFrames, colorSpace: 'sRGB' },
+      checks, frames, verified: true, completedAt: new Date().toISOString(), hyperframesVersion: cli.version
+    };
+    await writeFile(path.join(framesDir, 'alpha-sequence.threejs.json'), JSON.stringify(receipt, null, 2) + '\n', 'utf8');
+    return receipt;
+  }
   const snapshotDir = path.join(outputDir, 'snapshots');
   await run('snapshot', ['snapshot', outputDir, '--at', '0', '--output', snapshotDir, '--describe', 'false']);
   const snapshots = (await readdir(snapshotDir)).filter(name => /^frame-.*\.png$/i.test(name));

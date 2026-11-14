@@ -10,20 +10,22 @@ test('classifies whole-scene engine tasks and rejects mixed-engine scenes for v1
   const classification = classifyMixedScenes([
     plan('scene-01', ['hyperframes']),
     plan('scene-02', ['blender']),
-    plan('scene-03', ['hyperframes'])
+    plan('scene-03', ['threejs']),
+    plan('scene-04', ['hyperframes'])
   ]);
-  assert.deepEqual(classification.hyperframes, ['scene-01', 'scene-03']);
+  assert.deepEqual(classification.hyperframes, ['scene-01', 'scene-04']);
   assert.deepEqual(classification.blender, ['scene-02']);
+  assert.deepEqual(classification.threejs, ['scene-03']);
   assert.deepEqual(classification.unsupported, []);
 
   const mixed = classifyMixedScenes([plan('scene-02', ['hyperframes', 'blender'])]);
   assert.deepEqual(mixed.hyperframes, []);
   assert.deepEqual(mixed.blender, []);
+  assert.deepEqual(mixed.threejs, []);
   assert.deepEqual(mixed.unsupported, [{ sceneId: 'scene-02', reason: 'multi-engine-scene', engines: ['hyperframes', 'blender'] }]);
 
-  const outside = classifyMixedScenes([plan('scene-04', ['threejs']), plan('scene-05', ['ffmpeg']), plan('scene-06', [])]);
+  const outside = classifyMixedScenes([plan('scene-05', ['ffmpeg']), plan('scene-06', [])]);
   assert.deepEqual(outside.unsupported.map(item => [item.sceneId, item.reason]), [
-    ['scene-04', 'engine-unsupported-in-v1'],
     ['scene-05', 'engine-unsupported-in-v1'],
     ['scene-06', 'no-engine-tasks']
   ]);

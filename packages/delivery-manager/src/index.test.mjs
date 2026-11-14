@@ -260,3 +260,52 @@ test('a reflowed variant source with mismatching dimensions fails closed', async
     }), /but the target requires/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+// Full acceptance bundle (roadmap delivery status): narrated production audio,
+// editorial manifest evidence, and packaging reproducibility — the same inputs
+// must produce byte-identical deterministic package artifacts across runs.
+
+test('full acceptance bundle: narrated audio, editorial evidence and reproducible packaging', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-acceptance-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    input.delivery.targets = [
+      { id: 'master', format: 'mp4', width: 320, height: 180, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', audioRequired: true }
+    ];
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    // Narrated production: a real generated narration wav packaged as a
+    // user-owned audio asset and mixed into the master variant.
+    const narration = path.join(projectDir, 'narration.wav');
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=330:duration=2', '-c:a', 'pcm_s16le', narration]);
+    input.assets = [{ id: 'narration-1', kind: 'audio', uri: 'narration.wav', rightsStatus: 'user-owned' }];
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const editorialAssembly = { assemblyVersion: '1.0.0', project: input.project, sequence: { durationFrames: 60 }, scenes: [{ sceneId: 'scene-01', startFrame: 0, durationFrames: 60 }], clips: [{ id: 'clip-1', sceneId: 'scene-01', track: 'V1', startFrame: 0, durationFrames: 60 }] };
+    const audioInputs = [{ path: narration, offsetSeconds: 0, volume: 1, kind: 'narration' }];
+    const buildOptions = { project: input, projectFile, sourceVideo, projectRoot: root, renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly, operationHistory: [{ stage: 'render', status: 'passed' }], audioInputs };
+    const first = await buildDeliveryPackage({ ...buildOptions, outputRoot: path.join(root, 'delivery-a') });
+    const second = await buildDeliveryPackage({ ...buildOptions, outputRoot: path.join(root, 'delivery-b') });
+    for (const result of [first, second]) {
+      assert.equal(result.acceptance.passed, true, 'narrated bundle accepted: ' + JSON.stringify(result.acceptance));
+      assert.equal(result.variants[0].media.hasAudio, true, 'the master variant carries the mixed narration');
+      assert.equal(result.variants[0].mediaAnalysis.passed, true);
+      const editorial = JSON.parse(await readFile(result.evidence.editorialAssembly, 'utf8'));
+      assert.equal(editorial.assemblyVersion, '1.0.0');
+      assert.deepEqual(editorial.clips, editorialAssembly.clips, 'the editorial manifest is packaged as evidence');
+    }
+    // Reproducibility: every deterministic package artifact is byte-identical
+    // across runs (variant MP4 bytes depend on encoder thread scheduling and
+    // are intentionally not compared).
+    for (const artifact of ['captions.srt', 'captions.vtt', 'project-portable.json', 'asset-manifest.json', 'evidence/editorial-assembly.json', 'evidence/operation-history.json']) {
+      const a = await readFile(path.join(root, 'delivery-a', artifact));
+      const b = await readFile(path.join(root, 'delivery-b', artifact));
+      assert.deepEqual(a, b, artifact + ' is byte-identical across independent deliveries');
+    }
+    assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery-a'))).passed, true);
+    assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery-b'))).passed, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

@@ -99,12 +99,16 @@ test('writeInstallRecord persists the failure record with a recovery hint', asyn
 test('installer lifecycle smoke: --dry-run reports without writing any state', async () => {
   // Cross-platform lifecycle smoke (P4.2): the dry run exercises flag
   // parsing, node-version gating, software detection and report assembly with
-  // zero host writes. The full npm-install path still requires a host run.
-  const previousAppData = process.env.APPDATA;
+  // zero host writes. Every platform config-root env var points at the same
+  // temp dir (APPDATA on Windows, XDG_CONFIG_HOME elsewhere) so the record
+  // path assertion holds on all three OSes. The full npm-install path still
+  // requires a host run.
   const tempConfigRoot = await mkdtemp(path.join(os.tmpdir(), 'motion-install-config-'));
-  process.env.APPDATA = tempConfigRoot;
   try {
-    const result = spawnSync(process.execPath, [INSTALLER, '--dry-run', '--skip-hosts', '--minimal'], { encoding: 'utf8', timeout: 120_000 });
+    const result = spawnSync(process.execPath, [INSTALLER, '--dry-run', '--skip-hosts', '--minimal'], {
+      encoding: 'utf8', timeout: 120_000,
+      env: { ...process.env, APPDATA: tempConfigRoot, LOCALAPPDATA: tempConfigRoot, XDG_CONFIG_HOME: tempConfigRoot }
+    });
     assert.equal(result.status, 0, 'dry run exits cleanly: ' + result.stderr?.slice(-400));
     const jsonStart = result.stdout.indexOf('{');
     assert.ok(jsonStart >= 0, 'the installer prints its JSON report');
@@ -113,12 +117,10 @@ test('installer lifecycle smoke: --dry-run reports without writing any state', a
     assert.equal(report.status, undefined, 'a clean run does not carry the failure status');
     assert.ok(Array.isArray(report.needsUserAction));
     assert.ok(report.detected && typeof report.detected.supported === 'boolean');
-    assert.ok(report.recordPath.startsWith(tempConfigRoot), 'the record path honors APPDATA');
+    assert.ok(report.recordPath.startsWith(tempConfigRoot), 'the record path honors the platform config root');
     assert.equal(existsSync(report.recordPath), false, 'a dry run never writes the install record');
     assert.ok(result.stdout.includes('DRY RUN'));
   } finally {
-    if (previousAppData === undefined) delete process.env.APPDATA;
-    else process.env.APPDATA = previousAppData;
     await rm(tempConfigRoot, { recursive: true, force: true });
   }
 });
