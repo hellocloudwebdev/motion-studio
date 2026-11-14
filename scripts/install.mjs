@@ -10,13 +10,73 @@ import { detectAdobeApplications } from './software-detect.mjs';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
+
+// Pure flag parsing (P4.2): exported so the installer lifecycle tests can pin
+// the option surface without spawning the installer.
+export function parseInstallerFlags(argv) {
+  const flags = new Set(argv);
+  return {
+    flags,
+    yes: flags.has('--yes') || flags.has('-y'),
+    minimal: flags.has('--minimal') || flags.has('--skip-software'),
+    skipHosts: flags.has('--skip-hosts'),
+    installCep: flags.has('--install-premiere-cep'),
+    dryRun: flags.has('--dry-run'),
+    help: flags.has('--help') || flags.has('-h')
+  };
+}
+
+// Pure Adobe-guidance decision (P4.2): the exact messages, MCP status rows and
+// follow-up actions the installer produces for every detected-software shape.
+// main() performs the side effects (openUrl, CEP install, token setup) from
+// this decision, so tests can pin the guidance without touching a host.
+export function adobeGuidance(detected, { installCep = false } = {}) {
+  const needsUserAction = [];
+  const openUrls = [];
+  const adobeMcp = {};
+  const actions = { runCepInstall: false, premiereTokenSetup: false };
+  if (!detected?.creativeCloud?.installed) {
+    // Adobe status rows below still run without Creative Cloud: the guidance
+    // must record what is missing on the host, not only what to install next.
+    needsUserAction.push('Install Adobe Creative Cloud Desktop and sign in with an account that includes After Effects and Premiere Pro.');
+    openUrls.push('https://helpx.adobe.com/download-install/apps/download-install-apps/creative-cloud-apps/download-creative-cloud-apps.html');
+  } else {
+    if (!detected.afterEffects?.installed) needsUserAction.push('Install After Effects from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+    if (!detected.premierePro?.installed) needsUserAction.push('Install Premiere Pro from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
+    if (!detected.afterEffects?.installed || !detected.premierePro?.installed) openUrls.push('https://creativecloud.adobe.com/apps/download/creative-cloud');
+  }
+  if (detected.afterEffects?.installed) {
+    adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, mode: 'read-only-default', arbitraryEval: false };
+    needsUserAction.push('In After Effects, enable Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network, then launch After Effects for MCP control.');
+  } else adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
+  if (detected.premierePro?.installed) {
+    const detectedYear = Number(detected.premierePro.version || 0);
+    if (detectedYear >= 2026) {
+      actions.premiereTokenSetup = true;
+    } else {
+      adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'compatibility decision required', status: 'needs-user-action' };
+      needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
+    }
+  } else adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', host: 'missing', status: 'needs-user-install' };
+  if (installCep && detected.premierePro?.installed) {
+    actions.runCepInstall = true;
+    adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'CEP', status: 'install-command-completed' };
+  }
+  return { needsUserAction, openUrls, adobeMcp, actions };
+}
+
+// Failure tracking (P4.2/P4.3): the install record is written even when the
+// installer fails, with a recovery hint, so a failed run is never silent.
+export function installRecordPath(configRoot) {
+  return path.join(configRoot, 'motion-studio', 'install.json');
+}
+export async function writeInstallRecord(recordPath, report) {
+  await mkdir(path.dirname(recordPath), { recursive: true });
+  await writeFile(recordPath, JSON.stringify({ ...report, installedAt: new Date().toISOString() }, null, 2) + '\n');
+}
+
 const argv = process.argv.slice(2);
-const flags = new Set(argv);
-const yes = flags.has('--yes') || flags.has('-y');
-const minimal = flags.has('--minimal') || flags.has('--skip-software');
-const skipHosts = flags.has('--skip-hosts');
-const installCep = flags.has('--install-premiere-cep');
-const dryRun = flags.has('--dry-run');
+const { flags, yes, minimal, skipHosts, installCep, dryRun, help } = parseInstallerFlags(argv);
 const platform = process.platform;
 const home = os.homedir();
 const configRoot = platform === 'win32' ? (process.env.APPDATA || path.join(home, 'AppData', 'Roaming')) : (process.env.XDG_CONFIG_HOME || path.join(home, '.config'));
@@ -209,39 +269,39 @@ async function main() {
   report.detected = detectAdobeApplications();
   if (!report.detected.supported) report.warnings.push(report.detected.note);
   else {
-    if (!report.detected.creativeCloud.installed) {
-      report.needsUserAction.push('Install Adobe Creative Cloud Desktop and sign in with an account that includes After Effects and Premiere Pro.');
-      openUrl('https://helpx.adobe.com/download-install/apps/download-install-apps/creative-cloud-apps/download-creative-cloud-apps.html');
-    } else {
-      if (!report.detected.afterEffects.installed) report.needsUserAction.push('Install After Effects from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
-      if (!report.detected.premierePro.installed) report.needsUserAction.push('Install Premiere Pro from Creative Cloud Desktop. Motion Studio cannot sign in or activate Adobe products for you.');
-      if (!report.detected.afterEffects.installed || !report.detected.premierePro.installed) openUrl('https://creativecloud.adobe.com/apps/download/creative-cloud');
-    }
-    if (report.detected.afterEffects.installed) {
-      report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, mode: 'read-only-default', arbitraryEval: false };
-      report.needsUserAction.push('In After Effects, enable Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network, then launch After Effects for MCP control.');
-    } else report.adobeMcp.afterEffects = { package: '@kumoproductions/mcp-aftereffects@0.3.2', installed: true, host: 'missing', status: 'needs-user-install' };
-    if (report.detected.premierePro.installed) {
-      const detectedYear = Number(report.detected.premierePro.version || 0);
-      if (detectedYear >= 2026) await setupPremiereToken();
-      else {
-        report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'compatibility decision required', status: 'needs-user-action' };
-        report.needsUserAction.push('Check the exact Premiere version. Authenticated UXP requires Premiere 25.6+; for older versions use the signed CEP compatibility connector. Run with --install-premiere-cep to install CEP.');
-      }
-    } else report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', host: 'missing', status: 'needs-user-install' };
-    if (installCep && report.detected.premierePro.installed) {
-      runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
-      report.adobeMcp.premiere = { package: 'premiere-pro-mcp@1.30.0', connector: 'CEP', status: 'install-command-completed' };
-    }
+    const guidance = adobeGuidance(report.detected, { installCep });
+    report.needsUserAction.push(...guidance.needsUserAction);
+    report.adobeMcp = guidance.adobeMcp;
+    for (const url of guidance.openUrls) openUrl(url);
+    if (guidance.actions.premiereTokenSetup) await setupPremiereToken();
+    if (guidance.actions.runCepInstall) runNpm(['exec', '--', 'premiere-pro-mcp', '--install-cep'], 'Installing upstream Premiere CEP connector', appRoot);
   }
   if (!skipHosts) await stageHosts();
   else report.warnings.push('Host integrations skipped by --skip-hosts.');
 
-  const recordPath = path.join(configRoot, 'motion-studio', 'install.json');
+  const recordPath = installRecordPath(configRoot);
   if (!dryRun) {
-    await mkdir(path.dirname(recordPath), { recursive: true });
-    await writeFile(recordPath, JSON.stringify({ ...report, installedAt: new Date().toISOString(), installPath: appRoot }, null, 2) + '\n');
+    await writeInstallRecord(recordPath, { ...report, installPath: appRoot });
   }
   console.log(JSON.stringify({ ...report, installPath: appRoot, recordPath }, null, 2));
 }
-await main();
+
+// Self-run gate + failure tracking (P4.2): the module is importable for tests;
+// a real run that fails still writes its install record with a recovery hint,
+// so a failed install is never silent and re-runs are idempotent.
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+  try {
+    await main();
+  } catch (error) {
+    report.status = 'failed';
+    report.error = error?.message ?? String(error);
+    report.recovery = 'Re-run the installer with the same options; it is idempotent — already-installed components are detected and skipped, and partial state is refreshed.';
+    try {
+      const recordPath = installRecordPath(configRoot);
+      await writeInstallRecord(recordPath, { ...report, installPath: appRoot });
+      console.error('Motion Studio install FAILED. Record written to ' + recordPath);
+    } catch { console.error('Motion Studio install FAILED and the failure record could not be written.'); }
+    console.error(error?.stack || String(error));
+    process.exitCode = 1;
+  }
+}
