@@ -4,6 +4,7 @@ import { renderHyperFramesProject, rationalFps, safeSceneId, compilerBlockerWarn
 import { analyzeRenderedMedia } from './media-analysis.mjs';
 import { renderBlenderScene } from '../../blender-adapter/src/index.mjs';
 import { renderThreeJsScene } from '../../threejs-adapter/src/index.mjs';
+import { renderEffectCraftScene } from '../../effectcraft-adapter/src/index.mjs';
 import { routeScenes, projectIrSha256, evaluateRenderEvidence, createRepairPlan, persistQaRecord } from '../../core/src/index.mjs';
 import { assembleScenes, countVideoFrames, normalizeAssemblyAudioInputs, probeMedia, runMediaCommand } from '../../ffmpeg/src/index.mjs';
 
@@ -14,7 +15,7 @@ import { assembleScenes, countVideoFrames, normalizeAssemblyAudioInputs, probeMe
 // The assembled master stays video-only unless the caller supplies
 // audioInputs, in which case cues are mixed in at assembly time (see
 // mixedRenderLimitations).
-const MIXED_SUPPORTED_ENGINES = new Set(['hyperframes', 'blender', 'threejs']);
+const MIXED_SUPPORTED_ENGINES = new Set(['hyperframes', 'blender', 'threejs', 'effectcraft']);
 const MIXED_LIMITATIONS = [
   { code: 'SINGLE_SCENE_MULTI_ENGINE_UNSUPPORTED', reason: 'v1 renders every scene on exactly one engine; scenes mixing HyperFrames and Blender layers are rejected before rendering instead of being silently split.' },
   { code: 'ASSEMBLY_IS_VIDEO_ONLY', reason: 'Scene assembly concatenates video segments without audio; audio mixing happens at delivery through finalizeMedia.' }
@@ -276,6 +277,46 @@ export async function renderMixedProject(project, options = {}) {
       durationFrames: timelineEntry.durationFrames, media, frameCount,
       verified: receipt.verified === true, passed: analysis.passed === true, findings: shiftedFindings,
       qa: null, threejs: { artifact: receipt.artifact, hyperframesVersion: receipt.hyperframesVersion || null }
+    });
+    findings.push(...shiftedFindings);
+  }
+
+  // 2d. EffectCraft scenes: the free specialist engine renders IR shape/text
+  //     comps through its engine commands and enters assembly as an
+  //     independently verified MP4 segment.
+  for (const sceneId of classification.effectcraft) {
+    const timelineEntry = timelineById.get(sceneId);
+    if (!timelineEntry) throw new Error('EffectCraft scene ' + sceneId + ' has no assembly timeline entry.');
+    const receipt = await renderEffectCraftScene(project, sceneId, {
+      projectRoot,
+      outputRoot: path.join(outputRoot, renderLabel, 'effectcraft', safeSceneId(sceneId)),
+      engineRoot: path.join(projectRoot, 'engines', 'effectcraft', safeSceneId(sceneId)),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      signal, ...(options.onLine ? { onLine } : {})
+    });
+    const segmentPath = receipt.artifact.path;
+    const media = await probeMedia(segmentPath, { signal });
+    const frameCount = await countVideoFrames(segmentPath, { signal });
+    const expectedSeconds = timelineEntry.durationFrames / fps.value;
+    const checks = {
+      dimensionsMatch: media.width === canvas.width && media.height === canvas.height,
+      frameRateMatch: frameRateMatches(media, fps.value),
+      frameCountMatchesIr: frameCount === timelineEntry.durationFrames,
+      durationWithinOneFrame: Math.abs(media.durationSeconds - expectedSeconds) <= 1 / fps.value + 0.02,
+      nonEmpty: receipt.artifact.byteSize > 0
+    };
+    if (!Object.values(checks).every(Boolean)) throw new Error('EffectCraft scene segment failed verification for scene ' + sceneId + ': ' + JSON.stringify({ checks, media }));
+    const midpoint = Math.max(0, expectedSeconds / 2 - 1 / fps.value);
+    const framePath = path.join(outputRoot, 'qa-frames', 'mixed-' + safeSceneId(sceneId) + '.png');
+    const frameInfo = await extractQaFrame(segmentPath, midpoint, framePath, signal);
+    const analysis = await analyzeRenderedMedia({ input: segmentPath, media, frameEvidence: [{ sceneId, atSeconds: midpoint, path: framePath, bytes: frameInfo.size, decoded: frameInfo.size > 0 }], options: mediaAnalysisOptions, signal });
+    const shiftedFindings = analysis.findings.map(finding => ({ ...shiftFindingToTimeline(finding, timelineEntry.startFrame, fps.value), sceneId }));
+    segmentByScene.set(sceneId, segmentPath);
+    sceneReceipts.push({
+      sceneId, engine: 'effectcraft', output: segmentPath, bytes: receipt.artifact.byteSize,
+      durationFrames: timelineEntry.durationFrames, media, frameCount,
+      verified: receipt.verified === true, passed: analysis.passed === true, findings: shiftedFindings,
+      qa: null, effectcraft: { artifact: receipt.artifact, skippedLayers: receipt.skippedLayers }
     });
     findings.push(...shiftedFindings);
   }
