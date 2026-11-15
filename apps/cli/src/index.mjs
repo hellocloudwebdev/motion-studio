@@ -13,6 +13,7 @@ import { scanAssetDirectory, verifyAssetRegistry, approveAssetRights, attachAsse
 import { generateMediaDerivatives } from '../../../packages/media-derivatives/src/index.mjs';
 import { createEditorialAssembly, validateEditorialAssembly } from '../../../packages/editorial-assembly/src/index.mjs';
 import { exportEditorialInterchange } from '../../../packages/editorial-interchange/src/index.mjs';
+import { importInterchangeIntoFilmCraft } from '../../../packages/editorial-interchange/src/filmcraft-commands.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
 import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
@@ -96,7 +97,7 @@ if (command === 'assets') {
   // `premiere export` is kept as a back-compat alias: the FCPXML output is
   // importable by Premiere Pro (licensed stack) and FilmCraft (free stack) alike.
   const assemblyFile = args.find(x => !x.startsWith('--'));
-  if (!assemblyFile) throw new Error('Usage: motion-studio interchange export <assembly.json> --output <sequence.fcpxml> [--asset-root <directory>] [--manifest <handoff.json>] [--allow-unsupported] (alias: premiere export)');
+  if (!assemblyFile) throw new Error('Usage: motion-studio interchange export <assembly.json> --output <sequence.fcpxml> [--asset-root <directory>] [--manifest <handoff.json>] [--allow-unsupported] (alias: premiere export; subcommand filmcraft builds a live .fcproj)');
   const assembly = await load(assemblyFile);
   const result = await exportEditorialInterchange(assembly, {
     assetRoot: option('--asset-root', undefined),
@@ -113,6 +114,20 @@ if (command === 'assets') {
     await writeFile(path.resolve(manifestPath), JSON.stringify(result.manifest, null, 2) + '\n', 'utf8');
     print({ valid: true, output: path.resolve(output), manifest: path.resolve(manifestPath), warnings: result.issues });
   }
+} else if (command === 'interchange' && file === 'filmcraft') {
+  // FilmCraft handoff: import a Motion Studio FCPXML interchange into a real
+  // .fcproj through FilmCraft's own file.import (which accepts interchange
+  // documents and links the referenced media). Fails closed when
+  // filmcraft-cli is not installed.
+  const fcpxmlFile = args.find(x => !x.startsWith('--'));
+  if (!fcpxmlFile) throw new Error('Usage: motion-studio interchange filmcraft <sequence.fcpxml> --project <out.fcproj> [--filmcraft-cli <path>]');
+  const result = await importInterchangeIntoFilmCraft({
+    fcpxmlPath: path.resolve(fcpxmlFile),
+    projectPath: path.resolve(option('--project', 'imported.fcproj')),
+    filmcraftCommand: option('--filmcraft-cli', undefined)
+  });
+  print(result);
+  if (!result.ok) process.exitCode = 2;
 } else if (command === 'media' && file === 'derive') {
   const source = args.find(x => !x.startsWith('--'));
   const outputDir = option('--output-dir', 'media-derived');

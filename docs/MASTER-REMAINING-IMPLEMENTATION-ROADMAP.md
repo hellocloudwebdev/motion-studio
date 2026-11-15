@@ -274,11 +274,11 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - [x] Save, render (`effectcraft-cli render`), read back composition/render state and return artifact paths plus operation evidence. (2026-11-15: `--project roundtrip.ecproj render --comp Main` → H.264 640×360, 60 frames, 30 fps, 2.0 s in 0.17 s; independently FFprobe-verified. Artifacts: `D:/motions/craft-roundtrip/`.)
 
 **FilmCraft**
-- [ ] Import verified scene renders and EffectCraft outputs via FCPXML interchange. **FilmCraft 0.20.1 gap:** it EXPORTS FCPXML/OTIO/AAF/EDL but has no FCPXML import yet (AAF + media import only) — watch the upstream releases; AAF is the current import path.
+- [x] Import verified scene renders and EffectCraft outputs via FCPXML interchange. **Closed 2026-11-15:** FilmCraft's `file.import` is polymorphic — it accepts interchange documents, importing a Motion Studio FCPXML as a linked-media sequence (`documents[0]: format FCPXML, linkedMedia 1, offlineMedia [], sequences [1]`). The earlier "no FCPXML import" conclusion was wrong: the command's params don't advertise the document format, but the import works. Wrapped as `packages/editorial-interchange/src/filmcraft-commands.mjs` (`importInterchangeIntoFilmCraft`: import + save in one session, reopen, discover the sequence id from the project tree, activate it) and the CLI `interchange filmcraft <sequence.fcpxml> --project <out.fcproj>`; live-verified on this PC.
 - [x] Create sequences and organize tracks. (2026-11-15: `file.newProject`/`file.newSequence`/`file.importDemoFootage`/`timeline.place` via `filmcraft-cli run --commands`; project saved to `.fcproj`.)
 - [ ] Position clips precisely; apply supported transitions; add narration/music/SFX/captions; color and sound post where supported.
-- [x] Read back sequence structure after edits; save checkpoints; export through the supported FilmCraft workflow. (2026-11-15: `file.saveAs` → `.fcproj`; `file.exportInterchange` → FCPXML 1.10 — the same format family Motion Studio's editorial-interchange emits, with an honest per-clip report.)
-- [x] Independently inspect exported media. (2026-11-15: `filmcraft-cli export fc-export.mp4 --format h264` in 8.1 s → FFprobe-verified 320×180, H.264, 30 fps, 10.0 s.)
+- [x] Read back sequence structure after edits; save checkpoints; export through the supported FilmCraft workflow. (2026-11-15: `file.saveAs` → `.fcproj`; `file.exportInterchange` → FCPXML 1.10; handoff project re-opens with `activeSequence` persisted.)
+- [x] Independently inspect exported media. (2026-11-15: two FFprobe-verified exports — demo sequence 320×180 H.264 30 fps 10.0 s in 8.1 s, and the imported Motion Studio FCPXML sequence exported in 3.5 s.)
 
 **Governance**
 - [ ] Exact-operation approvals for writes; project/sequence scope; pre-edit checkpoints; post-edit readback.
