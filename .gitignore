@@ -19,3 +19,4 @@ projects/**/temp/
 
 # Local scratch workspace (agent run logs, probes)
 work/
+editorial-handoff.json
