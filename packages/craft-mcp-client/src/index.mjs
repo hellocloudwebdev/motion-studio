@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { access } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -54,7 +55,7 @@ export function validateCraftOperationApproval({ approval, projectId, runId, app
 // known per-user install roots come last. `resolveCraftCommand` probes the
 // candidates with fs and returns the first that exists; with none on disk it
 // returns the bare name so spawn surfaces a clear PATH error.
-export function craftCommandCandidates({ app, env = process.env, platform = process.platform, home = null } = {}) {
+export function craftCommandCandidates({ app, env = process.env, platform = process.platform, home = null, systemUsersRoot = platform === 'win32' ? 'C:\\Users' : null } = {}) {
   if (!CRAFT_APPS.has(app)) throw new Error('app must be effectcraft or filmcraft.');
   const join = platform === 'win32' ? path.win32.join : path.posix.join;
   const homeDir = home || env.USERPROFILE || env.HOME || '';
@@ -65,6 +66,19 @@ export function craftCommandCandidates({ app, env = process.env, platform = proc
   if (platform === 'win32') {
     for (const root of [env.LOCALAPPDATA, homeDir ? join(homeDir, 'AppData', 'Local') : '', homeDir ? join(homeDir, 'AppData', 'Roaming') : ''].filter(Boolean)) {
       list.push(join(root, 'Programs', app, 'bin', app + '-cli.exe'));
+    }
+    // The ArtCraft launcher's per-user MSI layout installs into the profile
+    // root of the user who ran it — which is not always the current user
+    // (shared machines). Enumerate every profile directory.
+    if (systemUsersRoot) {
+      try {
+        for (const entry of readdirSync(systemUsersRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory() || entry.name.startsWith('$') || entry.name === 'Public' || entry.name === 'Default') continue;
+          const profile = join(systemUsersRoot, entry.name);
+          list.push(join(profile, app, app + '-cli.exe'));
+          list.push(join(profile, 'AppData', 'Local', 'Programs', app, 'bin', app + '-cli.exe'));
+        }
+      } catch { /* unreadable users root: the PATH fallback still applies */ }
     }
   } else if (platform === 'darwin') {
     list.push(join('/Applications', capitalized(app) + '.app', 'Contents', 'MacOS', app + '-cli'), '/usr/local/bin/' + app + '-cli', '/usr/bin/' + app + '-cli');

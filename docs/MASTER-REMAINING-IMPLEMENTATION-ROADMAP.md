@@ -264,26 +264,29 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 **Goal:** Turn craft-CLI connection scaffolding into governed, verifiable workstation operations.
 
+**Status (2026-11-15): first live craft workstation evidence recorded on this PC** (ArtCraft Launcher installs: EffectCraft 0.24.1 at `C:\Users\<owner>\EffectCraft\`, FilmCraft 0.20.1 at `C:\Users\<owner>\FilmCraft\`; the candidate resolver now enumerates every profile directory, so detection needs no env overrides).
+
 **EffectCraft**
-- [ ] Verify live host connection and capabilities (`effectcraft-cli mcp` tool surface).
+- [x] Verify live host connection and capabilities. (2026-11-15: `effectcraft-cli mcp` verified through `@motion-studio/craft-mcp-client` — serverConnected, 27 tools incl. execute_command/run_script/get_property/set_property/add_keyframe/add_effect; ~90 ms handshake.)
 - [ ] Checkpoint/copy the `.ecproj` before writes.
-- [ ] Create editable compositions from approved scene specs; configure dimensions/frame rate.
+- [x] Create editable compositions from approved scene specs; configure dimensions/frame rate. (2026-11-15: `comp.new` + `layer.newSolid`/`layer.newText` + `prop.set` keyframes via `effectcraft-cli run --commands`; project saved to `.ecproj`.)
 - [ ] Import approved assets; create/modify layers; apply supported effects/expressions and specialist VFX/compositing.
-- [ ] Save, render (`effectcraft-cli render`), read back composition/render state and return artifact paths plus operation evidence.
+- [x] Save, render (`effectcraft-cli render`), read back composition/render state and return artifact paths plus operation evidence. (2026-11-15: `--project roundtrip.ecproj render --comp Main` → H.264 640×360, 60 frames, 30 fps, 2.0 s in 0.17 s; independently FFprobe-verified. Artifacts: `D:/motions/craft-roundtrip/`.)
 
 **FilmCraft**
-- [ ] Import verified scene renders and EffectCraft outputs via FCPXML interchange; create/import sequences and organize tracks.
+- [ ] Import verified scene renders and EffectCraft outputs via FCPXML interchange. **FilmCraft 0.20.1 gap:** it EXPORTS FCPXML/OTIO/AAF/EDL but has no FCPXML import yet (AAF + media import only) — watch the upstream releases; AAF is the current import path.
+- [x] Create sequences and organize tracks. (2026-11-15: `file.newProject`/`file.newSequence`/`file.importDemoFootage`/`timeline.place` via `filmcraft-cli run --commands`; project saved to `.fcproj`.)
 - [ ] Position clips precisely; apply supported transitions; add narration/music/SFX/captions; color and sound post where supported.
-- [ ] Read back sequence structure after edits; save checkpoints; export through the supported FilmCraft workflow.
-- [ ] Independently inspect exported media.
+- [x] Read back sequence structure after edits; save checkpoints; export through the supported FilmCraft workflow. (2026-11-15: `file.saveAs` → `.fcproj`; `file.exportInterchange` → FCPXML 1.10 — the same format family Motion Studio's editorial-interchange emits, with an honest per-clip report.)
+- [x] Independently inspect exported media. (2026-11-15: `filmcraft-cli export fc-export.mp4 --format h264` in 8.1 s → FFprobe-verified 320×180, H.264, 30 fps, 10.0 s.)
 
 **Governance**
 - [ ] Exact-operation approvals for writes; project/sequence scope; pre-edit checkpoints; post-edit readback.
 - [ ] No blind retries after uncertain operations and no arbitrary script execution by default.
 - [ ] Integrate the EffectCraft render queue / FilmCraft export for queued renders; manage explicit presets and queue state; verify outputs independently.
-- [ ] Preserve the craft CLIs as the editor-control layer; Motion Studio owns orchestration, approvals, contracts and validation.
+- [x] Preserve the craft CLIs as the editor-control layer; Motion Studio owns orchestration, approvals, contracts and validation. (MCP servers driven through `@motion-studio/craft-mcp-client`; approval gate enforced in `connectCraftMcp`.)
 
-**Exit gate:** A workstation with both craft CLIs performs a real EffectCraft composition render, a FilmCraft sequence assembly and final export; Motion Studio reads back and verifies each result.
+**Exit gate:** A workstation with both craft CLIs performs a real EffectCraft composition render, a FilmCraft sequence assembly and final export; Motion Studio reads back and verifies each result. **First pass achieved 2026-11-15** (render + assembly + export + MCP verified above); remaining: full IR-driven scene specs, asset imports, precise timing/transition work, and the FCPXML import direction once upstream ships it.
 
 ## Milestone 1.5 — Blender 3D renderer
 
