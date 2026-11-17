@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+
 import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -71,6 +72,42 @@ test('rejects invalid colors and empty text with explicit issues', () => {
   assert.ok(plan.issues.some(issue => issue.code === 'EFFECTCRAFT_TEXT_REQUIRED'));
 });
 
+test('IR effects become effect.apply + per-index param steps with camelCase ids', () => {
+  const fixture = projectFixture();
+  fixture.scenes[0].layers[1].effects = [
+    { name: 'Gaussian Blur', params: { Blurriness: 20, 'Repeat Edge': true } },
+    { name: 'Tint' }
+  ];
+  const plan = planEffectCraftScene(fixture, 'scene-01');
+  assert.equal(plan.valid, true);
+  const barName = plan.steps.find(step => step.id === 'layer.newSolid' && step.params.name.includes('bar')).params.name;
+  const effectSteps = plan.steps.filter(step => step.id === 'effect.apply');
+  assert.deepEqual(effectSteps.map(step => step.params.effect), ['Gaussian Blur', 'Tint']);
+  assert.deepEqual(effectSteps.map(step => step.params.layers), [[barName], [barName]]);
+  const blurParams = plan.steps.filter(step => step.id === 'prop.set' && step.params.path.includes('effects/'));
+  assert.deepEqual(blurParams.map(step => step.params.path), ['effects/#1/blurriness', 'effects/#1/repeatEdge'], 'per-layer effect index and camelCase param ids');
+  assert.equal(blurParams[0].params.value, 20);
+});
+
+test('effects on asset layers are planned into the placement session', () => {
+  const fixture = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: 'a'.repeat(64) }], layers: [
+    { id: 'footage', kind: 'video', assetId: 'clip', transform: { x: 100, y: 90, width: 440, height: 180 }, effects: [{ name: 'Gaussian Blur', params: { Blurriness: 8 } }] }
+  ] });
+  const plan = planEffectCraftScene(fixture, 'scene-01');
+  assert.equal(plan.valid, true);
+  assert.equal(plan.assetLayers.length, 1);
+  assert.deepEqual(plan.assetLayers[0].phaseTwoEffects.map(step => step.id), ['effect.apply', 'prop.set']);
+  assert.equal(plan.assetLayers[0].phaseTwoEffects[0].params.layers[0], plan.assetLayers[0].name);
+});
+
+test('malformed effect entries fail with explicit issues', () => {
+  const fixture = projectFixture();
+  fixture.scenes[0].layers[1].effects = [{ params: { Blurriness: 5 } }];
+  const plan = planEffectCraftScene(fixture, 'scene-01');
+  assert.equal(plan.valid, false);
+  assert.ok(plan.issues.some(issue => issue.code === 'EFFECTCRAFT_EFFECT_NAME_REQUIRED'));
+});
+
 test('asset layers produce import requests with checksum requirements', () => {
   const good = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: 'a'.repeat(64) }], layers: [
     { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
@@ -119,6 +156,20 @@ test('live render places a real video asset into the comp at the IR box', { skip
     assert.deepEqual(receipt.assets[0].item, { width: 320, height: 180 }, 'the imported item is probed for scale-to-box');
     assert.equal(receipt.assets[0].box.width, 320);
     assert.ok(existsSync(receipt.ecprojPath));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live render applies IR effects to the rendered layer', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-fx-'));
+  try {
+    const input = projectFixture();
+    input.scenes[0].layers[1].effects = [{ name: 'Gaussian Blur', params: { Blurriness: 20 } }];
+    const receipt = await renderEffectCraftScene(input, 'scene-01', { projectRoot: root, quality: 'draft' });
+    assert.equal(receipt.verified, true);
+    // The saved .ecproj carries the effect: read it back through the CLI.
+    const command = await resolveEffectCraftCommand();
+    const props = spawnSync(command, ['--project', receipt.ecprojPath, 'props', 'scene-01', 'MS-bar', '--flat'], { encoding: 'utf8' });
+    assert.match(props.stdout, /effects\/#1\/blurriness\s+scalar\s+20\.0/, 'the effect param persisted at the planned path');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

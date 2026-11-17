@@ -37,6 +37,40 @@ function rgbOf(hex) {
   return [(value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255];
 }
 
+// IR effect params use the engine's display names ("Map Black To"); the
+// engine's property ids are lowerCamelCase ("mapBlackTo").
+function effectParamId(displayName) {
+  return String(displayName)
+    .trim()
+    .split(/\s+/)
+    .map((word, index) => index === 0 ? word.charAt(0).toLowerCase() + word.slice(1) : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('');
+}
+
+// Effect entries from the IR: [{name, params?{DisplayName: value}, time?}].
+// Returns the apply step + param steps. Effect indices are per-layer:
+// effects/#1 is the first effect applied on that layer.
+function effectStepsFor(layerEffects, layerName, issues, sceneId, layerId) {
+  const steps = [];
+  if (!Array.isArray(layerEffects)) return steps;
+  let effectIndex = 0;
+  for (const effect of layerEffects) {
+    if (!effect || typeof effect.name !== 'string' || !effect.name.trim()) {
+      issues.push({ code: 'EFFECTCRAFT_EFFECT_NAME_REQUIRED', severity: 'error', sceneId, layerId, message: 'Every effect needs a non-empty name.' });
+      continue;
+    }
+    effectIndex += 1;
+    steps.push({ id: 'effect.apply', params: { effect: effect.name.trim(), layers: [layerName] } });
+    if (effect.params && typeof effect.params === 'object' && !Array.isArray(effect.params)) {
+      for (const [displayName, value] of Object.entries(effect.params)) {
+        if (!displayName.trim()) { issues.push({ code: 'EFFECTCRAFT_EFFECT_PARAM_INVALID', severity: 'error', sceneId, layerId, message: 'Effect param names must be non-empty.' }); continue; }
+        steps.push({ id: 'prop.set', params: { layer: layerName, path: 'effects/#' + effectIndex + '/' + effectParamId(displayName), value } });
+      }
+    }
+  }
+  return steps;
+}
+
 // Motion presets become entrance keyframes on the first motion.durationFrames
 // (default 24) of the scene. Scale/opacity are percent-valued in EffectCraft;
 // position is a vec3 with z always 0 in 2D comps.
@@ -140,7 +174,7 @@ export function planEffectCraftScene(project, sceneId) {
       // Editorial in-point: the IR layer's sourceInFrame (seconds in the
       // source) becomes a slip after the layer is trimmed to the scene length.
       const sourceInFrames = Number.isInteger(layer?.sourceInFrame) && layer.sourceInFrame >= 0 ? layer.sourceInFrame : 0;
-      assetLayers.push({ importIndex, ref: 'asset:' + importIndex, clipId: layerLabel, assetId: asset.id, uri: asset.uri, sha256: asset.sha256.toLowerCase(), name, trimIn: secondsOf(sourceInFrames, fps), box: { x: Number(layer?.transform?.x) || 0, y: Number(layer?.transform?.y) || 0, width: Math.max(1, Math.round(Number(layer?.transform?.width) || canvas.width)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || canvas.height)) } });
+      assetLayers.push({ importIndex, ref: 'asset:' + importIndex, clipId: layerLabel, assetId: asset.id, uri: asset.uri, sha256: asset.sha256.toLowerCase(), name, trimIn: secondsOf(sourceInFrames, fps), phaseTwoEffects: effectStepsFor(layer?.effects, name, issues, scene.id, layerLabel), box: { x: Number(layer?.transform?.x) || 0, y: Number(layer?.transform?.y) || 0, width: Math.max(1, Math.round(Number(layer?.transform?.width) || canvas.width)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || canvas.height)) } });
       continue;
     }
     if (layer.kind === 'text') {
@@ -151,6 +185,7 @@ export function planEffectCraftScene(project, sceneId) {
       const x = Number(layer?.transform?.x) || 0, y = Number(layer?.transform?.y) || 0;
       steps.push({ id: 'layer.newText', params: { text, name, position: [x, y], size: Math.max(1, Math.round(Number(layer?.typography?.sizePx) || 24)), ...(color ? { fill: color } : {}) } });
       steps.push(...presetKeyframes(preset, { x, y }, layer, fps).map(frame => ({ id: 'prop.set', params: { layer: name, path: frame.path, value: frame.value, time: frame.time } })));
+      steps.push(...effectStepsFor(layer?.effects, name, issues, scene.id, layerLabel));
     } else {
       const color = layer?.style?.backgroundColor;
       if (!HEX.test(color || '')) { issues.push({ code: 'EFFECTCRAFT_COLOR_INVALID', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Shape fills must be #RRGGBB.' }); continue; }
@@ -162,6 +197,7 @@ export function planEffectCraftScene(project, sceneId) {
       steps.push({ id: 'layer.newSolid', params: { name, color, width, height } });
       if (x !== 0 || y !== 0) steps.push({ id: 'prop.set', params: { layer: name, path: 'transform/position', value: [x + width / 2, y + height / 2, 0], time: 0 } });
       steps.push(...presetKeyframes(preset, { x: x + width / 2, y: y + height / 2 }, layer, fps).map(frame => ({ id: 'prop.set', params: { layer: name, path: frame.path, value: frame.value, time: frame.time } })));
+      steps.push(...effectStepsFor(layer?.effects, name, issues, scene.id, layerLabel));
     }
   }
   const blocking = issues.filter(item => item.severity === 'error');
@@ -308,6 +344,7 @@ export async function renderEffectCraftScene(project, sceneId, options = {}) {
           ];
           if (asset.trimIn > 0) stepsForAsset.push({ id: 'layer.slip', params: { layers: [asset.name], delta: asset.trimIn } });
           stepsForAsset.push({ id: 'prop.set', params: { layer: asset.name, path: 'transform/scale', value: [scaleX, scaleY, 100], time: 0 } });
+          stepsForAsset.push(...(asset.phaseTwoEffects || []));
           return stepsForAsset;
         }).flat(),
         { id: 'file.saveAs', params: { path: ecprojPath } }
