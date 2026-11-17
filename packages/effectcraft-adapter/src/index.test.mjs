@@ -122,6 +122,25 @@ test('live render places a real video asset into the comp at the IR box', { skip
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('live render honors the editorial sourceInFrame via trim + slip', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-trim-'));
+  try {
+    await mkdir(path.join(root, 'media'), { recursive: true });
+    const clipPath = path.join(root, 'media', 'clip.mp4');
+    // 6-second source; the IR scene consumes 2 s starting at the 1 s in-point.
+    const fixture = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30:duration=6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', clipPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    if (fixture.status !== 0) throw new Error('ffmpeg fixture failed: ' + fixture.stderr);
+    const sha = createHash('sha256').update(await readFile(clipPath)).digest('hex');
+    const input = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: sha, byteSize: (await stat(clipPath)).size, rightsStatus: 'user-owned' }], layers: [
+      { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
+      { id: 'footage', kind: 'video', assetId: 'clip', sourceInFrame: 30, transform: { x: 160, y: 90, width: 320, height: 180 } }
+    ] });
+    const receipt = await renderEffectCraftScene(input, 'scene-01', { projectRoot: root, sourceRoot: root, quality: 'draft' });
+    assert.equal(receipt.verified, true);
+    assert.ok(Math.abs(receipt.artifact.durationSeconds - 2) <= 1 / 30, 'the comp keeps its 2 s duration');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('live render produces an FFprobe-verified MP4 from the IR scene', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-live-'));
   try {

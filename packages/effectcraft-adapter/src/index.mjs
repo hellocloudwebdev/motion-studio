@@ -137,7 +137,10 @@ export function planEffectCraftScene(project, sceneId) {
       if (!/^[a-f0-9]{64}$/i.test(asset?.sha256 || '')) { issues.push({ code: 'EFFECTCRAFT_ASSET_CHECKSUM_REQUIRED', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Asset ' + asset.id + ' needs a valid sha256 for the EffectCraft bridge.' }); continue; }
       if (typeof asset?.uri !== 'string' || !asset.uri.trim()) { issues.push({ code: 'EFFECTCRAFT_ASSET_URI_REQUIRED', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Asset ' + asset.id + ' has no uri.' }); continue; }
       const importIndex = assetLayers.length;
-      assetLayers.push({ importIndex, ref: 'asset:' + importIndex, clipId: layerLabel, assetId: asset.id, uri: asset.uri, sha256: asset.sha256.toLowerCase(), name, box: { x: Number(layer?.transform?.x) || 0, y: Number(layer?.transform?.y) || 0, width: Math.max(1, Math.round(Number(layer?.transform?.width) || canvas.width)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || canvas.height)) } });
+      // Editorial in-point: the IR layer's sourceInFrame (seconds in the
+      // source) becomes a slip after the layer is trimmed to the scene length.
+      const sourceInFrames = Number.isInteger(layer?.sourceInFrame) && layer.sourceInFrame >= 0 ? layer.sourceInFrame : 0;
+      assetLayers.push({ importIndex, ref: 'asset:' + importIndex, clipId: layerLabel, assetId: asset.id, uri: asset.uri, sha256: asset.sha256.toLowerCase(), name, trimIn: secondsOf(sourceInFrames, fps), box: { x: Number(layer?.transform?.x) || 0, y: Number(layer?.transform?.y) || 0, width: Math.max(1, Math.round(Number(layer?.transform?.width) || canvas.width)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || canvas.height)) } });
       continue;
     }
     if (layer.kind === 'text') {
@@ -294,11 +297,18 @@ export async function renderEffectCraftScene(project, sceneId, options = {}) {
           const scaleY = Math.round(asset.box.height / asset.itemHeight * 10000) / 100;
           // addItem selects the new layer, so the immediate rename targets it;
           // afterwards every prop.set addresses the deterministic MS- name.
-          return [
+          // Footage trims: the item is placed at full source length, so trim
+          // the layer out to the scene length first — then slip to the
+          // editorial in-point (slip clamps at the source bounds, and an
+          // out point equal to the full source length would clamp to zero).
+          const stepsForAsset = [
             { id: 'layer.addItem', params: { item: importedItems[asset.importIndex], time: 0, position: [asset.box.x + asset.box.width / 2, asset.box.y + asset.box.height / 2] } },
             { id: 'layer.rename', params: { name: asset.name } },
-            { id: 'prop.set', params: { layer: asset.name, path: 'transform/scale', value: [scaleX, scaleY, 100], time: 0 } }
+            { id: 'layer.timing', params: { layers: [asset.name], op: 'trimOutToTime', out: spec.durationSeconds } }
           ];
+          if (asset.trimIn > 0) stepsForAsset.push({ id: 'layer.slip', params: { layers: [asset.name], delta: asset.trimIn } });
+          stepsForAsset.push({ id: 'prop.set', params: { layer: asset.name, path: 'transform/scale', value: [scaleX, scaleY, 100], time: 0 } });
+          return stepsForAsset;
         }).flat(),
         { id: 'file.saveAs', params: { path: ecprojPath } }
       ];
