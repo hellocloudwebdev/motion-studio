@@ -1,25 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { planEffectCraftScene, renderEffectCraftScene, resolveEffectCraftCommand } from './index.mjs';
 
-function projectFixture({ preset = 'fade-up' } = {}) {
+function projectFixture({ preset = 'fade-up', assets = [], layers = null } = {}) {
   return {
     schemaVersion: '1.0.0',
     project: { id: 'ec-fixture', name: 'EC Fixture', objective: 'Verify the EffectCraft adapter.', frameRate: { numerator: 30, denominator: 1 }, canvas: { width: 640, height: 360, pixelAspectRatio: 1, safeAreaPercent: 5 }, totalDurationFrames: 60, colorSpace: 'Rec.709', revision: 3 },
     creative: { concept: 'c', audience: 'a', message: 'm', visualDirection: 'v' },
     brand: { colors: { background: '#10243a', accent: '#4ade80', text: '#ffffff' }, fonts: { display: 'Arial', body: 'Arial' } },
-    assets: [],
+    assets,
     scenes: [{
       id: 'scene-01', name: 'Scene One', startFrame: 0, durationFrames: 60, intent: 'Show the message.',
-      layers: [
+      layers: layers ?? [
         { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
         { id: 'bar', kind: 'shape', transform: { x: 60, y: 120, width: 200, height: 16 }, style: { backgroundColor: '#4ade80' }, motion: { preset, durationFrames: 24 } },
-        { id: 'title', kind: 'text', content: { text: 'Motion Studio x EffectCraft' }, typography: { family: 'Arial', sizePx: 42, lineHeight: 1.1, safeArea: true }, transform: { x: 320, y: 200, width: 520, height: 80 }, style: { color: '#ffffff' }, motion: { preset: 'fade', durationFrames: 20 } },
-        { id: 'asset-clip', kind: 'video', assetId: 'not-in-scope', transform: { x: 0, y: 0, width: 320, height: 180 } }
+        { id: 'title', kind: 'text', content: { text: 'Motion Studio x EffectCraft' }, typography: { family: 'Arial', sizePx: 42, lineHeight: 1.1, safeArea: true }, transform: { x: 320, y: 200, width: 520, height: 80 }, style: { color: '#ffffff' }, motion: { preset: 'fade', durationFrames: 20 } }
       ]
     }],
     audio: { tracks: [] },
@@ -35,8 +36,8 @@ test('plans a deterministic EffectCraft command script from the IR scene', () =>
   assert.equal(ids[0], 'comp.new');
   assert.equal(ids.filter(id => id === 'layer.newSolid').length, 2, 'both shape layers become solids');
   assert.equal(ids.filter(id => id === 'layer.newText').length, 1);
-  // The unsupported video layer is reported, never silently dropped.
-  assert.deepEqual(plan.skipped.map(item => item.layerId), ['asset-clip']);
+  assert.deepEqual(plan.skipped, [], 'no skipped layers in the shape/text fixture');
+  assert.deepEqual(plan.assetLayers, []);
   // fade-up on the bar: opacity 0→100 and position y+40→y in seconds.
   const barName = plan.steps.find(step => step.id === 'layer.newSolid' && step.params.name.includes('bar')).params.name;
   const barFrames = plan.steps.filter(step => step.id === 'prop.set' && step.params.layer === barName);
@@ -70,6 +71,23 @@ test('rejects invalid colors and empty text with explicit issues', () => {
   assert.ok(plan.issues.some(issue => issue.code === 'EFFECTCRAFT_TEXT_REQUIRED'));
 });
 
+test('asset layers produce import requests with checksum requirements', () => {
+  const good = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: 'a'.repeat(64) }], layers: [
+    { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
+    { id: 'footage', kind: 'video', assetId: 'clip', transform: { x: 100, y: 90, width: 440, height: 180 } }
+  ] });
+  const plan = planEffectCraftScene(good, 'scene-01');
+  assert.equal(plan.valid, true);
+  assert.equal(plan.assetLayers.length, 1);
+  assert.equal(plan.assetLayers[0].importIndex, 0);
+  assert.deepEqual(plan.assetLayers[0].box, { x: 100, y: 90, width: 440, height: 180 });
+  assert.equal(plan.steps.some(step => step.id === 'layer.addItem'), false, 'asset placement lives in the driver, not the static plan');
+  const missing = projectFixture({ layers: [{ id: 'footage', kind: 'video', assetId: 'ghost', transform: { x: 0, y: 0, width: 100, height: 100 } }] });
+  assert.match(planEffectCraftScene(missing, 'scene-01').issues.find(issue => issue.code === 'EFFECTCRAFT_ASSET_MISSING').message, /missing from the Canonical Video IR/);
+  const noChecksum = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4' }], layers: [{ id: 'footage', kind: 'video', assetId: 'clip', transform: { x: 0, y: 0, width: 100, height: 100 } }] });
+  assert.match(planEffectCraftScene(noChecksum, 'scene-01').issues.find(issue => issue.code === 'EFFECTCRAFT_ASSET_CHECKSUM_REQUIRED').message, /sha256/);
+});
+
 test('scene-not-found and invalid IR fail closed', () => {
   assert.equal(planEffectCraftScene(projectFixture(), 'missing').valid, false);
   const broken = projectFixture();
@@ -83,6 +101,27 @@ async function effectcraftAvailable() {
   catch { return false; }
 }
 
+test('live render places a real video asset into the comp at the IR box', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-asset-'));
+  try {
+    await mkdir(path.join(root, 'media'), { recursive: true });
+    const clipPath = path.join(root, 'media', 'clip.mp4');
+    const fixture = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', clipPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    if (fixture.status !== 0) throw new Error('ffmpeg fixture failed: ' + fixture.stderr);
+    const sha = createHash('sha256').update(await readFile(clipPath)).digest('hex');
+    const input = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: sha, byteSize: (await stat(clipPath)).size, rightsStatus: 'user-owned' }], layers: [
+      { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
+      { id: 'footage', kind: 'video', assetId: 'clip', transform: { x: 160, y: 90, width: 320, height: 180 } }
+    ] });
+    const receipt = await renderEffectCraftScene(input, 'scene-01', { projectRoot: root, sourceRoot: root, quality: 'draft' });
+    assert.equal(receipt.verified, true);
+    assert.equal(receipt.assets.length, 1);
+    assert.deepEqual(receipt.assets[0].item, { width: 320, height: 180 }, 'the imported item is probed for scale-to-box');
+    assert.equal(receipt.assets[0].box.width, 320);
+    assert.ok(existsSync(receipt.ecprojPath));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('live render produces an FFprobe-verified MP4 from the IR scene', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-live-'));
   try {
@@ -93,7 +132,7 @@ test('live render produces an FFprobe-verified MP4 from the IR scene', { skip: a
     assert.ok(Math.abs(receipt.artifact.durationSeconds - 2) <= 1 / 30, 'duration matches the IR scene');
     assert.equal(receipt.artifact.frameRate.numerator, 30);
     assert.ok(existsSync(receipt.ecprojPath), 'the scene .ecproj is kept in the workspace');
-    assert.equal(receipt.skippedLayers.length, 1);
+    assert.deepEqual(receipt.skippedLayers, []);
     const saved = JSON.parse(await readFile(receipt.artifact.path + '.effectcraft.json', 'utf8'));
     assert.equal(saved.engine, 'effectcraft');
     assert.ok((await stat(receipt.artifact.path)).size > 1000);

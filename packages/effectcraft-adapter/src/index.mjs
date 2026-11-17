@@ -103,6 +103,9 @@ function presetKeyframes(preset, target, layer, fps) {
 // Pure, deterministic planner: Canonical Video IR scene -> EffectCraft engine
 // command steps. Unsupported layer kinds are reported, never silently
 // dropped. The plan only uses live-verified command ids and property paths.
+// Asset layers (image/video) become phase-two placements: session 1 imports
+// the footage items, and the driver resolves each asset's item id (dynamic,
+// runtime-assigned) before emitting layer.addItem into session 2.
 export function planEffectCraftScene(project, sceneId) {
   const validation = validateProject(project);
   if (!validation.valid) return { valid: false, issues: validation.issues };
@@ -111,20 +114,32 @@ export function planEffectCraftScene(project, sceneId) {
   const issues = [];
   const skipped = [];
   const steps = [];
+  const assetLayers = [];
   const fps = project.project.frameRate.numerator / project.project.frameRate.denominator;
   const durationSeconds = secondsOf(scene.durationFrames, fps);
   const canvas = project.project.canvas;
   const background = rgbOf(project.brand?.colors?.background) || [0.06, 0.06, 0.07];
   steps.push({ id: 'comp.new', params: { name: scene.id, width: canvas.width, height: canvas.height, frameRate: fps, duration: durationSeconds, background: project.brand?.colors?.background || '#101010' } });
+  const assetsById = new Map((Array.isArray(project.assets) ? project.assets : []).filter(asset => asset && typeof asset.id === 'string').map(asset => [asset.id, asset]));
   let layerCounter = 0;
   for (const layer of Array.isArray(scene.layers) ? scene.layers : []) {
     const layerLabel = layer?.id || 'layer-' + (++layerCounter);
-    if (!SUPPORTED_LAYER_KINDS.has(layer?.kind)) {
-      skipped.push({ layerId: layerLabel, kind: layer?.kind ?? null, reason: 'EffectCraft adapter v1 supports shape and text layers only; asset and 3D layers route to their own engines.' });
-      continue;
-    }
     const name = 'MS-' + String(layerLabel).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60);
     const preset = layer?.motion?.preset;
+    const isAssetKind = layer?.kind === 'image' || layer?.kind === 'video';
+    if (!SUPPORTED_LAYER_KINDS.has(layer?.kind) && !isAssetKind) {
+      skipped.push({ layerId: layerLabel, kind: layer?.kind ?? null, reason: 'EffectCraft adapter v2 supports shape, text, image and video layers; other kinds route to their own engines.' });
+      continue;
+    }
+    if (isAssetKind) {
+      const asset = assetsById.get(layer?.assetId);
+      if (!asset) { issues.push({ code: 'EFFECTCRAFT_ASSET_MISSING', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Asset layer ' + layerLabel + ' references asset ' + (layer?.assetId ?? '(none)') + ', which is missing from the Canonical Video IR.' }); continue; }
+      if (!/^[a-f0-9]{64}$/i.test(asset?.sha256 || '')) { issues.push({ code: 'EFFECTCRAFT_ASSET_CHECKSUM_REQUIRED', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Asset ' + asset.id + ' needs a valid sha256 for the EffectCraft bridge.' }); continue; }
+      if (typeof asset?.uri !== 'string' || !asset.uri.trim()) { issues.push({ code: 'EFFECTCRAFT_ASSET_URI_REQUIRED', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Asset ' + asset.id + ' has no uri.' }); continue; }
+      const importIndex = assetLayers.length;
+      assetLayers.push({ importIndex, ref: 'asset:' + importIndex, clipId: layerLabel, assetId: asset.id, uri: asset.uri, sha256: asset.sha256.toLowerCase(), name, box: { x: Number(layer?.transform?.x) || 0, y: Number(layer?.transform?.y) || 0, width: Math.max(1, Math.round(Number(layer?.transform?.width) || canvas.width)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || canvas.height)) } });
+      continue;
+    }
     if (layer.kind === 'text') {
       const text = String(layer?.content?.text ?? '').trim();
       if (!text) { issues.push({ code: 'EFFECTCRAFT_TEXT_REQUIRED', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'Text layers need non-empty content.text.' }); continue; }
@@ -152,6 +167,7 @@ export function planEffectCraftScene(project, sceneId) {
     issues,
     scene: { id: scene.id, name: scene.name || scene.id, durationFrames: scene.durationFrames, fps, durationSeconds, width: canvas.width, height: canvas.height },
     steps,
+    assetLayers,
     skipped,
     background
   };
@@ -183,12 +199,41 @@ export async function resolveEffectCraftCommand({ env = process.env, platform = 
   throw new Error('effectcraft-cli was not found on this machine. Install EffectCraft (https://github.com/storytold/effectcraft) or pass effectcraftCommand explicitly.');
 }
 
+// EffectCraft's `run` prints each step's result as a pretty-printed JSON
+// object (no step-id lines). Extract the JSON objects in output order so they
+// can be zipped with the session's steps.
+export function parseJsonObjects(text) {
+  const objects = [];
+  let depth = 0, start = -1, inString = false, escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') { inString = true; continue; }
+    if (character === '{') { if (depth === 0) start = index; depth += 1; }
+    else if (character === '}') {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        const chunk = text.slice(start, index + 1);
+        try { objects.push(JSON.parse(chunk)); } catch { /* non-JSON block: skip */ }
+        start = -1;
+      }
+    }
+  }
+  return objects;
+}
+
 export async function renderEffectCraftScene(project, sceneId, options = {}) {
   const plan = planEffectCraftScene(project, sceneId);
   if (!plan.valid) throw new Error('Cannot render EffectCraft scene: ' + JSON.stringify(plan.issues));
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
   const outputRoot = inside(projectRoot, path.resolve(options.outputRoot || path.join(projectRoot, 'renders')), 'EffectCraft output directory');
   const engineRoot = inside(projectRoot, path.resolve(options.engineRoot || path.join(projectRoot, 'engines', 'effectcraft', sceneId)), 'EffectCraft engine directory');
+  const sourceRoot = path.resolve(options.sourceRoot || path.dirname(path.resolve(options.projectFile || path.join(projectRoot, 'project.json'))));
   await mkdir(outputRoot, { recursive: true });
   // file.saveAs does not create parent directories.
   await mkdir(engineRoot, { recursive: true });
@@ -196,18 +241,73 @@ export async function renderEffectCraftScene(project, sceneId, options = {}) {
   const spec = plan.scene;
   const sourceSha256 = createHash('sha256').update(JSON.stringify(project)).digest('hex');
 
-  // Session 1: build the comp and save the .ecproj into the workspace.
+  // Resolve asset layers: workspace-contained paths, verified against the IR
+  // checksum, dimensions probed for scale-to-box. Fails before any session.
+  const resolvedAssets = [];
+  for (const assetLayer of plan.assetLayers) {
+    const uri = String(assetLayer.uri);
+    if (/^[a-z][a-z0-9+.-]*:/i.test(uri)) throw new Error('EffectCraft asset ' + assetLayer.assetId + ' uses a remote scheme; only project-relative or file: paths are supported.');
+    const candidate = path.resolve(sourceRoot, uri);
+    const relative = path.relative(sourceRoot, candidate);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('EffectCraft asset ' + assetLayer.assetId + ' escapes the project source root.');
+    const info = await stat(candidate);
+    if (!info.isFile()) throw new Error('EffectCraft asset ' + assetLayer.assetId + ' does not resolve to a file: ' + uri);
+    const actualSha256 = createHash('sha256').update(await readFile(candidate)).digest('hex');
+    if (actualSha256 !== assetLayer.sha256) throw new Error('EffectCraft asset ' + assetLayer.assetId + ' sha256 mismatch: the on-disk file does not match the Canonical Video IR.');
+    const media = await probeMedia(candidate, { signal: options.signal });
+    if (!(media.width > 0) || !(media.height > 0)) throw new Error('EffectCraft asset ' + assetLayer.assetId + ' has no probeable dimensions.');
+    resolvedAssets.push({ ...assetLayer, path: candidate, itemWidth: media.width, itemHeight: media.height });
+  }
+
+  // Session 1: build the comp (shape/text layers) and import + save in the
+  // SAME session — a saveAs from a separate session persists an empty project.
   const phaseRoot = await mkdtemp(path.join(os.tmpdir(), 'motion-effectcraft-'));
   try {
-    const buildSteps = [...plan.steps, { id: 'file.saveAs', params: { path: path.join(engineRoot, 'scene.ecproj') } }];
+    const sessionOne = [
+      ...plan.steps,
+      ...(resolvedAssets.length ? [{ id: 'file.import', params: { paths: resolvedAssets.map(asset => asset.path) } }] : []),
+      { id: 'file.saveAs', params: { path: path.join(engineRoot, 'scene.ecproj') } }
+    ];
     const stepsFile = path.join(phaseRoot, 'build.jsonl');
-    await writeFile(stepsFile, buildSteps.map(step => JSON.stringify(step)).join('\n') + '\n', 'utf8');
-    await execute(command, ['run', '--commands', stepsFile], { cwd: phaseRoot, timeoutMs: options.timeoutMs || 600_000, signal: options.signal });
+    await writeFile(stepsFile, sessionOne.map(step => JSON.stringify(step)).join('\n') + '\n', 'utf8');
+    const buildOut = await execute(command, ['run', '--commands', stepsFile], { cwd: phaseRoot, timeoutMs: options.timeoutMs || 600_000, signal: options.signal });
     const ecprojPath = path.join(engineRoot, 'scene.ecproj');
     const projectStat = await stat(ecprojPath);
     if (!projectStat.isFile() || projectStat.size === 0) throw new Error('EffectCraft did not produce the scene .ecproj.');
 
-    // Session 2: render the saved comp to an MP4 at the IR contract.
+    // Session 2 (only when asset layers exist): reopen the saved project,
+    // resolve each footage item id from the import result, place and scale it
+    // to the IR box (EffectCraft positions footage layers by center).
+    if (resolvedAssets.length) {
+      // Results print as one JSON object per step, in step order.
+      const results = parseJsonObjects(buildOut.stdout);
+      const importStepIndex = sessionOne.findIndex(step => step.id === 'file.import');
+      const importResult = results[importStepIndex];
+      const importedItems = importResult?.items;
+      if (!Array.isArray(importedItems) || importedItems.length !== resolvedAssets.length) {
+        throw new Error('EffectCraft imported ' + (importedItems?.length ?? 0) + ' asset items but ' + resolvedAssets.length + ' were requested; aborting. Output: ' + buildOut.stdout.slice(-600));
+      }
+      const sessionTwo = [
+        { id: 'comp.open', params: { comp: sceneId } },
+        ...resolvedAssets.map(asset => {
+          const scaleX = Math.round(asset.box.width / asset.itemWidth * 10000) / 100;
+          const scaleY = Math.round(asset.box.height / asset.itemHeight * 10000) / 100;
+          // addItem selects the new layer, so the immediate rename targets it;
+          // afterwards every prop.set addresses the deterministic MS- name.
+          return [
+            { id: 'layer.addItem', params: { item: importedItems[asset.importIndex], time: 0, position: [asset.box.x + asset.box.width / 2, asset.box.y + asset.box.height / 2] } },
+            { id: 'layer.rename', params: { name: asset.name } },
+            { id: 'prop.set', params: { layer: asset.name, path: 'transform/scale', value: [scaleX, scaleY, 100], time: 0 } }
+          ];
+        }).flat(),
+        { id: 'file.saveAs', params: { path: ecprojPath } }
+      ];
+      const sessionTwoFile = path.join(phaseRoot, 'assets.jsonl');
+      await writeFile(sessionTwoFile, sessionTwo.map(step => JSON.stringify(step)).join('\n') + '\n', 'utf8');
+      await execute(command, ['--project', ecprojPath, 'run', '--commands', sessionTwoFile], { cwd: phaseRoot, timeoutMs: options.timeoutMs || 600_000, signal: options.signal });
+    }
+
+    // Session 3: render the saved comp to an MP4 at the IR contract.
     const fps = spec.fps;
     const output = path.join(outputRoot, project.project.id + '-' + sceneId + '-effectcraft-' + (options.quality || 'draft') + '.mp4');
     await execute(command, ['--project', ecprojPath, 'render', '--comp', sceneId, '--out', output, '--fps', String(fps)], { cwd: phaseRoot, timeoutMs: options.timeoutMs || 600_000, signal: options.signal });
@@ -222,6 +322,7 @@ export async function renderEffectCraftScene(project, sceneId, options = {}) {
       sceneId, sceneName: spec.sceneName, sourceSha256,
       artifact: { path: output, sha256: outputSha256, byteSize: outputStat.size, container: 'mp4', codec: media.videoCodec, width: media.width, height: media.height, frameRate: project.project.frameRate, durationFrames: spec.durationFrames, durationSeconds: media.durationSeconds, colorSpace: 'sRGB', alpha: false, audio: { present: media.hasAudio, codec: media.audioCodec || null } },
       verification, checks: [{ name: 'ffprobe-verify', exitCode: 0 }], skippedLayers: plan.skipped, planIssues: plan.issues,
+      assets: resolvedAssets.map(asset => ({ assetId: asset.assetId, clipId: asset.clipId, path: asset.path, item: { width: asset.itemWidth, height: asset.itemHeight }, box: asset.box })),
       ecprojPath, effectcraftVersion: null, verified: true, completedAt: new Date().toISOString()
     };
     await mkdir(engineRoot, { recursive: true });
