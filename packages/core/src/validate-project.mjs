@@ -3,7 +3,7 @@ const ENGINE_HINTS = new Set(['effectcraft', 'after-effects', 'hyperframes', 'bl
 // master. 'contain' fits with black pad bars, 'cover' fills and crops the
 // overflow, 'stretch' fills exactly (may distort).
 const DELIVERY_FITS = new Set(['contain', 'cover', 'stretch']);
-const LAYER_KINDS = new Set(['text', 'shape', 'image', 'video', '3d', 'camera', 'effect', 'audio', 'chart', 'particle', 'composite', 'other']);
+const LAYER_KINDS = new Set(['text', 'shape', 'image', 'video', '3d', 'camera', 'light', 'effect', 'audio', 'chart', 'particle', 'composite', 'other']);
 // project.id and scene.id name filesystem workspaces and render artifacts, so
 // they are held to the same charset the adapters' safeId sanitization keeps
 // (1-80 characters of [a-zA-Z0-9_-]); anything else could traverse paths.

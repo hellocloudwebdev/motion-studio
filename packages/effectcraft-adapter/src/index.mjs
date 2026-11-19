@@ -18,6 +18,10 @@ import { craftCommandCandidates } from '../../craft-mcp-client/src/index.mjs';
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const HEX = /^#[\da-f]{6}$/i;
 const SUPPORTED_LAYER_KINDS = new Set(['shape', 'text']);
+// EffectCraft's 3D primitives use their own kind names; the IR uses the
+// Blender-style names, so the map converts.
+const PRIMITIVE_KINDS = new Set(['cube', 'sphere', 'plane', 'torus', 'cone', 'cylinder']);
+const IR_PRIMITIVE_TO_EFFECTCRAFT = { box: 'cube', sphere: 'sphere', plane: 'plane', torus: 'torus', cone: 'cone', cylinder: 'cylinder' };
 
 function inside(root, target, label) {
   const resolvedRoot = path.resolve(root), resolvedTarget = path.resolve(target);
@@ -177,16 +181,57 @@ export function planEffectCraftScene(project, sceneId) {
   const durationSeconds = secondsOf(scene.durationFrames, fps);
   const canvas = project.project.canvas;
   const background = rgbOf(project.brand?.colors?.background) || [0.06, 0.06, 0.07];
-  steps.push({ id: 'comp.new', params: { name: scene.id, width: canvas.width, height: canvas.height, frameRate: fps, duration: durationSeconds, background: project.brand?.colors?.background || '#101010' } });
+  steps.push({ id: 'comp.new', params: { name: scene.id, width: canvas.width, height: canvas.height, frameRate: fps, duration: durationSeconds, background: project.brand?.colors?.background || '#101010', ...(scene.layers?.some(layer => layer?.kind === '3d' || layer?.kind === 'camera' || layer?.kind === 'light') ? { renderer: 'advanced3D' } : {}) } });
   const assetsById = new Map((Array.isArray(project.assets) ? project.assets : []).filter(asset => asset && typeof asset.id === 'string').map(asset => [asset.id, asset]));
   let layerCounter = 0;
   for (const layer of Array.isArray(scene.layers) ? scene.layers : []) {
     const layerLabel = layer?.id || 'layer-' + (++layerCounter);
     const name = 'MS-' + String(layerLabel).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60);
     const preset = layer?.motion?.preset;
+    const content = layer?.content && typeof layer.content === 'object' && !Array.isArray(layer.content) ? layer.content : {};
     const isAssetKind = layer?.kind === 'image' || layer?.kind === 'video';
-    if (!SUPPORTED_LAYER_KINDS.has(layer?.kind) && !isAssetKind) {
-      skipped.push({ layerId: layerLabel, kind: layer?.kind ?? null, reason: 'EffectCraft adapter v2 supports shape, text, image and video layers; other kinds route to their own engines.' });
+    const is3dKind = layer?.kind === '3d' || layer?.kind === 'camera' || layer?.kind === 'light';
+    if (!SUPPORTED_LAYER_KINDS.has(layer?.kind) && !isAssetKind && !is3dKind) {
+      skipped.push({ layerId: layerLabel, kind: layer?.kind ?? null, reason: 'EffectCraft adapter supports shape, text, image, video, 3d, camera and light layers; other kinds route to their own engines.' });
+      continue;
+    }
+    if (is3dKind) {
+      // 3D breadth (M1.4): primitives, cameras and lights. The comp upgrades
+      // to the advanced3D renderer automatically when a 3dPrimitive lands.
+      if (layer.kind === 'camera') {
+        steps.push({ id: 'layer.newCamera', params: { name, ...(content?.preset ? { preset: content.preset } : {}) } });
+        continue;
+      }
+      if (layer.kind === 'light') {
+        steps.push({ id: 'layer.newLight', params: { name, kind: content?.kind || 'Point' } });
+        continue;
+      }
+      const irPrimitive = content?.primitive;
+      const primitive = IR_PRIMITIVE_TO_EFFECTCRAFT[irPrimitive];
+      if (!primitive) {
+        issues.push({ code: 'EFFECTCRAFT_PRIMITIVE_UNSUPPORTED', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: 'IR primitive "' + (irPrimitive ?? '(none)') + '" has no EffectCraft 3D primitive; use one of ' + Object.keys(IR_PRIMITIVE_TO_EFFECTCRAFT).join(', ') + '.' });
+        continue;
+      }
+      const color = content?.material?.color || layer?.style?.color || project.brand?.colors?.accent || '#ffffff';
+      if (!HEX.test(color)) { issues.push({ code: 'EFFECTCRAFT_COLOR_INVALID', severity: 'error', sceneId: scene.id, layerId: layerLabel, message: '3D primitive baseColor must be #RRGGBB.' }); continue; }
+      const position3d = content?.position ?? layer?.transform;
+      steps.push({
+        id: 'layer.new3dPrimitive',
+        params: {
+          kind: primitive,
+          name,
+          ...(primitive === 'cube' ? { width: Math.max(1, Math.round(Number(layer?.transform?.width) || 120)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || 120)), depth: Math.max(1, Math.round(Number(content?.depth) || 120)) } : {}),
+          ...(primitive === 'sphere' || primitive === 'torus' ? { radius: Math.max(1, Math.round(Number(content?.radius) || 60)) } : {}),
+          ...(primitive === 'cone' || primitive === 'cylinder' ? { radius: Math.max(1, Math.round(Number(content?.radius) || 60)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || 120)) } : {}),
+          ...(primitive === 'plane' ? { width: Math.max(1, Math.round(Number(layer?.transform?.width) || 320)), height: Math.max(1, Math.round(Number(layer?.transform?.height) || 180)) } : {}),
+          position: [Number(position3d?.x) || 0, Number(position3d?.y) || 0, Number(position3d?.z) || 0],
+          baseColor: color,
+          ...(Number.isFinite(Number(content?.metallic)) ? { metallic: Number(content.metallic) } : {}),
+          ...(Number.isFinite(Number(content?.roughness)) ? { roughness: Number(content.roughness) } : {})
+        }
+      });
+      steps.push(...presetKeyframes(preset, { x: Number(position3d?.x) || 0, y: Number(position3d?.y) || 0 }, layer, fps).map(frame => ({ id: 'prop.set', params: { layer: name, path: frame.path === 'transform/position' ? 'transform/position' : frame.path, value: Array.isArray(frame.value) && frame.value.length === 2 ? [...frame.value, 0] : frame.value, time: frame.time } })));
+      steps.push(...effectStepsFor(layer?.effects, name, issues, scene.id, layerLabel));
       continue;
     }
     if (isAssetKind) {

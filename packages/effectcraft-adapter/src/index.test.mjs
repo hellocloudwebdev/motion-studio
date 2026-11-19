@@ -125,6 +125,44 @@ test('IR layer.expressions become prop.setExpression steps restricted to transfo
   ], 'only the valid transform expression is emitted, addressed to the layer');
 });
 
+test('3d layers map to EffectCraft primitives with an advanced3D comp', () => {
+  const fixture = projectFixture({ layers: [
+    { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
+    { id: 'cube', kind: '3d', engineHint: 'effectcraft', content: { primitive: 'box', material: { color: '#4ade80' }, position: { x: 320, y: 180, z: 0 }, depth: 140, metallic: 30, roughness: 40 } },
+    { id: 'orb', kind: '3d', engineHint: 'effectcraft', content: { primitive: 'sphere', position: { x: 100, y: 80, z: -50 }, radius: 80 } },
+    { id: 'cam', kind: 'camera', content: { preset: '35mm' } }
+  ] });
+  const plan = planEffectCraftScene(fixture, 'scene-01');
+  assert.equal(plan.valid, true);
+  const comp = plan.steps[0];
+  assert.equal(comp.params.renderer, 'advanced3D', 'a scene with 3d layers upgrades the renderer');
+  const cube = plan.steps.find(step => step.id === 'layer.new3dPrimitive' && step.params.name === 'MS-cube');
+  assert.equal(cube.params.kind, 'cube', 'IR box maps to the EffectCraft cube');
+  assert.equal(cube.params.baseColor, '#4ade80');
+  assert.deepEqual(cube.params.position, [320, 180, 0]);
+  assert.equal(cube.params.metallic, 30);
+  const orb = plan.steps.find(step => step.id === 'layer.new3dPrimitive' && step.params.name === 'MS-orb');
+  assert.equal(orb.params.kind, 'sphere');
+  assert.equal(orb.params.radius, 80);
+  const camera = plan.steps.find(step => step.id === 'layer.newCamera');
+  assert.equal(camera.params.preset, '35mm');
+  const unknown = projectFixture({ layers: [{ id: 'weird', kind: '3d', engineHint: 'effectcraft', content: { primitive: 'monolith' } }] });
+  const unknownPlan = planEffectCraftScene(unknown, 'scene-01');
+  assert.equal(unknownPlan.valid, false);
+  assert.ok(unknownPlan.issues.some(issue => issue.code === 'EFFECTCRAFT_PRIMITIVE_UNSUPPORTED'));
+});
+
+test('light layers plan to EffectCraft point lights', () => {
+  const fixture = projectFixture({ layers: [
+    { id: 'l', kind: 'light', content: { kind: 'Spot' } }
+  ] });
+  const plan = planEffectCraftScene(fixture, 'scene-01');
+  assert.equal(plan.valid, true);
+  const light = plan.steps.find(step => step.id === 'layer.newLight');
+  assert.equal(light.params.kind, 'Spot');
+  assert.equal(plan.steps[0].params.renderer, 'advanced3D', 'lights also need the 3D renderer');
+});
+
 test('asset layers produce import requests with checksum requirements', () => {
   const good = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: 'a'.repeat(64) }], layers: [
     { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
@@ -208,6 +246,25 @@ test('live render applies an expression and checkpoints the previous .ecproj', {
     const props = spawnSync(command, ['--project', second.ecprojPath, 'get', 'scene-01', 'MS-bar', 'transform/rotation', '--time', '1'], { encoding: 'utf8' });
     const rotation = Number((props.stdout.match(/-?[\d.]+/) || [])[0]);
     assert.ok(Math.abs(rotation - 180) < 1, 'the time*180 expression evaluates to 180 at t=1 s, got ' + rotation);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live render produces a rotating 3D cube verified by FFprobe', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-3d-'));
+  try {
+    const input = projectFixture({ layers: [
+      { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
+      { id: 'cube', kind: '3d', engineHint: 'effectcraft', content: { primitive: 'box', material: { color: '#4ade80' }, position: { x: 320, y: 180, z: 0 }, depth: 140, metallic: 30, roughness: 40, keyframes: [] } },
+      { id: 'cam', kind: 'camera', content: { preset: '50mm' } }
+    ] });
+    input.scenes[0].layers[1].content.keyframes = [
+      { frame: 0, rotation: { x: 0, y: 0, z: 0 } },
+      { frame: 59, rotation: { x: 0, y: 3, z: 0 } }
+    ];
+    const receipt = await renderEffectCraftScene(input, 'scene-01', { projectRoot: root, quality: 'draft' });
+    assert.equal(receipt.verified, true);
+    assert.equal(receipt.artifact.width, 640);
+    assert.ok(Math.abs(receipt.artifact.durationSeconds - 2) <= 1 / 30);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

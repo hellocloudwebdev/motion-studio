@@ -5,6 +5,47 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { craftCommandCandidates } from '../../craft-mcp-client/src/index.mjs';
 
+// Apply a video transition (e.g. cross_dissolve) across a clip boundary in a
+// saved FilmCraft project. The clip ids are discovered from the sequence
+// inspect, so callers only name the track and the clip ordinal (1-based from
+// the track start): the transition is applied at that clip's boundary.
+export async function applyFilmCraftTransition({ projectPath, track = 'V1', clipOrdinal = 1, effect = 'cross_dissolve', frames = 24, filmcraftCommand, signal, timeoutMs = 300_000, onLine } = {}) {
+  if (typeof projectPath !== 'string' || !projectPath.trim()) throw new Error('A saved .fcproj project path is required.');
+  if (!Number.isInteger(clipOrdinal) || clipOrdinal < 1) throw new Error('clipOrdinal must be a 1-based integer.');
+  if (!Number.isInteger(frames) || frames <= 0) throw new Error('frames must be a positive integer.');
+  const resolvedProject = path.resolve(projectPath);
+  const command = filmcraftCommand ?? await resolveFilmcraftCommand();
+
+  const inspectOut = await runFilmcraftCli(command, ['--project', resolvedProject, 'inspect', 'sequence'], { signal, timeoutMs, onLine });
+  const sequence = parseJsonOutput(inspectOut.stdout);
+  const trackEntry = (sequence.video || []).find(entry => entry.name === track) || (sequence.video || [])[0];
+  if (!trackEntry) throw new Error('FilmCraft sequence has no video track to transition on.');
+  const clips = (trackEntry.items || []).map(item => item.clip).filter(id => Number.isInteger(id));
+  if (clips.length < clipOrdinal + 1) throw new Error('FilmCraft sequence has ' + clips.length + ' clip(s) on ' + (trackEntry.name || track) + '; a transition at clip ' + clipOrdinal + ' needs at least ' + (clipOrdinal + 1) + '.');
+
+  const phaseRoot = await mkdtemp(path.join(os.tmpdir(), 'motion-filmcraft-transition-'));
+  try {
+    const sessionFile = path.join(phaseRoot, 'transition.jsonl');
+    const steps = [
+      { id: 'sequence.open', params: { item: sequence.id } },
+      { id: 'sequence.applyVideoTransition', params: { clip: clips[clipOrdinal - 1], effect, frames } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    await writeFile(sessionFile, steps.map(step => JSON.stringify(step)).join('\n') + '\n', 'utf8');
+    await runFilmcraftCli(command, ['--project', resolvedProject, 'run', '--commands', sessionFile], { signal, timeoutMs, onLine });
+    return {
+      ok: true,
+      projectPath: resolvedProject,
+      sequenceId: sequence.id,
+      clip: clips[clipOrdinal - 1],
+      effect,
+      frames
+    };
+  } finally {
+    await rm(phaseRoot, { recursive: true, force: true });
+  }
+}
+
 // FilmCraft handoff (2026-11-15): FilmCraft's `file.import` is polymorphic —
 // it accepts media files AND interchange documents, importing a Motion Studio
 // FCPXML as a linked-media sequence (documents[0].linkedMedia / .sequences).
