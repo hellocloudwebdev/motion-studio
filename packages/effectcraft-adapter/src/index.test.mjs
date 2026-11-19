@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -108,6 +108,23 @@ test('malformed effect entries fail with explicit issues', () => {
   assert.ok(plan.issues.some(issue => issue.code === 'EFFECTCRAFT_EFFECT_NAME_REQUIRED'));
 });
 
+test('IR layer.expressions become prop.setExpression steps restricted to transform paths', () => {
+  const fixture = projectFixture();
+  fixture.scenes[0].layers[1].expressions = [
+    { path: 'transform/rotation', expression: 'time*180' },
+    { path: 'effects/blur', expression: 'time' },
+    { path: 'transform/opacity', expression: ' ' }
+  ];
+  const plan = planEffectCraftScene(fixture, 'scene-01');
+  assert.equal(plan.valid, false, 'the empty expression and the out-of-namespace path are errors');
+  assert.ok(plan.issues.some(issue => issue.code === 'EFFECTCRAFT_EXPRESSION_PATH_UNSUPPORTED'));
+  assert.ok(plan.issues.some(issue => issue.code === 'EFFECTCRAFT_EXPRESSION_INVALID'));
+  const expressionSteps = plan.steps.filter(step => step.id === 'prop.setExpression');
+  assert.deepEqual(expressionSteps.map(step => [step.params.layer, step.params.path, step.params.expression]), [
+    ['MS-bar', 'transform/rotation', 'time*180']
+  ], 'only the valid transform expression is emitted, addressed to the layer');
+});
+
 test('asset layers produce import requests with checksum requirements', () => {
   const good = projectFixture({ assets: [{ id: 'clip', kind: 'video', uri: 'media/clip.mp4', sha256: 'a'.repeat(64) }], layers: [
     { id: 'bg', kind: 'shape', transform: { x: 0, y: 0, width: 640, height: 360 }, style: { backgroundColor: '#10243a' } },
@@ -170,6 +187,27 @@ test('live render applies IR effects to the rendered layer', { skip: await effec
     const command = await resolveEffectCraftCommand();
     const props = spawnSync(command, ['--project', receipt.ecprojPath, 'props', 'scene-01', 'MS-bar', '--flat'], { encoding: 'utf8' });
     assert.match(props.stdout, /effects\/#1\/blurriness\s+scalar\s+20\.0/, 'the effect param persisted at the planned path');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live render applies an expression and checkpoints the previous .ecproj', { skip: await effectcraftAvailable() ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ec-expr-'));
+  try {
+    const input = projectFixture();
+    input.scenes[0].layers[1].expressions = [{ path: 'transform/rotation', expression: 'time*180' }];
+    const first = await renderEffectCraftScene(input, 'scene-01', { projectRoot: root, quality: 'draft' });
+    assert.equal(first.verified, true);
+    const checkpointDir = path.join(root, 'engines', 'effectcraft', 'scene-01', 'checkpoints');
+    assert.equal(existsSync(checkpointDir), false, 'no checkpoint on the first run (nothing to preserve)');
+    const second = await renderEffectCraftScene(input, 'scene-01', { projectRoot: root, quality: 'draft' });
+    assert.equal(second.verified, true);
+    assert.equal(existsSync(checkpointDir), true, 'the second run checkpoints the first run\'s .ecproj');
+    const checkpoints = (await readdir(checkpointDir)).filter(name => name.endsWith('.ecproj'));
+    assert.equal(checkpoints.length, 1);
+    const command = await resolveEffectCraftCommand();
+    const props = spawnSync(command, ['--project', second.ecprojPath, 'get', 'scene-01', 'MS-bar', 'transform/rotation', '--time', '1'], { encoding: 'utf8' });
+    const rotation = Number((props.stdout.match(/-?[\d.]+/) || [])[0]);
+    assert.ok(Math.abs(rotation - 180) < 1, 'the time*180 expression evaluates to 180 at t=1 s, got ' + rotation);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

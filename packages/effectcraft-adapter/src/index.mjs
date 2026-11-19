@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,6 +134,30 @@ function presetKeyframes(preset, target, layer, fps) {
   return frames;
 }
 
+// IR layer.expressions: [{path, expression}] -> prop.setExpression steps.
+// Expressions are authored in the Canonical Video IR (creative-side intent,
+// like After Effects expressions) and run inside EffectCraft's own engine
+// sandbox; Motion Studio only forwards them verbatim and records them in the
+// receipt. Paths are restricted to the transform namespace.
+function expressionStepsFor(expressions, layerName, issues, sceneId) {
+  const steps = [];
+  if (!Array.isArray(expressions)) return steps;
+  for (const entry of expressions) {
+    const expressionPath = typeof entry?.path === 'string' ? entry.path.trim() : '';
+    const expression = typeof entry?.expression === 'string' ? entry.expression.trim() : '';
+    if (!expressionPath || !expression) {
+      issues.push({ code: 'EFFECTCRAFT_EXPRESSION_INVALID', severity: 'error', sceneId, layerId: layerName, message: 'Expressions need a non-empty path and expression.' });
+      continue;
+    }
+    if (!expressionPath.startsWith('transform/')) {
+      issues.push({ code: 'EFFECTCRAFT_EXPRESSION_PATH_UNSUPPORTED', severity: 'error', sceneId, layerId: layerName, message: 'Expression paths are restricted to transform/* properties (received ' + expressionPath + ').' });
+      continue;
+    }
+    steps.push({ id: 'prop.setExpression', params: { layer: layerName, path: expressionPath, expression } });
+  }
+  return steps;
+}
+
 // Pure, deterministic planner: Canonical Video IR scene -> EffectCraft engine
 // command steps. Unsupported layer kinds are reported, never silently
 // dropped. The plan only uses live-verified command ids and property paths.
@@ -185,6 +209,7 @@ export function planEffectCraftScene(project, sceneId) {
       const x = Number(layer?.transform?.x) || 0, y = Number(layer?.transform?.y) || 0;
       steps.push({ id: 'layer.newText', params: { text, name, position: [x, y], size: Math.max(1, Math.round(Number(layer?.typography?.sizePx) || 24)), ...(color ? { fill: color } : {}) } });
       steps.push(...presetKeyframes(preset, { x, y }, layer, fps).map(frame => ({ id: 'prop.set', params: { layer: name, path: frame.path, value: frame.value, time: frame.time } })));
+      steps.push(...expressionStepsFor(layer?.expressions, name, issues, scene.id));
       steps.push(...effectStepsFor(layer?.effects, name, issues, scene.id, layerLabel));
     } else {
       const color = layer?.style?.backgroundColor;
@@ -197,6 +222,7 @@ export function planEffectCraftScene(project, sceneId) {
       steps.push({ id: 'layer.newSolid', params: { name, color, width, height } });
       if (x !== 0 || y !== 0) steps.push({ id: 'prop.set', params: { layer: name, path: 'transform/position', value: [x + width / 2, y + height / 2, 0], time: 0 } });
       steps.push(...presetKeyframes(preset, { x: x + width / 2, y: y + height / 2 }, layer, fps).map(frame => ({ id: 'prop.set', params: { layer: name, path: frame.path, value: frame.value, time: frame.time } })));
+      steps.push(...expressionStepsFor(layer?.expressions, name, issues, scene.id));
       steps.push(...effectStepsFor(layer?.effects, name, issues, scene.id, layerLabel));
     }
   }
@@ -276,6 +302,20 @@ export async function renderEffectCraftScene(project, sceneId, options = {}) {
   await mkdir(outputRoot, { recursive: true });
   // file.saveAs does not create parent directories.
   await mkdir(engineRoot, { recursive: true });
+  // Checkpoint before writes (M1.4): an existing scene .ecproj is copied into
+  // a bounded checkpoint directory before this run overwrites it, so a failed
+  // build never destroys the last good state. Newest 3 are kept.
+  const ecprojPath = path.join(engineRoot, 'scene.ecproj');
+  const checkpointDir = path.join(engineRoot, 'checkpoints');
+  if (existsSync(ecprojPath)) {
+    await mkdir(checkpointDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await copyFile(ecprojPath, path.join(checkpointDir, 'scene-' + stamp + '.ecproj'));
+    const existing = (await readdir(checkpointDir)).filter(name => name.endsWith('.ecproj')).sort();
+    for (const stale of existing.slice(0, Math.max(0, existing.length - 3))) {
+      await rm(path.join(checkpointDir, stale), { force: true });
+    }
+  }
   const command = options.effectcraftCommand ?? await resolveEffectCraftCommand(options);
   const spec = plan.scene;
   const sourceSha256 = createHash('sha256').update(JSON.stringify(project)).digest('hex');
@@ -310,7 +350,6 @@ export async function renderEffectCraftScene(project, sceneId, options = {}) {
     const stepsFile = path.join(phaseRoot, 'build.jsonl');
     await writeFile(stepsFile, sessionOne.map(step => JSON.stringify(step)).join('\n') + '\n', 'utf8');
     const buildOut = await execute(command, ['run', '--commands', stepsFile], { cwd: phaseRoot, timeoutMs: options.timeoutMs || 600_000, signal: options.signal });
-    const ecprojPath = path.join(engineRoot, 'scene.ecproj');
     const projectStat = await stat(ecprojPath);
     if (!projectStat.isFile() || projectStat.size === 0) throw new Error('EffectCraft did not produce the scene .ecproj.');
 
