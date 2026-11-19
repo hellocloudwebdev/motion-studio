@@ -458,8 +458,11 @@ test('both panel.js files build their UI, browse commands and run an approved co
         await waitMs(250);
 
         // The fixture echoes the exact tool arguments back, so the approval
-        // record can be verified byte-for-byte against the digest rule.
-        const opArgs = { commandId: 'fixture.echo', params: { value: 'hi' }, save: false };
+        // record can be verified byte-for-byte against the SERVER's opArgs
+        // shape: the gate digests the resolved operation arguments INCLUDING
+        // projectId/runId/timeoutMs (and projectPath present-as-undefined —
+        // the panel now builds exactly this shape; see approvedCall).
+        const opArgs = { projectId: 'p1', runId: 'r1', commandId: 'fixture.echo', params: { value: 'hi' }, projectPath: undefined, save: false, timeoutMs: undefined };
         const expectedDigest = createHash('sha256').update(stableStringify(opArgs)).digest('hex');
         // Receipts are prepended newest-first: the run we just triggered is the
         // newest call receipt, and the fixture echo names the tool.
@@ -475,6 +478,51 @@ test('both panel.js files build their UI, browse commands and run an approved co
         assert.equal(echoed.runId, 'r1', name + ': runId travels with the tool call');
         const allReceiptTools = findAll(root, node => node.className === 'receipt-tool').map(node => node.textContent);
         assert.ok(allReceiptTools.includes('describe_command') && allReceiptTools.includes('list_commands'), name + ': list/describe receipts logged');
+    }
+});
+
+test('panel-minted approvals validate against the real server approval gates', async () => {
+    // The definitive regression net for the panel↔server digest contract: the
+    // approval created the way the panels mint it (createApproval over the
+    // server's resolved opArgs shape) must pass packages/craft-mcp-client's
+    // validateCraftOperationApproval — the exact gate both studio servers run.
+    const { validateCraftOperationApproval } = await import('../../packages/craft-mcp-client/src/index.mjs');
+    const now = Date.now();
+    // The servers' opArgs constructions, mirrored from
+    // packages/effectcraft-mcp-server/src/index.mjs and
+    // packages/filmcraft-mcp-server/src/index.mjs. If a server changes its
+    // opArgs shape, update the shape here AND the panel card — together.
+    const shapes = {
+        'effectcraft.run_command': fields => ({ projectId: 'p1', runId: 'r1', commandId: fields.commandId, params: fields.params, projectPath: fields.projectPath, save: fields.save, timeoutMs: fields.timeoutMs }),
+        'effectcraft.run_batch': fields => ({ projectId: 'p1', runId: 'r1', commands: fields.commands, projectPath: fields.projectPath, saveAs: fields.saveAs, timeoutMs: fields.timeoutMs }),
+        'filmcraft.run_command': fields => ({ projectId: 'p1', runId: 'r1', commandId: fields.commandId, params: fields.params, projectPath: fields.projectPath, save: fields.save, timeoutMs: fields.timeoutMs }),
+        'filmcraft.run_batch': fields => ({ projectId: 'p1', runId: 'r1', commands: fields.commands, projectPath: fields.projectPath, saveAs: fields.saveAs, timeoutMs: fields.timeoutMs }),
+        'filmcraft.import_interchange': fields => ({ projectId: 'p1', runId: 'r1', fcpxmlPath: fields.fcpxmlPath, projectPath: fields.projectPath, timeoutMs: fields.timeoutMs }),
+        'filmcraft.apply_transition': fields => ({ projectId: 'p1', runId: 'r1', projectPath: fields.projectPath, track: 'V1', clipOrdinal: 1, effect: 'cross_dissolve', frames: 12, timeoutMs: fields.timeoutMs })
+    };
+    const fieldSets = {
+        'effectcraft.run_command': { commandId: 'comp.new', params: {}, projectPath: undefined, save: false, timeoutMs: undefined },
+        'effectcraft.run_batch': { commands: [{ id: 'file.newProject', params: {} }], projectPath: undefined, saveAs: undefined, timeoutMs: undefined },
+        'filmcraft.run_command': { commandId: 'file.newBin', params: { name: 'Selects' }, projectPath: 'D:/demo.fcproj', save: true, timeoutMs: undefined },
+        'filmcraft.run_batch': { commands: [{ id: 'file.importDemoFootage', params: { scene: 'Plasma' } }], projectPath: 'D:/demo.fcproj', saveAs: undefined, timeoutMs: undefined },
+        'filmcraft.import_interchange': { fcpxmlPath: 'D:/demo/ms.fcpxml', projectPath: 'D:/demo/p.fcproj', timeoutMs: undefined },
+        'filmcraft.apply_transition': { projectPath: 'D:/demo/p.fcproj', timeoutMs: undefined }
+    };
+    for (const [toolName, shape] of Object.entries(shapes)) {
+        const app = toolName.split('.')[0];
+        const opArgs = shape(fieldSets[toolName]);
+        const approval = await createApproval({ projectId: 'p1', runId: 'r1', app, toolName, args: opArgs, approvedBy: 'producer', now });
+        const check = validateCraftOperationApproval({ approval, projectId: 'p1', runId: 'r1', app, toolName, args: opArgs, now });
+        assert.equal(check.valid, true, toolName + ': panel-minted approval passes the real gate (' + check.reason + ')');
+        // Any changed operation field must break the digest.
+        const tampered = JSON.parse(JSON.stringify(fieldSets[toolName]));
+        if (typeof tampered.save === 'boolean') tampered.save = !tampered.save;
+        else if (tampered.params) tampered.params = { name: 'Tampered' };
+        else if (tampered.commands) tampered.commands = [{ id: 'file.newBin', params: {} }];
+        else if (tampered.fcpxmlPath) tampered.fcpxmlPath = 'D:/other.fcpxml';
+        else tampered.projectPath = 'D:/other.fcproj';
+        const refused = validateCraftOperationApproval({ approval, projectId: 'p1', runId: 'r1', app, toolName, args: shape(tampered), now });
+        assert.equal(refused.valid, false, toolName + ': tampered operation args are refused');
     }
 });
 

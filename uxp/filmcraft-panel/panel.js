@@ -9,12 +9,15 @@
  *
  * Approval flow: mutating calls build the approval locally via
  * MotionStudioMcpClient.createApproval — toolName is app-prefixed
- * ("filmcraft.run_command" etc.) and args are the operation arguments minus
- * the approval field — then the tool is called with
+ * ("filmcraft.run_command" etc.) and args are the SERVER's resolved operation
+ * arguments (projectId, runId and timeoutMs: undefined included — see
+ * approvedCall); the tool is then called with
  * { approval, projectId, runId, ...opArgs }.
  *
- * Read-only tools (inspect_project, inspect_sequence, probe_media,
- * list_commands, describe_command, check_engine) run without an approval.
+ * Ungated tools run without an approval: read-only inspections
+ * (inspect_project, inspect_sequence, probe_media, list_commands,
+ * describe_command, check_engine) and verified artifact generation
+ * (export_master).
  */
 (function () {
     'use strict';
@@ -317,7 +320,7 @@
         };
     }
 
-    function approvedCall(toolName, opArgs, identityOverrides) {
+    function approvedCall(toolName, fields, identityOverrides) {
         var identity = identityOverrides ? Object.assign(readApprovalIdentity(), identityOverrides) : readApprovalIdentity();
         if (!identity.projectId || !identity.runId || !identity.approvedBy) {
             return Promise.reject(new Error('Approval required: fill in Project ID, Run ID and Approved By at the top of the tool console first.'));
@@ -325,6 +328,13 @@
         if (!mcp || typeof mcp.createApproval !== 'function') {
             return Promise.reject(new Error('MotionStudioMcpClient is not loaded — cannot build the approval.'));
         }
+        // The server gate digests its RESOLVED operation arguments — projectId,
+        // runId and timeoutMs included. timeoutMs is never sent (JSON.stringify
+        // drops undefined), the server schema resolves it back to undefined and
+        // the digest writes the literal "undefined"; optional keys the card
+        // leaves empty must still be present, as undefined, or the digests
+        // diverge and the mutation is refused.
+        var opArgs = Object.assign({ projectId: identity.projectId, runId: identity.runId, timeoutMs: undefined }, fields);
         return mcp.createApproval({
             projectId: identity.projectId,
             runId: identity.runId,
@@ -567,10 +577,10 @@
                 return;
             }
         }
-        var opArgs = { commandId: commandId, params: params };
         var projectPath = refs.runProjectPath.value.trim();
-        if (projectPath) opArgs.projectPath = projectPath;
-        opArgs.save = refs.runSave.checked === true;
+        // projectPath stays present-but-undefined when empty: the server gate
+        // digests its resolved opArgs, so the key must exist on both sides.
+        var opArgs = { commandId: commandId, params: params, projectPath: projectPath || undefined, save: refs.runSave.checked === true };
         showRunResult(null, 'Running ' + PANEL.runCommandTool + '…');
         approvedCall(PANEL.runCommandTool, opArgs).then(function (result) {
             showRunResult(result.isError ? false : true, result);
@@ -708,7 +718,8 @@
                 noAudio: noAudio.checked === true
             };
             showCardResult(result, null, 'export_master running…');
-            approvedCall('filmcraft.export_master', opArgs).then(function (res) {
+            // export_master is verified artifact generation — no approval needed.
+            callToolTracked('filmcraft.export_master', opArgs).then(function (res) {
                 showReceiptResult(result, res, ['verified', 'output', 'duration', 'sha256']);
             }, function (err) {
                 showCardResult(result, false, err.message);
