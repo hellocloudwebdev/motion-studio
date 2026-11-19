@@ -1,0 +1,308 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const here = path.dirname(fileURLToPath(import.meta.url));
+const SHARED_PATH = path.join(here, 'mcp-http-client.js');
+const EFFECTCRAFT_COPY = path.join(here, '..', 'effectcraft-panel', 'mcp-http-client.js');
+const FILMCRAFT_COPY = path.join(here, '..', 'filmcraft-panel', 'mcp-http-client.js');
+
+const { createMcpHttpClient, stableStringify, createApproval } = require(SHARED_PATH);
+
+// ---------------------------------------------------------------------------
+// Golden vectors for the approval digest, computed independently with
+// node:crypto against the exact rule the craft servers implement
+// (sha256(utf8(stableStringify(args)))). If the client and the servers ever
+// disagree, byte-for-byte approval validation breaks — these vectors are the
+// tripwire. The undefined-prop vector pins the subtle behavior where
+// JSON.stringify(undefined) === undefined, which string-concatenates as the
+// literal text "undefined".
+// ---------------------------------------------------------------------------
+const GOLDEN_VECTORS = [
+    { label: 'sorted flat keys', args: { b: 2, a: 1, A: 'z' }, stable: '{"A":"z","a":1,"b":2}', digest: '4b7bf73a004f427cb88e059de6176b3037d466b6311fba9cf428f3ae7b2de868' },
+    { label: 'nested objects and arrays', args: { z: [3, 1, { y: 'x', a: [true, null] }], a: { c: 'x', b: 2 } }, stable: '{"a":{"b":2,"c":"x"},"z":[3,1,{"a":[true,null],"y":"x"}]}', digest: 'afb62c39e101d660ccc475318dbc9585422d39f8ad489af41da1ddf162bb7620' },
+    { label: 'empty object', args: {}, stable: '{}', digest: '44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a' },
+    { label: 'array of objects', args: [{ b: 1, a: 2 }, ['z', 'a']], stable: '[{"a":2,"b":1},["z","a"]]', digest: 'dc905f9588fcbb49e82de8162da39356e21fd0185d3737d76457c4ae53107372' },
+    { label: 'unicode and paths', args: { name: 'héllo ✓', path: 'D:/motions/scene.exr' }, stable: '{"name":"héllo ✓","path":"D:/motions/scene.exr"}', digest: '2bd48ab03abb45fe94d84e2e4c97afa82ca488cebf0751bfda21ec16e3fc2c48' },
+    { label: 'run_command payload', args: { commandId: 'scene.render', params: { sceneId: 'sc-01', quality: 2 }, projectPath: 'D:/motions/demo.ecproj', save: true }, stable: '{"commandId":"scene.render","params":{"quality":2,"sceneId":"sc-01"},"projectPath":"D:/motions/demo.ecproj","save":true}', digest: '5d01c0c555734ee890581af541b61311a45e09367716b6daf97156caa0402028' },
+    { label: 'undefined property concatenates as text', args: { a: undefined, b: null }, stable: '{"a":undefined,"b":null}', digest: '1bd7135b0bad947188e8aa54a422c973ed6c0d2062b3ee890a15cf633d074560' },
+    { label: 'NaN serializes as null', args: { n: NaN }, stable: '{"n":null}', digest: '5b4da02351c1c20974b216a5e3a4edb59ac51cbda6be3e9d82952b4f5beea463' }
+];
+
+// ---------------------------------------------------------------------------
+// Minimal MCP Streamable-HTTP fixture server (stand-in for the craft servers).
+// POST /mcp only; initialize -> 200 + Mcp-Session-Id header; initialized
+// notification -> 202 empty; tools/list -> two tools (optionally SSE-framed);
+// tools/call -> JSON receipt; optional mandatory x-motion-studio-token.
+// ---------------------------------------------------------------------------
+const FIXTURE_TOKEN = 'fixture-token-1234';
+const FIXTURE_TOOLS = [
+    { name: 'fixture_echo', description: 'Echoes the arguments back as a JSON receipt.', inputSchema: { type: 'object', properties: { value: { type: 'string' } } } },
+    { name: 'fixture_fail', description: 'Always answers isError true to exercise faithful error surfacing.', inputSchema: { type: 'object' } }
+];
+
+async function startFixture({ requireToken = false, sseToolsList = false } = {}) {
+    const seen = [];
+    const sessions = new Set();
+    const server = http.createServer((req, res) => {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => {
+            const raw = Buffer.concat(chunks).toString('utf8');
+            const record = {
+                method: req.method,
+                url: req.url,
+                sessionHeader: req.headers['mcp-session-id'] || null,
+                protocolHeader: req.headers['mcp-protocol-version'] || null,
+                tokenHeader: req.headers['x-motion-studio-token'] || null,
+                acceptHeader: req.headers['accept'] || null,
+                contentTypeHeader: req.headers['content-type'] || null
+            };
+            seen.push(record);
+            const reply = (status, headers, body) => { res.writeHead(status, headers); res.end(body); };
+            const rpcError = (status, id, code, message) => reply(status, { 'content-type': 'application/json' }, JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }));
+
+            if (req.method !== 'POST' || req.url !== '/mcp') {
+                reply(404, { 'content-type': 'application/json' }, JSON.stringify({ jsonrpc: '2.0', error: { code: -32601, message: 'fixture: unknown route' } }));
+                return;
+            }
+            let message;
+            try { message = JSON.parse(raw); } catch {
+                reply(400, { 'content-type': 'application/json' }, JSON.stringify({ jsonrpc: '2.0', error: { code: -32700, message: 'fixture: parse error' } }));
+                return;
+            }
+            if (requireToken && record.tokenHeader !== FIXTURE_TOKEN) {
+                rpcError(403, message.id ?? null, -32001, 'forbidden: x-motion-studio-token missing or wrong');
+                return;
+            }
+            if (message.method === 'initialize') {
+                // Deliberately mixed-case header name: the client must capture the
+                // session id case-insensitively.
+                const sessionId = 'fixture-session-' + (sessions.size + 1);
+                sessions.add(sessionId);
+                reply(200, {
+                    'content-type': 'application/json',
+                    'McP-SeSsIoN-Id': sessionId,
+                    'mcp-protocol-version': '2025-06-18'
+                }, JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: message.id,
+                    result: {
+                        protocolVersion: '2025-06-18',
+                        capabilities: { tools: {} },
+                        serverInfo: { name: 'fixture', version: '0.0.1' },
+                        instructions: 'minimal fixture server'
+                    }
+                }));
+                return;
+            }
+            if (message.method === 'notifications/initialized') {
+                reply(202, {}, '');
+                return;
+            }
+            if (!record.sessionHeader || !sessions.has(record.sessionHeader)) {
+                rpcError(400, message.id ?? null, -32000, 'fixture: missing or unknown mcp-session-id');
+                return;
+            }
+            if (message.method === 'tools/list') {
+                const body = JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { tools: FIXTURE_TOOLS } });
+                if (sseToolsList) {
+                    reply(200, { 'content-type': 'text/event-stream' }, ': fixture heartbeat\n\nevent: message\ndata: ' + body + '\n\n');
+                } else {
+                    reply(200, { 'content-type': 'application/json' }, body);
+                }
+                return;
+            }
+            if (message.method === 'tools/call') {
+                const name = message.params && message.params.name;
+                if (name === 'fixture_fail') {
+                    reply(200, { 'content-type': 'application/json' }, JSON.stringify({
+                        jsonrpc: '2.0', id: message.id,
+                        result: { isError: true, content: [{ type: 'text', text: 'fixture boom: ' + JSON.stringify((message.params && message.params.arguments) || {}) }] }
+                    }));
+                    return;
+                }
+                reply(200, { 'content-type': 'application/json' }, JSON.stringify({
+                    jsonrpc: '2.0', id: message.id,
+                    result: { isError: false, content: [{ type: 'text', text: JSON.stringify({ ok: true, tool: name, echoed: (message.params && message.params.arguments) || {} }) }] }
+                }));
+                return;
+            }
+            rpcError(200, message.id ?? null, -32601, 'fixture: unknown method ' + String(message.method));
+        });
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    return {
+        port,
+        seen,
+        url: 'http://127.0.0.1:' + port + '/mcp',
+        close: () => new Promise(resolve => server.close(() => resolve()))
+    };
+}
+
+test('stableStringify golden vectors match the craft-server digest rule', () => {
+    for (const vector of GOLDEN_VECTORS) {
+        assert.equal(stableStringify(vector.args), vector.stable, 'stable form mismatch for: ' + vector.label);
+        assert.equal(createHash('sha256').update(vector.stable).digest('hex'), vector.digest, 'independent sha256 of the stable form must equal the golden digest: ' + vector.label);
+    }
+});
+
+test('createApproval builds a record whose digest matches the golden vectors', async () => {
+    const now = Date.parse('2026-11-19T12:00:00.000Z');
+    const args = { commandId: 'scene.render', params: { sceneId: 'sc-01', quality: 2 }, projectPath: 'D:/motions/demo.ecproj', save: true };
+    const approval = await createApproval({ projectId: 'p1', runId: 'r1', app: 'effectcraft', toolName: 'effectcraft.run_command', args, approvedBy: ' producer ', now });
+    assert.equal(approval.approved, true);
+    assert.equal(approval.projectId, 'p1');
+    assert.equal(approval.runId, 'r1');
+    assert.equal(approval.app, 'effectcraft');
+    assert.equal(approval.toolName, 'effectcraft.run_command');
+    assert.equal(approval.approvedBy, 'producer', 'approvedBy must be trimmed');
+    assert.equal(approval.argumentsSha256, GOLDEN_VECTORS.find(v => v.label === 'run_command payload').digest);
+    assert.match(approval.approvalId, /^[0-9a-f-]{36}$/, 'approvalId looks like a UUID');
+    assert.equal(approval.approvedAt, '2026-11-19T12:00:00.000Z');
+    assert.equal(Date.parse(approval.expiresAt) - Date.parse(approval.approvedAt), 600000, 'default expiry is 10 minutes');
+
+    const custom = await createApproval({ projectId: 'p', runId: 'r', app: 'filmcraft', toolName: 'export_master', args: {}, approvedBy: 'a', expiresInMs: 60000, now });
+    assert.equal(Date.parse(custom.expiresAt) - Date.parse(custom.approvedAt), 60000);
+    assert.equal(custom.argumentsSha256, GOLDEN_VECTORS.find(v => v.label === 'empty object').digest, 'nullish args digest over {}');
+    const nullArgs = await createApproval({ projectId: 'p', runId: 'r', app: 'filmcraft', toolName: 't', args: null, approvedBy: 'a', now });
+    assert.equal(nullArgs.argumentsSha256, GOLDEN_VECTORS.find(v => v.label === 'empty object').digest);
+});
+
+test('createApproval rejects missing scope, actor and unbounded expiry', async () => {
+    await assert.rejects(createApproval({ runId: 'r', app: 'effectcraft', toolName: 't', approvedBy: 'a' }), /projectId/);
+    await assert.rejects(createApproval({ projectId: 'p', app: 'effectcraft', toolName: 't', approvedBy: 'a' }), /runId/);
+    await assert.rejects(createApproval({ projectId: 'p', runId: 'r', toolName: 't', approvedBy: 'a' }), /app/);
+    await assert.rejects(createApproval({ projectId: 'p', runId: 'r', app: 'photoshop', toolName: 't', approvedBy: 'a' }), /effectcraft.*filmcraft/);
+    await assert.rejects(createApproval({ projectId: 'p', runId: 'r', app: 'filmcraft', toolName: 't', approvedBy: '   ' }), /approvedBy/);
+    await assert.rejects(createApproval({ projectId: 'p', runId: 'r', app: 'filmcraft', toolName: 't', approvedBy: 'a', expiresInMs: 0 }), /expiry/);
+    await assert.rejects(createApproval({ projectId: 'p', runId: 'r', app: 'filmcraft', toolName: 't', approvedBy: 'a', expiresInMs: 3600001 }), /expiry/);
+});
+
+test('createMcpHttpClient fails fast without a fetch implementation', () => {
+    const realFetch = globalThis.fetch;
+    delete globalThis.fetch;
+    try {
+        assert.throws(() => createMcpHttpClient({ baseUrl: 'http://127.0.0.1:7420/mcp' }), /fetch implementation/);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test('createMcpHttpClient rejects non-http or localhost-style baseUrl', () => {
+    assert.throws(() => createMcpHttpClient({ baseUrl: 'ftp://127.0.0.1:7420/mcp' }), /http\(s\) MCP endpoint/);
+    assert.throws(() => createMcpHttpClient({ baseUrl: '' }), /http\(s\) MCP endpoint/);
+});
+
+test('full panel flow against one fixture: connect -> initialized -> listTools -> callTool (both panel copies + shared)', async (t) => {
+    const fixture = await startFixture();
+    t.after(() => fixture.close());
+    const clients = [
+        ['shared', require(SHARED_PATH)],
+        ['effectcraft copy', require(EFFECTCRAFT_COPY)],
+        ['filmcraft copy', require(FILMCRAFT_COPY)]
+    ];
+    for (const [label, moduleExports] of clients) {
+        const client = moduleExports.createMcpHttpClient({ baseUrl: fixture.url });
+        const serverInfo = await client.connect();
+        assert.deepEqual(serverInfo, { name: 'fixture', version: '0.0.1' }, label + ': serverInfo captured');
+        assert.ok(client.sessionId, label + ': session id captured from the (mixed-case) header');
+        assert.equal(client.protocolVersion, '2025-06-18', label + ': negotiated protocol version stored');
+
+        const tools = await client.listTools();
+        assert.deepEqual(tools.tools.map(tool => tool.name), ['fixture_echo', 'fixture_fail'], label + ': tools listed');
+
+        const echo = await client.callTool('fixture_echo', { value: 'hi', nested: { b: 2, a: 1 } });
+        assert.equal(echo.isError, false, label + ': echo isError false');
+        assert.equal(echo.data.ok, true, label + ': content[].text parsed as JSON (data)');
+        assert.deepEqual(echo.data.echoed, { value: 'hi', nested: { b: 2, a: 1 } }, label + ': args echoed verbatim');
+        assert.equal(typeof echo.text, 'string', label + ': raw text surfaced');
+
+        const failed = await client.callTool('fixture_fail', {});
+        assert.equal(failed.isError, true, label + ': isError surfaced faithfully');
+        assert.equal(failed.data, undefined, label + ': failing receipt is not JSON, data stays undefined');
+        assert.match(failed.text, /fixture boom/, label + ': failing receipt text preserved');
+
+        await client.close();
+        assert.equal(client.sessionId, null, label + ': session cleared on close');
+    }
+
+    const initializeSeen = fixture.seen.find(r => r.url === '/mcp');
+    assert.equal(initializeSeen.method, 'POST');
+    assert.equal(initializeSeen.acceptHeader, 'application/json, text/event-stream', 'initialize sends the streamable-HTTP Accept pair');
+    assert.equal(initializeSeen.contentTypeHeader, 'application/json');
+    assert.equal(initializeSeen.sessionHeader, null, 'initialize carries no session id yet');
+    const initialized = fixture.seen.find(r => r.sessionHeader && r.protocolHeader);
+    assert.ok(initialized, 'post-initialize requests carry session + protocol headers');
+    assert.match(initialized.sessionHeader, /^fixture-session-/);
+    assert.equal(initialized.protocolHeader, '2025-06-18');
+    assert.ok(fixture.seen.some(r => r.method === 'DELETE'), 'close() DELETEs the session endpoint');
+});
+
+test('token mode: absent or wrong token surfaces the 403 clearly, right token connects', async (t) => {
+    const fixture = await startFixture({ requireToken: true });
+    t.after(() => fixture.close());
+
+    const noToken = createMcpHttpClient({ baseUrl: fixture.url });
+    await assert.rejects(noToken.connect(), /token required or mismatch.*x-motion-studio-token/i);
+    assert.equal(noToken.sessionId, null, 'no session is stored on rejection');
+
+    const wrongToken = createMcpHttpClient({ baseUrl: fixture.url, token: 'not-the-token' });
+    await assert.rejects(wrongToken.connect(), /token required or mismatch/);
+
+    const beforeRight = fixture.seen.length;
+    const rightToken = createMcpHttpClient({ baseUrl: fixture.url, token: FIXTURE_TOKEN });
+    await rightToken.connect();
+    const tools = await rightToken.listTools();
+    assert.equal(tools.tools.length, 2);
+    assert.equal(fixture.seen.slice(beforeRight).every(record => record.tokenHeader === FIXTURE_TOKEN), true, 'every authenticated request carries the token header');
+    await rightToken.close();
+});
+
+test('wrong path (404) and connection refused surface descriptive errors with the start command', async (t) => {
+    const fixture = await startFixture();
+    t.after(() => fixture.close());
+
+    const wrongPath = createMcpHttpClient({ baseUrl: fixture.url.replace('/mcp', '/wrong') });
+    await assert.rejects(wrongPath.connect(), /404.*wrong path/);
+
+    // Grab an ephemeral port and release it: connecting there is refused.
+    const probe = http.createServer();
+    await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+    const deadPort = probe.address().port;
+    await new Promise(resolve => probe.close(() => resolve()));
+    const refused = createMcpHttpClient({ baseUrl: 'http://127.0.0.1:' + deadPort + '/mcp' });
+    await assert.rejects(refused.connect(), err => {
+        assert.match(err.message, /server not running/);
+        // The dead port is not one of the known MCP ports, so the hint falls
+        // back to the generic craft package path.
+        assert.match(err.message, /start it with: node packages\/.*-mcp-server\/src\/index\.mjs --http/i);
+        return true;
+    });
+});
+
+test('SSE-framed responses are parsed (data: payload matching the request id)', async (t) => {
+    const fixture = await startFixture({ sseToolsList: true });
+    t.after(() => fixture.close());
+    const client = createMcpHttpClient({ baseUrl: fixture.url });
+    await client.connect();
+    const tools = await client.listTools();
+    assert.deepEqual(tools.tools.map(tool => tool.name), ['fixture_echo', 'fixture_fail'], 'tools parsed out of the SSE stream');
+    const sseRecord = fixture.seen.filter(r => r.method === 'POST' && r.sessionHeader).pop();
+    assert.ok(sseRecord, 'SSE request carried the session id');
+    await client.close();
+});
+
+test('panel copies are byte-identical to the shared client', () => {
+    const shared = readFileSync(SHARED_PATH);
+    assert.deepEqual(readFileSync(EFFECTCRAFT_COPY), shared, 'effectcraft copy must be byte-identical to shared');
+    assert.deepEqual(readFileSync(FILMCRAFT_COPY), shared, 'filmcraft copy must be byte-identical to shared');
+    assert.match(shared.toString('utf8'), /copy of \.\.\/shared\/mcp-http-client\.js — keep in sync/, 'copies carry the keep-in-sync header');
+});

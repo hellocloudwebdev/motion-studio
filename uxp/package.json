@@ -1,0 +1,7 @@
+{
+  "name": "motion-studio-uxp-panels",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adobe UXP panels (EffectCraft for After Effects, FilmCraft for Premiere Pro). This package.json exists only so `node --test uxp/` can require the plain-script .js client copies as CommonJS (the repo root is ESM); UXP itself ignores it.",
+  "type": "commonjs"
+}

@@ -32,6 +32,73 @@ function resolveModelAsset(sourceRoot, asset, layerId) {
   return candidate;
 }
 
+// M1.6: custom GLSL shaders. The GLSL source travels inside the base64 spec
+// (no script injection surface) and compiles in EffectCraft... in Three.js's
+// WebGL program; structural validation fails closed before any render so a
+// broken shader never ships as a black frame.
+const MAX_GLSL_LENGTH = 64 * 1024;
+
+function validateShader(shader, layerId) {
+  if (!shader || typeof shader !== 'object') throw new Error('Layer ' + layerId + ' shader must be an object with vertex and fragment GLSL sources.');
+  for (const stage of ['vertex', 'fragment']) {
+    const source = shader[stage];
+    if (typeof source !== 'string' || !source.trim()) throw new Error('Layer ' + layerId + ' shader needs a non-empty ' + stage + ' GLSL source.');
+    if (source.length > MAX_GLSL_LENGTH) throw new Error('Layer ' + layerId + ' ' + stage + ' GLSL exceeds ' + MAX_GLSL_LENGTH + ' characters.');
+    if (source.includes('\0')) throw new Error('Layer ' + layerId + ' ' + stage + ' GLSL contains a null byte.');
+    if (!/void\s+main\s*\(/.test(source)) throw new Error('Layer ' + layerId + ' ' + stage + ' GLSL has no void main() entry point.');
+    if (/#\s*include\b/.test(source)) throw new Error('Layer ' + layerId + ' ' + stage + ' GLSL must not use #include directives.');
+    const opens = (source.match(/\{/g) || []).length, closes = (source.match(/\}/g) || []).length;
+    if (opens !== closes) throw new Error('Layer ' + layerId + ' ' + stage + ' GLSL braces are unbalanced (' + opens + ' open, ' + closes + ' close).');
+  }
+  const uniforms = {};
+  if (shader.uniforms !== undefined) {
+    if (!shader.uniforms || typeof shader.uniforms !== 'object' || Array.isArray(shader.uniforms)) throw new Error('Layer ' + layerId + ' shader uniforms must be an object of scalar or vector values.');
+    for (const [name, value] of Object.entries(shader.uniforms)) {
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error('Layer ' + layerId + ' uniform name "' + name + '" is not a valid GLSL identifier.');
+      if (typeof value === 'number' && Number.isFinite(value)) uniforms[name] = value;
+      else if (Array.isArray(value) && value.every(item => typeof item === 'number' && Number.isFinite(item)) && value.length >= 2 && value.length <= 4) uniforms[name] = value;
+      else if (typeof value === 'string' && HEX.test(value)) uniforms[name] = value;
+      else throw new Error('Layer ' + layerId + ' uniform "' + name + '" must be a finite number, a 2-4 number array, or a #RRGGBB color.');
+    }
+  }
+  return { vertex: shader.vertex, fragment: shader.fragment, uniforms };
+}
+
+// M1.6: deterministic particle systems. The point cloud is generated from a
+// seeded PRNG so identical IR always renders identical frames.
+function validateParticles(particles, layerId) {
+  if (!particles || typeof particles !== 'object') throw new Error('Layer ' + layerId + ' particles must be an object.');
+  const count = Number(particles.count);
+  if (!Number.isInteger(count) || count < 1 || count > 100_000) throw new Error('Layer ' + layerId + ' particles.count must be an integer between 1 and 100000.');
+  const spread = Number(particles.spread);
+  if (!Number.isFinite(spread) || spread <= 0 || spread > 10000) throw new Error('Layer ' + layerId + ' particles.spread must be a positive number (comp pixels).');
+  const size = Number(particles.size ?? 4);
+  if (!Number.isFinite(size) || size <= 0 || size > 100) throw new Error('Layer ' + layerId + ' particles.size must be a positive number (pixels).');
+  const color = particles.color ?? '#ffffff';
+  if (!HEX.test(color)) throw new Error('Layer ' + layerId + ' particles.color must be #RRGGBB.');
+  const seed = Number.isInteger(particles.seed) ? particles.seed : 0x4d53;
+  const speed = Number.isFinite(Number(particles.speed)) ? Number(particles.speed) : 0;
+  if (speed < 0 || speed > 10) throw new Error('Layer ' + layerId + ' particles.speed must be between 0 and 10.');
+  return { count, spread, size, color, seed, speed };
+}
+
+// mulberry32: tiny deterministic PRNG so particle clouds reproduce exactly.
+function seededPoints(count, spread, seed) {
+  let state = seed >>> 0;
+  const next = () => {
+    state = state + 0x6D2B79F5 >>> 0;
+    let t = state;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  const points = [];
+  for (let index = 0; index < count; index += 1) {
+    points.push([(next() - 0.5) * spread, (next() - 0.5) * spread, (next() - 0.5) * spread / 2]);
+  }
+  return points;
+}
+
 function vector(value, fallback, field) {
   const input = value ?? fallback;
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(field + ' must be a numeric x/y/z vector.');
@@ -96,6 +163,8 @@ function sceneSpec(project, scene, sourceRoot) {
       id: layer.id,
       primitive,
       color,
+      ...(content.shader ? { shader: validateShader(content.shader, layer.id) } : {}),
+      ...(content.particles ? { particles: validateParticles(content.particles, layer.id) } : {}),
       position: vector(content.position ?? layer.transform, { x: 0, y: 0, z: 0 }, 'layer.position'),
       rotation: vector(content.rotation, { x: 0, y: 0, z: 0 }, 'layer.rotation'),
       scale: vector(content.scale, { x: 1, y: 1, z: 1 }, 'layer.scale'),
@@ -156,16 +225,21 @@ camera.position.set(spec.camera.position.x,spec.camera.position.y,spec.camera.po
 scene.add(new THREE.AmbientLight(0xffffff,1.6));
 const keyLight=new THREE.DirectionalLight(0xffffff,2.2);keyLight.position.set(-3,5,7);scene.add(keyLight);
 function geometry(primitive){switch(primitive){case'box':return new THREE.BoxGeometry(1,1,1);case'sphere':return new THREE.SphereGeometry(.5,32,24);case'icosahedron':return new THREE.IcosahedronGeometry(.62,1);case'cylinder':return new THREE.CylinderGeometry(.5,.5,1,32);case'cone':return new THREE.ConeGeometry(.55,1,32);case'torus':return new THREE.TorusGeometry(.48,.18,16,48);case'plane':return new THREE.PlaneGeometry(1,1);default:throw new Error('Unsupported primitive');}}
+function mulberry32(seed){let state=seed>>>0;return function(){state=state+0x6D2B79F5>>>0;let t=state;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};}
+function makeParticles(item){const p=item.particles;const rng=mulberry32(p.seed);const positions=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){positions[i*3]=(rng()-0.5)*p.spread;positions[i*3+1]=(rng()-0.5)*p.spread;positions[i*3+2]=(rng()-0.5)*p.spread/2;}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(positions,3));const m=new THREE.PointsMaterial({size:p.size,color:new THREE.Color(p.color)});return new THREE.Points(g,m);}
+function makeShaderMaterial(shader){const uniforms={};for(const name of Object.keys(shader.uniforms||{})){const v=shader.uniforms[name];uniforms[name]={value:Array.isArray(v)?(v.length===2?new THREE.Vector2(v[0],v[1]):v.length===3?new THREE.Vector3(v[0],v[1],v[2]):new THREE.Vector4(v[0],v[1],v[2],v[3])):(typeof v==='string'?new THREE.Color(v):v)};}return new THREE.ShaderMaterial({vertexShader:shader.vertex,fragmentShader:shader.fragment,uniforms});}
+const pfps=spec.frameRate.numerator/spec.frameRate.denominator;
 const instances=[];
 for(const item of spec.objects){
   let object;
   if(item.model){object=new THREE.Group();object.name=item.id;}
-  else{object=new THREE.Mesh(geometry(item.primitive),new THREE.MeshStandardMaterial({color:item.color,metalness:.15,roughness:.55}));object.name=item.id;}
+  else if(item.particles){object=makeParticles(item);object.name=item.id;}
+  else{const material=item.shader?makeShaderMaterial(item.shader):new THREE.MeshStandardMaterial({color:item.color,metalness:.15,roughness:.55});object=new THREE.Mesh(geometry(item.primitive),material);object.name=item.id;}
   scene.add(object);instances.push({spec:item,object});
 }
 function mix(a,b,t){return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};}
 function transformAt(item,frame){const keys=item.frames;if(!keys.length)return{position:item.position,rotation:item.rotation,scale:item.scale};let left={frame:0,position:item.position,rotation:item.rotation,scale:item.scale},right=null;for(const key of keys){right={frame:key.frame,position:key.position||left.position,rotation:key.rotation||left.rotation,scale:key.scale||left.scale};if(frame<=right.frame)break;left=right;right=null;}if(!right)return{position:left.position,rotation:left.rotation,scale:left.scale};const t=right.frame===left.frame?0:Math.max(0,Math.min(1,(frame-left.frame)/(right.frame-left.frame)));return{position:mix(left.position,right.position,t),rotation:mix(left.rotation,right.rotation,t),scale:mix(left.scale,right.scale,t)};}
-function renderAtFrame(frame){for(const {spec:item,object} of instances){const t=transformAt(item,frame);object.position.set(t.position.x,t.position.y,t.position.z);object.rotation.set(t.rotation.x,t.rotation.y,t.rotation.z);object.scale.set(t.scale.x,t.scale.y,t.scale.z);}renderer.render(scene,camera);}
+function renderAtFrame(frame){for(const {spec:item,object} of instances){const t=transformAt(item,frame);object.position.set(t.position.x,t.position.y,t.position.z);object.rotation.set(t.rotation.x,t.rotation.y,t.rotation.z);object.scale.set(t.scale.x,t.scale.y,t.scale.z);if(item.particles&&item.particles.speed){object.position.y+=(frame/pfps)*item.particles.speed;}}renderer.render(scene,camera);}
 const playhead={frame:0};const timeline=gsap.timeline({paused:true});timeline.fromTo(document.getElementById(compositionId),{scale:.99},{scale:1,duration:${duration},ease:'none'},0);timeline.to(playhead,{frame:spec.durationFrames,duration:${duration},ease:'none',onUpdate:()=>renderAtFrame(playhead.frame)},0);window.__timelines=window.__timelines||{};window.__timelines[compositionId]=timeline;window.renderAtFrame=renderAtFrame;
 ${hasModels ? `const loader=new GLTFLoader();
 const modelItems=spec.objects.filter(item=>item.model);

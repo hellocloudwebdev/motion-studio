@@ -167,10 +167,12 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Persist stage state, inputs/outputs, approvals, checkpoints, retry count and logs per project; resume only from verified artifacts and invalidate downstream work when an input hash changes.
 - Keep a single local render worker by default; make resource scheduling/cancel behavior observable and safe.
 - Version reusable brand systems, templates and motion components with explicit approval, compatibility, migration and rollback metadata.
+- **Status (2026-11-19): DONE — `packages/template-registry`.** Versioned registry file with per-template version (semver), author, status (draft/approved/retired), compatibility metadata (minVersion/maxMajor gated against the running Motion Studio version), explicit approval actor, rollback to the previously approved version, and an append-only history. Production use is refused for draft/retired/incompatible entries; malformed registrations are refused without corrupting the registry. 7 tests.
 
 **P4.2 — Portability, host adapters and secure operations**
 - Verify fresh install, upgrade, uninstall and recovery on supported Windows/macOS/Linux combinations; preserve project data and user-owned software/configuration.
 - Test host adapters and MCP capabilities independently; publish a compatibility matrix instead of assuming similar host behavior.
+- **Status (2026-11-19): DONE — `scripts/compatibility-matrix.mjs` + `docs/COMPATIBILITY-MATRIX.md`.** The script renders a machine-readable JSON matrix for the current host from live probes (engines, craft CLIs, licensed Adobe detection, workspace presence); the doc records the evidence log of verified host/engine combinations and the CI/runtime-gated split.
 - Validate fixed executables/argument arrays, workspace path boundaries, untrusted media handling, credential storage, approval scope and audit records.
 - Treat cloud/distributed rendering as optional; define its artifact identity, access control, cost/resource limits and cancellation before enabling it.
 
@@ -178,6 +180,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - Establish CI for supported Node/platform combinations, unit/integration/real-media fixtures, installer lifecycle and dependency audit.
 - Maintain benchmarks for representative durations/resolutions and memory use; publish results with machine and settings context.
 - Track production failures, repair rates, render cost/time and accepted outputs without collecting secrets or unapproved media.
+- **Status (2026-11-19): DONE — `packages/orchestrator/src/failure-tracking.mjs` + CLI `report [--out failure-report.json]`.** Aggregates the run-state ledgers and IR repair histories across all project workspaces into per-project and global stats: executed repair cycles, repair rate (cycles/run), escalations, verified masters, production-ready count and last activity. Counters and timestamps only — no secrets, no media. Live against the acceptance workspaces.
 - **Phase 4 exit:** clean-install release produces reproducible, auditable deliveries on the supported matrix and safely upgrades/recovers without data loss.
 - **Status (2026-11-14): CI configured** (`.github/workflows/ci.yml`, 3-OS × Node 24, per-OS ffmpeg installs — first Actions run pending), benchmarks implemented (`scripts/benchmark.mjs` → `work/benchmark-results.json` with machine context), doctor expanded (credential presence, HyperFrames browser, benchmark results). **Installer lifecycle DONE (2026-11-14):** pure flag/guidance units extracted and pinned by tests (including the AE/PP status rows without Creative Cloud), failure tracking writes a failed record with an idempotent-recovery hint before a non-zero exit, and a cross-platform dry-run lifecycle smoke runs in CI (the full npm-install path still needs a host run). CI green since 4b447e7; first green run covered the full suite on all 3 OSes.
 
@@ -316,6 +319,8 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 **Exit gate:** An IR-defined procedural 3D scene renders frame-accurately and appears in a final video.
 
 ## Milestone 1.7 — Visual, audio and creative QA with bounded repair
+
+**Status (2026-11-19): QA depth extended.** Technical QA: black/frozen/silence/loudness/true-peak already verified; NEW - CONTRAST_LOW (per-frame luma contrast floor), BALANCE_SKEWED (first/second-half luma skew), AUDIO_CLIPPING (astats flat factor), AUDIO_PEAK_AT_MAX and AUDIO_SYNC_MISMATCH (audio-stream duration vs video duration drift) - all FFprobe/FFmpeg-derived, medium severity (visible, non-blocking) with configurable thresholds, live-verified against generated fixtures. Visual QA: OCR safe-area/overflow checks already verified. Narration/music sync depth: audio-cue timing was verified at plan time (exact rational seconds) and now at output time (stream-duration drift); intelligibility remains a manual/OCR-proxy review.
 
 **Technical QA**
 - [ ] Schema/semantic validation, frame timing, missing media/fonts, dimensions, frame rate, codec/color, black/frozen frames, silence/clipping and file integrity.

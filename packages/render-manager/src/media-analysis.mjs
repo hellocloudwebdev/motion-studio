@@ -146,6 +146,52 @@ export async function analyzeRenderedMedia({ input, media, frameEvidence = [], o
   if (options.requireContinuousAudio && !media?.hasAudio) findings.push({ code: "AUDIO_STREAM_MISSING", severity: "high", message: "Continuous audio was required but the rendered file has no audio stream." });
   if (perceptual.nearDuplicateRunDetected) findings.push({ code: "PERCEPTUAL_DUPLICATE_FRAMES", severity: "medium", event: { maxNearDuplicateRunFrames: perceptual.maxNearDuplicateRunFrames }, message: "Downsampled consecutive frames are perceptually near-identical for longer than the configured static-frame threshold." });
 
+  // M1.7 QA depth: contrast, balance, clipping and A/V sync detectors.
+  const signalstats = await runFilter(input, "signalstats,metadata=print:file=-", signal);
+  const signalFindings = [];
+  if (signalstats.code === 0) {
+    const signalText = signalstats.stdout.toString("utf8");
+    const ymins = [], ymaxs = [], yavgs = [];
+    for (const match of signalText.matchAll(/YMIN=([\d.]+)/g)) ymins.push(Number(match[1]));
+    for (const match of signalText.matchAll(/YMAX=([\d.]+)/g)) ymaxs.push(Number(match[1]));
+    for (const match of signalText.matchAll(/YAVG=([\d.]+)/g)) yavgs.push(Number(match[1]));
+    if (ymins.length && ymaxs.length) {
+      const contrast = ymins.map((min, index) => (ymaxs[index] - min) / 255);
+      const avgContrast = contrast.reduce((sum, value) => sum + value, 0) / contrast.length;
+      const contrastThreshold = Number(options.minContrastRatio ?? 0.35);
+      if (avgContrast < contrastThreshold) signalFindings.push({ code: "CONTRAST_LOW", severity: "medium", value: Math.round(avgContrast * 1000) / 1000, threshold: contrastThreshold, message: "Average luma contrast across sampled frames is below the configured floor; the cut may read washed-out or flat." });
+      if (yavgs.length >= 2) {
+        const half = Math.floor(yavgs.length / 2);
+        const firstHalf = yavgs.slice(0, half).reduce((sum, v) => sum + v, 0) / half;
+        const secondHalf = yavgs.slice(half).reduce((sum, v) => sum + v, 0) / (yavgs.length - half);
+        const skew = Math.abs(firstHalf - secondHalf) / 255;
+        const skewThreshold = Number(options.maxLumaSkew ?? 0.5);
+        if (skew > skewThreshold) signalFindings.push({ code: "BALANCE_SKEWED", severity: "low", value: Math.round(skew * 1000) / 1000, threshold: skewThreshold, message: "Program brightness shifts strongly between the first and second half; verify the balance is intentional." });
+      }
+    }
+  }
+  findings.push(...signalFindings);
+  if (media?.hasAudio) {
+    const clipping = await runAudioFilter(input, "astats=measure_perchannel=none:measure_overall=Peak_level+Flat_factor:reset=0", signal);
+    if (clipping.code === 0) {
+      const flatFactor = Number((clipping.stderr.match(/Flat factor:\s*([\d.]+)/) || [])[1]);
+      const peak = Number((clipping.stderr.match(/Peak level:\s*([\d.]+)/) || [])[1]);
+      const flatThreshold = Number(options.clippingFlatFactor ?? 5);
+      if (Number.isFinite(flatFactor) && flatFactor >= flatThreshold) findings.push({ code: "AUDIO_CLIPPING", severity: "medium", value: flatFactor, threshold: flatThreshold, message: "Audio shows sustained clipping (flat factor above threshold); re-render with headroom or lower the mix." });
+      else if (Number.isFinite(peak) && peak >= 0.999) findings.push({ code: "AUDIO_PEAK_AT_MAX", severity: "low", value: peak, message: "Audio peaks at full scale; check for intersample clipping on the delivery encode." });
+    }
+    // A/V sync depth: the audio stream must not run measurably longer or
+    // shorter than the video stream for the same file.
+    const audioProbe = await run("ffprobe", ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration", "-of", "json", input], { signal });
+    let audioDuration = null;
+    try { audioDuration = Number(JSON.parse(audioProbe.stdout.toString("utf8")).streams?.[0]?.duration); } catch { /* no audio stream readable: the hasAudio guard already ran */ }
+    if (Number.isFinite(audioDuration) && media?.durationSeconds > 0) {
+      const drift = Math.abs(audioDuration - media.durationSeconds);
+      const syncTolerance = Number(options.maxSyncDriftSeconds ?? 0.15);
+      if (drift > syncTolerance) findings.push({ code: "AUDIO_SYNC_MISMATCH", severity: "medium", value: Math.round(drift * 1000) / 1000, threshold: syncTolerance, message: "Audio duration drifts from the video duration by more than the sync tolerance." });
+    }
+  }
+
   let ocr = { available: false, skipped: true, words: [], findings: [], reason: "Tesseract OCR is not installed or not enabled." };
   if (options.ocr !== false) {
     const version = await run("tesseract", ["--version"], { signal });

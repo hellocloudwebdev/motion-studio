@@ -1,0 +1,363 @@
+/*
+ * Motion Studio UXP panels — Spectrum-ish dark styling, CSS only.
+ * effectcraft-panel/panel.css and filmcraft-panel/panel.css are identical
+ * copies of this file — keep in sync.
+ *
+ * Flexbox only: UXP DOM support for CSS Grid is incomplete, so the layout
+ * never relies on grid. All colors are dark-spectrum style hand-rolled.
+ */
+
+.panel-root {
+    box-sizing: border-box;
+    padding: 10px;
+    background-color: #1e1e1e;
+    color: #d9d9d9;
+    font-family: "Adobe Clean", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.panel-note {
+    color: #8d8d8d;
+    padding: 8px 0;
+}
+
+.panel-fatal {
+    color: #e34850;
+    white-space: pre-wrap;
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.header {
+    margin-bottom: 10px;
+}
+
+.header-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.header-row .grow {
+    flex: 1 1 auto;
+}
+
+.brand {
+    font-weight: 700;
+    font-size: 13px;
+    color: #e8e8e8;
+}
+
+.status-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+    background-color: #3d3d3d;
+    color: #c9c9c9;
+}
+
+.status-pill.is-connecting {
+    background-color: #4d3f19;
+    color: #e8b64c;
+}
+
+.status-pill.is-connected {
+    background-color: #163826;
+    color: #33ab84;
+}
+
+.status-pill.is-error {
+    background-color: #4d1919;
+    color: #e34850;
+}
+
+/* Cards ------------------------------------------------------------------- */
+
+.card {
+    background-color: #252525;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.card-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9a9a9a;
+    margin: 0 0 8px 0;
+}
+
+.card-sub {
+    color: #8d8d8d;
+    margin: 0 0 8px 0;
+}
+
+/* Fields ------------------------------------------------------------------ */
+
+.field {
+    margin-bottom: 6px;
+}
+
+.field-label {
+    display: block;
+    font-size: 11px;
+    color: #a8a8a8;
+    margin-bottom: 2px;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+select,
+textarea {
+    box-sizing: border-box;
+    width: 100%;
+    background-color: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    color: #e8e8e8;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-family: inherit;
+}
+
+textarea {
+    font-family: "Source Code Pro", Consolas, "Courier New", monospace;
+    min-height: 56px;
+    resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 1px solid #1473e6;
+    border-color: #1473e6;
+}
+
+.row {
+    display: flex;
+    gap: 6px;
+}
+
+.row > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+}
+
+.checkbox-row label {
+    color: #c9c9c9;
+}
+
+/* Buttons ------------------------------------------------------------------ */
+
+button {
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    background-color: #393939;
+    color: #e8e8e8;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #444444;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+button.primary {
+    background-color: #1473e6;
+    border-color: #1473e6;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+button.primary:hover {
+    background-color: #2b7de9;
+}
+
+button.danger {
+    border-color: #6e2b2e;
+}
+
+button.link-like {
+    background: none;
+    border: none;
+    color: #74a8e8;
+    padding: 2px 4px;
+    font-size: 11px;
+}
+
+/* Key/value readouts (engine card, receipts) ------------------------------- */
+
+.kv-list {
+    margin: 4px 0;
+}
+
+.kv {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.kv .k {
+    flex: 0 0 82px;
+    color: #8d8d8d;
+}
+
+.kv .v {
+    flex: 1 1 auto;
+    color: #d9d9d9;
+    word-break: break-all;
+}
+
+/* Command browser ----------------------------------------------------------- */
+
+.cmd-list {
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    background-color: #1e1e1e;
+    max-height: 150px;
+    overflow-y: auto;
+    margin-bottom: 6px;
+}
+
+.cmd-item {
+    padding: 3px 8px;
+    cursor: pointer;
+}
+
+.cmd-item:hover,
+.cmd-item.is-selected {
+    background-color: #323232;
+}
+
+.cmd-item .cmd-id {
+    color: #e8e8e8;
+}
+
+.cmd-item .cmd-summary {
+    color: #8d8d8d;
+    margin-left: 6px;
+}
+
+.list-note {
+    color: #8d8d8d;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.describe-output {
+    margin-bottom: 6px;
+}
+
+/* JSON blocks and result areas --------------------------------------------- */
+
+pre.json {
+    background-color: #161616;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 6px;
+    margin: 4px 0;
+    max-height: 180px;
+    overflow: auto;
+    font-family: "Source Code Pro", Consolas, "Courier New", monospace;
+    font-size: 11px;
+    color: #c9d6c9;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.result-status-ok {
+    color: #33ab84;
+    font-weight: 600;
+}
+
+.result-status-error {
+    color: #e34850;
+    font-weight: 600;
+}
+
+.inline-error {
+    color: #e34850;
+    margin: 4px 0;
+    white-space: pre-wrap;
+}
+
+.inline-note {
+    color: #8d8d8d;
+    margin: 4px 0;
+}
+
+/* Receipt log --------------------------------------------------------------- */
+
+.receipt-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.receipt-list.collapsed {
+    display: none;
+}
+
+.receipt-item {
+    border-bottom: 1px solid #333333;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+}
+
+.receipt-summary {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    cursor: pointer;
+}
+
+.receipt-time {
+    color: #8d8d8d;
+    font-size: 11px;
+    flex: 0 0 auto;
+}
+
+.receipt-tool {
+    color: #e8e8e8;
+    flex: 1 1 auto;
+    word-break: break-all;
+}
+
+.tag-ok {
+    color: #33ab84;
+    flex: 0 0 auto;
+}
+
+.tag-err {
+    color: #e34850;
+    flex: 0 0 auto;
+}
+
+.receipt-detail.collapsed {
+    display: none;
+}

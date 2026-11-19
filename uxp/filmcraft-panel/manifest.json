@@ -1,0 +1,44 @@
+{
+    "id": "com.motion-studio.filmcraft",
+    "name": "Motion Studio — FilmCraft",
+    "version": "1.0.0",
+    "main": "index.html",
+    "manifestVersion": 5,
+    "host": [
+        {
+            "app": "premierepro",
+            "minVersion": "25.2.0"
+        }
+    ],
+    "requiredPermissions": {
+        "network": {
+            "domains": [
+                "http://127.0.0.1:7430",
+                "https://127.0.0.1:7430"
+            ]
+        },
+        "localFileSystem": "plugin",
+        "clipboard": "readAndWrite"
+    },
+    "entrypoints": [
+        {
+            "type": "panel",
+            "id": "main",
+            "label": {
+                "default": "Motion Studio — FilmCraft"
+            },
+            "minimumSize": {
+                "width": 300,
+                "height": 400
+            },
+            "preferredDockedSize": {
+                "width": 360,
+                "height": 560
+            },
+            "preferredFloatingSize": {
+                "width": 360,
+                "height": 560
+            }
+        }
+    ]
+}

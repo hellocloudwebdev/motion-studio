@@ -6,27 +6,38 @@ import path from 'node:path';
 import { compileThreeJsScene, renderThreeJsScene, validateThreeJsScene } from './index.mjs';
 import { resolveHyperFramesCli } from '../../render-manager/src/index.mjs';
 
-function project({ alpha = false, assets = [], modelLayer = false } = {}) {
-  const layers = [{
+function projectFixture({ alpha = false, assets = [], modelLayer = false, layers = null, shader = false, particles = false } = {}) {
+  const baseLayers = [{
     id: 'sphere', kind: '3d', engineHint: 'threejs',
     content: { primitive: 'sphere', material: { color: '#70e0cc' }, position: { x: 0, y: 0, z: 0 }, keyframes: [{ frame: 0, rotation: { x: 0, y: 0, z: 0 } }, { frame: 11, rotation: { x: 0, y: 3, z: 0 } }] }
   }];
   if (modelLayer) {
-    layers.unshift({ id: 'imported-product', kind: '3d', engineHint: 'threejs', assetId: 'product-model', content: { position: { x: 0, y: -1, z: 0 }, keyframes: [] } });
+    baseLayers.unshift({ id: 'imported-product', kind: '3d', engineHint: 'threejs', assetId: 'product-model', content: { position: { x: 0, y: -1, z: 0 }, keyframes: [] } });
   }
+  if (shader) {
+    baseLayers[0].content.shader = {
+      vertex: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragment: 'varying vec2 vUv; uniform float uTime; void main() { gl_FragColor = vec4(vUv, 0.5 + 0.5 * sin(uTime), 1.0); }',
+      uniforms: { uTime: 0 }
+    };
+  }
+  if (particles) {
+    baseLayers[0].content.particles = { count: 300, spread: 150, size: 3, color: '#ffffff', seed: 7, speed: 1 };
+  }
+  const finalLayers = layers ?? baseLayers;
   return {
     schemaVersion: '1.0.0',
     project: { id: 'three-fixture', name: 'Three fixture', objective: 'Test a procedural sphere.', frameRate: { numerator: 30, denominator: 1 }, canvas: { width: 640, height: 360 }, totalDurationFrames: 12, colorSpace: 'Rec.709', revision: 2 },
     creative: { concept: 'A rotating sphere', audience: 'Test', message: 'Three.js scenes render from explicit IR data.' },
     brand: { colors: { background: '#101820', accent: '#70e0cc' } },
     assets,
-    scenes: [{ id: 'sphere-scene', name: 'Sphere scene', durationFrames: 12, intent: 'Show a procedural sphere.', ...(alpha ? { production: { alpha: true } } : {}), layers }],
+    scenes: [{ id: 'sphere-scene', name: 'Sphere scene', durationFrames: 12, intent: 'Show a procedural sphere.', ...(alpha ? { production: { alpha: true } } : {}), layers: finalLayers }],
     delivery: { targets: [{ id: 'master', format: 'mp4', width: 640, height: 360, frameRate: { numerator: 30, denominator: 1 }, videoCodec: 'libx264', audioCodec: 'aac', colorSpace: 'Rec.709', alpha: false }] }
   };
 }
 
 test('validates explicit primitives and rejects unsupported contracts', () => {
-  const input = project();
+  const input = projectFixture();
   const valid = validateThreeJsScene(input, 'sphere-scene');
   assert.equal(valid.valid, true);
   assert.equal(valid.scene.objects[0].primitive, 'sphere');
@@ -36,6 +47,45 @@ test('validates explicit primitives and rejects unsupported contracts', () => {
   assert.match(validateThreeJsScene(unsupported, 'sphere-scene').issues[0].message, /primitive or a \.glb\/\.gltf/);
 });
 
+test('custom shaders validate structurally and travel in the spec', () => {
+  const input = projectFixture();
+  input.scenes[0].layers[0].content.shader = {
+    vertex: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragment: 'varying vec2 vUv; uniform float uTime; void main() { gl_FragColor = vec4(vUv, 0.5 + 0.5 * sin(uTime), 1.0); }',
+    uniforms: { uTime: 0, uTint: '#4ade80' }
+  };
+  const valid = validateThreeJsScene(input, 'sphere-scene');
+  assert.equal(valid.valid, true);
+  assert.deepEqual(valid.scene.objects[0].shader.uniforms.uTime, 0);
+  assert.deepEqual(valid.scene.objects[0].shader.uniforms.uTint, '#4ade80');
+  const noMain = structuredClone(input);
+  noMain.scenes[0].layers[0].content.shader.fragment = 'varying vec2 vUv; gl_FragColor = vec4(1.0);';
+  assert.match(validateThreeJsScene(noMain, 'sphere-scene').issues[0].message, /no void main/);
+  const unbalanced = structuredClone(input);
+  unbalanced.scenes[0].layers[0].content.shader.vertex = 'void main() { gl_Position = vec4(0.0);';
+  assert.match(validateThreeJsScene(unbalanced, 'sphere-scene').issues[0].message, /unbalanced/);
+  const include = structuredClone(input);
+  include.scenes[0].layers[0].content.shader.fragment = '#include <common>\nvoid main() {}';
+  assert.match(validateThreeJsScene(include, 'sphere-scene').issues[0].message, /#include/);
+  const badUniform = structuredClone(input);
+  badUniform.scenes[0].layers[0].content.shader.uniforms = { '9bad': 1 };
+  assert.match(validateThreeJsScene(badUniform, 'sphere-scene').issues[0].message, /valid GLSL identifier/);
+});
+
+test('particle systems validate bounds and seed deterministically', () => {
+  const input = projectFixture();
+  input.scenes[0].layers[0].content.particles = { count: 500, spread: 200, size: 3, color: '#ffffff', seed: 7, speed: 2 };
+  const valid = validateThreeJsScene(input, 'sphere-scene');
+  assert.equal(valid.valid, true);
+  assert.deepEqual(valid.scene.objects[0].particles, { count: 500, spread: 200, size: 3, color: '#ffffff', seed: 7, speed: 2 });
+  const tooMany = structuredClone(input);
+  tooMany.scenes[0].layers[0].content.particles.count = 100001;
+  assert.match(validateThreeJsScene(tooMany, 'sphere-scene').issues[0].message, /between 1 and 100000/);
+  const badColor = structuredClone(input);
+  badColor.scenes[0].layers[0].content.particles.color = '#fff';
+  assert.match(validateThreeJsScene(badColor, 'sphere-scene').issues[0].message, /#RRGGBB/);
+});
+
 test('model layers resolve .glb/.gltf assets inside the workspace and fail closed otherwise', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-three-model-'));
   try {
@@ -43,18 +93,18 @@ test('model layers resolve .glb/.gltf assets inside the workspace and fail close
     await mkdir0(path.dirname(modelFile));
     await writeFile(modelFile, 'glb-bytes');
     const assets = [{ id: 'product-model', kind: 'model', uri: 'assets/product.glb', rightsStatus: 'user-owned' }];
-    const valid = validateThreeJsScene(project({ assets, modelLayer: true }), 'sphere-scene', { sourceRoot: root });
+    const valid = validateThreeJsScene(projectFixture({ assets, modelLayer: true }), 'sphere-scene', { sourceRoot: root });
     assert.equal(valid.valid, true);
     assert.equal(valid.scene.objects[0].model.assetId, 'product-model');
     assert.match(valid.scene.objects[0].model.source, /product\.glb$/);
 
-    const missing = project({ assets: [], modelLayer: true });
+    const missing = projectFixture({ assets: [], modelLayer: true });
     assert.match(validateThreeJsScene(missing, 'sphere-scene').issues[0].message, /missing from the Canonical Video IR/);
-    const wrongKind = project({ assets: [{ id: 'product-model', kind: 'image', uri: 'assets/product.png' }], modelLayer: true });
+    const wrongKind = projectFixture({ assets: [{ id: 'product-model', kind: 'image', uri: 'assets/product.png' }], modelLayer: true });
     assert.match(validateThreeJsScene(wrongKind, 'sphere-scene', { sourceRoot: root }).issues[0].message, /supports \.glb and \.gltf/);
-    const escape = project({ assets: [{ id: 'product-model', kind: 'model', uri: '../outside.glb' }], modelLayer: true });
+    const escape = projectFixture({ assets: [{ id: 'product-model', kind: 'model', uri: '../outside.glb' }], modelLayer: true });
     assert.match(validateThreeJsScene(escape, 'sphere-scene', { sourceRoot: root }).issues[0].message, /inside the project workspace/);
-    const alphaTooLong = project({ alpha: true });
+    const alphaTooLong = projectFixture({ alpha: true });
     alphaTooLong.scenes[0].durationFrames = 601;
     alphaTooLong.project.totalDurationFrames = 601;
     assert.match(validateThreeJsScene(alphaTooLong, 'sphere-scene').issues[0].message, /up to 600 frames/);
@@ -68,7 +118,7 @@ async function mkdir0(dir) {
 test('compiles a local Three.js project with deterministic frame seeking and no remote scripts', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-studio-three-'));
   try {
-    const compiled = await compileThreeJsScene(project(), 'sphere-scene', { projectRoot: root });
+    const compiled = await compileThreeJsScene(projectFixture(), 'sphere-scene', { projectRoot: root });
     const html = await readFile(compiled.htmlPath, 'utf8');
     assert.match(html, /data-composition-id="threejs-sphere-scene"/);
     assert.match(html, /window\.renderAtFrame=renderAtFrame/);
@@ -83,7 +133,7 @@ test('compiles a local Three.js project with deterministic frame seeking and no 
 test('alpha scenes compile a transparent renderer without a scene background', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-three-alpha-'));
   try {
-    const compiled = await compileThreeJsScene(project({ alpha: true }), 'sphere-scene', { projectRoot: root });
+    const compiled = await compileThreeJsScene(projectFixture({ alpha: true }), 'sphere-scene', { projectRoot: root });
     const html = await readFile(compiled.htmlPath, 'utf8');
     assert.match(html, /alpha:true/);
     assert.match(html, /setClearColor\(0x000000,0\)/);
@@ -99,7 +149,7 @@ test('model layers compile the GLTFLoader and copy the model into composition as
     const modelFile = path.join(root, 'assets', 'product.glb');
     await mkdir0(path.dirname(modelFile));
     await writeFile(modelFile, 'glb-bytes-for-compile');
-    const input = project({ assets: [{ id: 'product-model', kind: 'model', uri: 'assets/product.glb', rightsStatus: 'user-owned' }], modelLayer: true });
+    const input = projectFixture({ assets: [{ id: 'product-model', kind: 'model', uri: 'assets/product.glb', rightsStatus: 'user-owned' }], modelLayer: true });
     const compiled = await compileThreeJsScene(input, 'sphere-scene', { projectRoot: root, sourceRoot: root });
     const html = await readFile(compiled.htmlPath, 'utf8');
     assert.match(html, /GLTFLoader/);
@@ -134,7 +184,7 @@ async function hyperframesToolchainAvailable() {
 test('alpha scene renders a verified transparent PNG sequence', { skip: await hyperframesToolchainAvailable() ? false : 'HyperFrames browser toolchain is required (CI sets MOTION_STUDIO_SKIP_BROWSER_TESTS=1).' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'motion-three-alpha-render-'));
   try {
-    const input = project({ alpha: true });
+    const input = projectFixture({ alpha: true });
     input.project.canvas = { width: 320, height: 180 };
     input.delivery.targets[0].width = 320;
     input.delivery.targets[0].height = 180;

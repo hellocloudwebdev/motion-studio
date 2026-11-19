@@ -15,6 +15,7 @@ import { createEditorialAssembly, validateEditorialAssembly } from '../../../pac
 import { exportEditorialInterchange } from '../../../packages/editorial-interchange/src/index.mjs';
 import { importInterchangeIntoFilmCraft } from '../../../packages/editorial-interchange/src/filmcraft-commands.mjs';
 import { renderEffectCraftScene } from '../../../packages/effectcraft-adapter/src/index.mjs';
+import { aggregateProductionStats } from '../../../packages/orchestrator/src/failure-tracking.mjs';
 import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
 import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
@@ -427,6 +428,17 @@ if (command === 'assets') {
     errors: result.errors
   });
   process.exitCode = result.exitCode;
+} else if (command === 'report') {
+  // P4.3 production failure tracking: aggregate repair rates, escalations and
+  // acceptance across all project workspaces into one machine-readable report.
+  const target = paths({ project: { id: 'report' } }, file || 'project.json');
+  const stats = await aggregateProductionStats(path.resolve(process.cwd(), 'projects'));
+  print(stats);
+  if (option('--out', undefined)) {
+    const outFile = path.resolve(option('--out', 'failure-report.json'));
+    await writeFile(outFile, JSON.stringify(stats, null, 2) + '\n', 'utf8');
+    console.error('Failure report written to ' + outFile);
+  }
 } else if (command === 'type-scale') {
   const width = Number(option('--width', '1920')), height = Number(option('--height', '1080'));
   print(calculateTypeScale({ width, height }));
@@ -440,5 +452,5 @@ if (command === 'assets') {
   print({ nodeMajor: Number(process.versions.node.split('.')[0]), minimumNodeMajor: 24, checks: results, craftMcpClient: '@motion-studio/craft-mcp-client', note: 'Run scripts/doctor.mjs for installed craft-tool (FilmCraft/EffectCraft) state.' });
   if (Number(process.versions.node.split('.')[0]) < 24) process.exitCode = 1;
 } else {
-  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>] [--locale en-US] [--pronunciation "Term=Phonetic"]…, render-threejs <project.json> <scene-id> [--project-root <directory>], render-effectcraft <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, interchange export (alias: premiere export), doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
+  console.log('Motion Studio CLI 1.0.0-alpha.1\nCommands: plan "<video idea>" [--model openrouter/free] [--allow-web-search], narration-generate <project.json> [--speech-provider local|fish-audio] [--speech-model <fish-audio-model-id>] [--speech-voice <id>] [--speech-speed <0.5-2>] [--locale en-US] [--pronunciation "Term=Phonetic"]…, render-threejs <project.json> <scene-id> [--project-root <directory>], render-effectcraft <project.json> <scene-id> [--project-root <directory>], assets scan|verify|probe|approve-rights|attach, media derive, editorial plan|validate, interchange export (alias: premiere export), interchange filmcraft <sequence.fcpxml> --project <out.fcproj>, report [--out failure-report.json], doctor, validate <project.json>, route <project.json>, qa <project.json>, graph <project.json>, preflight <project.json> --host-checks <host-checks.json>, compile <project.json>, render <project.json> [--quality draft|standard|high], render-mixed <project.json> [--quality draft] [--threads 2] [--project-root <dir>], repair <project.json> [--max-cycles N] [--no-targeted] [--quality draft] [--dry-run] [--project-root <dir>], deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high], qa-approve <project-with-qa.json> --actor <name>, type-scale --width 1920 --height 1080');
 }

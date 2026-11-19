@@ -32,6 +32,7 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "@kumoproductions/mcp-aftereffects": "0.3.2",
     "premiere-pro-mcp": "1.30.0",
+    "@motion-studio/template-registry": "0.1.0-alpha.1",
     "hyperframes": "0.8.86",
     "gsap": "3.14.2",
     "three": "0.181.2",
