@@ -7,10 +7,16 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 // FilmCraft + EffectCraft MCP client (architecture pivot 2026-11-14: the
 // Adobe AE/Premiere stack is replaced by the open-source Storytold tools).
-// Both tools expose headless MCP servers over stdio through their CLIs —
-// `effectcraft-cli mcp` and `filmcraft-cli -- mcp` — so the same hardened
-// client pattern applies: explicit producer approval for every mutation,
-// fixed argv, no shell, no arbitrary code execution surface.
+// Both tools expose headless MCP servers over stdio through their CLIs as
+// `<app>-cli mcp` — so the same hardened client pattern applies: explicit
+// producer approval for every mutation, fixed argv, no shell, no arbitrary
+// code execution surface.
+// Launch-args note (2026-11-19, upstream source + live check on FilmCraft
+// 0.20.1): FilmCraft's CLI parser treats everything after `--` as plain
+// positionals, so the previously used `filmcraft-cli -- mcp` only worked by
+// accident and would silently demote any future flags (e.g. `-- --project x`)
+// into file arguments. The bare `mcp` subcommand is the canonical form for
+// both apps.
 
 const CRAFT_APPS = new Set(['effectcraft', 'filmcraft']);
 
@@ -103,7 +109,7 @@ export async function resolveCraftCommand({ app, env = process.env, platform = p
 
 export function craftMcpArgs(app) {
   if (!CRAFT_APPS.has(app)) throw new Error('app must be effectcraft or filmcraft.');
-  return app === 'filmcraft' ? ['--', 'mcp'] : ['mcp'];
+  return ['mcp'];
 }
 
 // The craft tools ship no documented read-only/eval env switches (unlike the

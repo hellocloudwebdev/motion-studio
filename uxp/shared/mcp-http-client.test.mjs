@@ -12,6 +12,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const SHARED_PATH = path.join(here, 'mcp-http-client.js');
 const EFFECTCRAFT_COPY = path.join(here, '..', 'effectcraft-panel', 'mcp-http-client.js');
 const FILMCRAFT_COPY = path.join(here, '..', 'filmcraft-panel', 'mcp-http-client.js');
+const EFFECTCRAFT_PANEL_JS = path.join(here, '..', 'effectcraft-panel', 'panel.js');
+const FILMCRAFT_PANEL_JS = path.join(here, '..', 'filmcraft-panel', 'panel.js');
+const SHARED_CSS = path.join(here, 'panel.css');
+const EFFECTCRAFT_CSS = path.join(here, '..', 'effectcraft-panel', 'panel.css');
+const FILMCRAFT_CSS = path.join(here, '..', 'filmcraft-panel', 'panel.css');
 
 const { createMcpHttpClient, stableStringify, createApproval } = require(SHARED_PATH);
 
@@ -121,17 +126,28 @@ async function startFixture({ requireToken = false, sseToolsList = false } = {})
             }
             if (message.method === 'tools/call') {
                 const name = message.params && message.params.name;
+                const args = (message.params && message.params.arguments) || {};
+                const callResult = (payload, isError = false) => reply(200, { 'content-type': 'application/json' }, JSON.stringify({
+                    jsonrpc: '2.0', id: message.id,
+                    result: { isError, content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload) }] }
+                }));
                 if (name === 'fixture_fail') {
-                    reply(200, { 'content-type': 'application/json' }, JSON.stringify({
-                        jsonrpc: '2.0', id: message.id,
-                        result: { isError: true, content: [{ type: 'text', text: 'fixture boom: ' + JSON.stringify((message.params && message.params.arguments) || {}) }] }
-                    }));
+                    callResult('fixture boom: ' + JSON.stringify(args), true);
                     return;
                 }
-                reply(200, { 'content-type': 'application/json' }, JSON.stringify({
-                    jsonrpc: '2.0', id: message.id,
-                    result: { isError: false, content: [{ type: 'text', text: JSON.stringify({ ok: true, tool: name, echoed: (message.params && message.params.arguments) || {} }) }] }
-                }));
+                if (name === 'list_commands') {
+                    callResult({ commands: [{ commandId: 'fixture.echo', summary: 'Echo fixture' }, { commandId: 'fixture.boom', summary: 'Always fails' }] });
+                    return;
+                }
+                if (name === 'describe_command') {
+                    callResult({
+                        commandId: args.commandId,
+                        description: 'Fixture command ' + String(args.commandId),
+                        schema: { type: 'object', properties: { value: { type: 'string' } } }
+                    });
+                    return;
+                }
+                callResult({ ok: true, tool: name, echoed: args });
                 return;
             }
             rpcError(200, message.id ?? null, -32601, 'fixture: unknown method ' + String(message.method));
@@ -300,9 +316,203 @@ test('SSE-framed responses are parsed (data: payload matching the request id)', 
     await client.close();
 });
 
-test('panel copies are byte-identical to the shared client', () => {
+test('panel copies are byte-identical to the shared client (and stylesheet)', () => {
     const shared = readFileSync(SHARED_PATH);
     assert.deepEqual(readFileSync(EFFECTCRAFT_COPY), shared, 'effectcraft copy must be byte-identical to shared');
     assert.deepEqual(readFileSync(FILMCRAFT_COPY), shared, 'filmcraft copy must be byte-identical to shared');
     assert.match(shared.toString('utf8'), /copy of \.\.\/shared\/mcp-http-client\.js — keep in sync/, 'copies carry the keep-in-sync header');
+    const css = readFileSync(SHARED_CSS);
+    assert.deepEqual(readFileSync(EFFECTCRAFT_CSS), css, 'effectcraft panel.css must be byte-identical to shared');
+    assert.deepEqual(readFileSync(FILMCRAFT_CSS), css, 'filmcraft panel.css must be byte-identical to shared');
+});
+
+// ---------------------------------------------------------------------------
+// Fake-DOM smoke tests: both panel.js files must build their full UI and land
+// every failure (dead server, server-side error) in the status pill and the
+// receipt log — never as an uncaught exception. UXP DOM is stubbed with the
+// minimal surface the panel uses (createElement/textContent/appendChild/…).
+// ---------------------------------------------------------------------------
+function FakeNode(tag) {
+    this.tagName = tag;
+    this.children = [];
+    this.className = '';
+    this.type = '';
+    this.value = '';
+    this.checked = false;
+    this.placeholder = '';
+    this.disabled = false;
+    this._listeners = {};
+    this._text = undefined;
+}
+// Mirror real DOM semantics: assigning textContent replaces the children with
+// plain text; reading it returns the assigned text or the concatenated tree.
+Object.defineProperty(FakeNode.prototype, 'textContent', {
+    get() {
+        if (this._text !== undefined) return this._text;
+        return this.children.map(child => child.textContent).join('');
+    },
+    set(value) {
+        this._text = String(value);
+        this.children = [];
+    }
+});
+FakeNode.prototype.appendChild = function (child) { this.children.push(child); return child; };
+FakeNode.prototype.insertBefore = function (child, ref) {
+    let index = ref ? this.children.indexOf(ref) : 0;
+    if (index < 0) index = 0;
+    this.children.splice(index, 0, child);
+    return child;
+};
+FakeNode.prototype.removeChild = function (child) {
+    const index = this.children.indexOf(child);
+    if (index >= 0) this.children.splice(index, 1);
+    return child;
+};
+Object.defineProperty(FakeNode.prototype, 'firstChild', { get() { return this.children[0] || null; } });
+Object.defineProperty(FakeNode.prototype, 'lastChild', { get() { return this.children[this.children.length - 1] || null; } });
+FakeNode.prototype.addEventListener = function (type, fn) { (this._listeners[type] = this._listeners[type] || []).push(fn); };
+FakeNode.prototype.dispatch = function (type, event) { (this._listeners[type] || []).slice().forEach(fn => fn.call(this, event)); };
+
+function findAll(node, predicate, out) {
+    out = out || [];
+    if (predicate(node)) out.push(node);
+    for (const child of node.children) findAll(child, predicate, out);
+    return out;
+}
+
+function installFakeDom(mcpModule) {
+    const realWindow = globalThis.window;
+    const realDocument = globalThis.document;
+    globalThis.window = { MotionStudioMcpClient: mcpModule };
+    globalThis.document = { createElement: tag => new FakeNode(tag) };
+    return () => {
+        globalThis.window = realWindow;
+        globalThis.document = realDocument;
+    };
+}
+
+function waitMs(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+test('both panel.js files build their UI, browse commands and run an approved command end-to-end', async (t) => {
+    const fixture = await startFixture();
+    t.after(() => fixture.close());
+    const restoreDom = installFakeDom(require(SHARED_PATH));
+    t.after(restoreDom);
+    const panelSpecs = [
+        ['effectcraft', require(EFFECTCRAFT_PANEL_JS), 'effectcraft.run_command', ['Render scene', 'Render comp']],
+        ['filmcraft', require(FILMCRAFT_PANEL_JS), 'filmcraft.run_command', ['Import interchange', 'Inspect project', 'Inspect sequence', 'Export master', 'Probe media']]
+    ];
+    for (const [name, panelModule, runTool, extraButtons] of panelSpecs) {
+        assert.ok(panelModule.panels && panelModule.panels.main && typeof panelModule.panels.main.create === 'function', name + ': panels.main.create exported');
+        const root = new FakeNode('div');
+        panelModule.panels.main.create(root);
+
+        const buttons = findAll(root, node => node.tagName === 'button').map(node => node.textContent);
+        for (const expected of ['Connect', 'Disconnect', 'Clear saved settings', 'Refresh', 'Run', ...extraButtons]) {
+            assert.ok(buttons.includes(expected), name + ': button "' + expected + '" present (got: ' + buttons.join(', ') + ')');
+        }
+
+        // Connect to the live fixture through the UI.
+        const urlInput = findAll(root, node => node.tagName === 'input' && node.placeholder && node.placeholder.indexOf('/mcp') !== -1)[0];
+        assert.ok(urlInput, name + ': server URL field present');
+        urlInput.value = fixture.url;
+        findAll(root, node => node.tagName === 'button' && node.textContent === 'Connect')[0].dispatch('click', {});
+        await waitMs(250);
+        const pill = findAll(root, node => node.className.indexOf('status-pill') !== -1)[0];
+        assert.match(pill.className, /is-connected/, name + ': status pill shows connected');
+        assert.match(pill.textContent, /Connected to fixture v0\.0\.1/, name + ': pill names the server and version from serverInfo');
+        const receiptTools = findAll(root, node => node.className === 'receipt-tool').map(node => node.textContent);
+        assert.ok(receiptTools.includes('connect'), name + ': connect receipt logged');
+
+        // Command browser: Refresh populates the list from the fixture.
+        const refreshButton = findAll(root, node => node.tagName === 'button' && node.textContent === 'Refresh')[0];
+        refreshButton.dispatch('click', {});
+        await waitMs(200);
+        const notes = findAll(root, node => node.className === 'list-note').map(node => node.textContent);
+        assert.match(notes.join(' '), /2 commands/, name + ': list_commands populated the browser');
+        const commandItems = findAll(root, node => node.className.indexOf('cmd-item') !== -1);
+        assert.equal(commandItems.length, 2, name + ': two fixture commands rendered');
+
+        // Clicking a command stages it and renders the schema description.
+        commandItems[0].dispatch('click', {});
+        await waitMs(200);
+        const commandIdInput = findAll(root, node => node.tagName === 'input' && node.placeholder && node.placeholder.indexOf('command id') !== -1)[0];
+        assert.equal(commandIdInput.value, 'fixture.echo', name + ': clicking a command stages its id in the run form');
+        const describeTexts = findAll(root, node => node.className === 'json').map(node => node.textContent).join('\n');
+        assert.match(describeTexts, /Fixture command fixture\.echo/, name + ': describe_command rendered');
+
+        // Fill the approval identity and run the staged command.
+        const textInputs = findAll(root, node => node.tagName === 'input' && node.type === 'text');
+        const projectIdInput = textInputs.find(node => node.placeholder === 'project id');
+        projectIdInput.value = 'p1';
+        const runIdInput = textInputs.find(node => node.placeholder === 'run id');
+        runIdInput.value = 'r1';
+        const approvedByInput = textInputs.find(node => node.placeholder === 'approved by');
+        approvedByInput.value = ' producer ';
+        const paramsTextarea = findAll(root, node => node.tagName === 'textarea')[0];
+        paramsTextarea.value = '{"value":"hi"}';
+        const runButton = findAll(root, node => node.tagName === 'button' && node.textContent === 'Run')[0];
+        runButton.dispatch('click', {});
+        await waitMs(250);
+
+        // The fixture echoes the exact tool arguments back, so the approval
+        // record can be verified byte-for-byte against the digest rule.
+        const opArgs = { commandId: 'fixture.echo', params: { value: 'hi' }, save: false };
+        const expectedDigest = createHash('sha256').update(stableStringify(opArgs)).digest('hex');
+        // Receipts are prepended newest-first: the run we just triggered is the
+        // newest call receipt, and the fixture echo names the tool.
+        const latestCallReceipt = parseLatestCallReceipt(root);
+        assert.ok(latestCallReceipt, name + ': newest receipt is a parseable call receipt');
+        assert.equal(latestCallReceipt.result.data.tool, runTool, name + ': ' + runTool + ' receipt logged newest-first');
+        const echoed = latestCallReceipt.result.data.echoed;
+        assert.equal(echoed.approval.approved, true, name + ': approval sent with the tool call');
+        assert.equal(echoed.approval.toolName, runTool, name + ': approval toolName is app-prefixed');
+        assert.equal(echoed.approval.approvedBy, 'producer', name + ': approvedBy trimmed into the approval');
+        assert.equal(echoed.approval.argumentsSha256, expectedDigest, name + ': approval digest covers exactly the operation args minus approval');
+        assert.equal(echoed.projectId, 'p1', name + ': projectId travels with the tool call');
+        assert.equal(echoed.runId, 'r1', name + ': runId travels with the tool call');
+        const allReceiptTools = findAll(root, node => node.className === 'receipt-tool').map(node => node.textContent);
+        assert.ok(allReceiptTools.includes('describe_command') && allReceiptTools.includes('list_commands'), name + ': list/describe receipts logged');
+    }
+});
+
+function parseLatestCallReceipt(root) {
+    // Receipt details start collapsed: class is "receipt-detail collapsed".
+    const detailPres = findAll(root, node => node.className.indexOf('receipt-detail') === 0 && node.children[0]);
+    for (const pre of detailPres) {
+        try {
+            const parsed = JSON.parse(pre.textContent);
+            if (parsed && parsed.args && parsed.result && parsed.result.data) return parsed;
+        } catch { /* not a tool-call receipt (e.g. plain error entry) — keep scanning */ }
+    }
+    return null;
+}
+
+test('both panel.js files survive a refused server without uncaught errors', async (t) => {
+    const restoreDom = installFakeDom(require(SHARED_PATH));
+    t.after(restoreDom);
+    const uncaught = [];
+    const onUncaught = err => uncaught.push(err);
+    process.on('uncaughtException', onUncaught);
+    process.on('unhandledRejection', onUncaught);
+    t.after(() => {
+        process.removeListener('uncaughtException', onUncaught);
+        process.removeListener('unhandledRejection', onUncaught);
+    });
+    for (const panelModule of [require(EFFECTCRAFT_PANEL_JS), require(FILMCRAFT_PANEL_JS)]) {
+        const root = new FakeNode('div');
+        panelModule.panels.main.create(root);
+        // Default baseUrl points at 127.0.0.1:7420/7430 — nothing is listening there.
+        const connectButton = findAll(root, node => node.tagName === 'button' && node.textContent === 'Connect')[0];
+        connectButton.dispatch('click', {});
+        await waitMs(400);
+        const pill = findAll(root, node => node.className.indexOf('status-pill') !== -1)[0];
+        assert.match(pill.className, /is-error/, 'refused connection lands in the status pill');
+        assert.match(pill.textContent, /server not running/, 'refused connection suggests the start command');
+        const errorTags = findAll(root, node => node.className === 'tag-err');
+        assert.ok(errorTags.length >= 1, 'refused connection is logged in the receipt log');
+    }
+    assert.deepEqual(uncaught, [], 'no uncaught exceptions or unhandled rejections from panel handlers');
 });

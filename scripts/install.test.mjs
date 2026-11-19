@@ -74,8 +74,8 @@ test('craft guidance records ready MCP rows with exact CLI contracts', () => {
   assert.deepEqual(guidance.craftMcp.effectcraft.mcpArgs, ['mcp']);
   assert.equal(guidance.craftMcp.effectcraft.command, 'C:\\craft\\effectcraft-cli.exe');
   assert.equal(guidance.craftMcp.filmcraft.status, 'ready');
-  assert.deepEqual(guidance.craftMcp.filmcraft.mcpArgs, ['--', 'mcp']);
-  assert.match(guidance.craftMcp.filmcraft.note, /filmcraft-cli -- mcp/);
+  assert.deepEqual(guidance.craftMcp.filmcraft.mcpArgs, ['mcp']);
+  assert.match(guidance.craftMcp.filmcraft.note, /filmcraft-cli mcp/);
   assert.match(guidance.craftMcp.effectcraft.note, /effectcraft-cli mcp/);
 });
 

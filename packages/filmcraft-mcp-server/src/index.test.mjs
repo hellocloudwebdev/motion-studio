@@ -464,3 +464,103 @@ test('live inspect_sequence reads tracks/clips with frame timing and never modif
     });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+// Shared live helper: build a saved project with `sceneCount` demo-footage
+// clips placed back-to-back on V1 (FilmCraft's built-in footage — no media
+// files needed). Returns { projectPath, sequenceId, itemIds }.
+async function buildDemoProject(client, root, name, sceneCount = 1) {
+  const projectPath = path.join(root, name + '.fcproj');
+  const buildCommands = [
+    { id: 'file.newProject', params: { name } },
+    { id: 'file.newSequence', params: { name: name + ' Seq', width: 320, height: 180, fps: 30 } },
+    ...Array.from({ length: sceneCount }, (_, index) => ({ id: 'file.importDemoFootage', params: { scene: index === 0 ? 'Plasma' : 'Forest' } })),
+    { id: 'file.saveAs', params: { path: projectPath } }
+  ];
+  const now = Date.now();
+  const buildApproval = createFilmcraftApproval({ projectId: 'p-' + name, runId: 'r-build', toolName: 'filmcraft.run_batch', args: { projectId: 'p-' + name, runId: 'r-build', commands: buildCommands, projectPath: undefined, saveAs: projectPath, timeoutMs: undefined }, approvedBy: 'Producer', now });
+  const built = await callToolJson(client, 'filmcraft.run_batch', { projectId: 'p-' + name, runId: 'r-build', commands: buildCommands, saveAs: projectPath, approval: buildApproval });
+  assert.equal(built.parsed.ok, true, built.text);
+  const sequenceId = built.parsed.results.find(entry => entry.id === 'file.newSequence')?.result?.sequence;
+  const itemIds = built.parsed.results.filter(entry => entry.id === 'file.importDemoFootage').flatMap(entry => entry.result.items);
+  assert.equal(itemIds.length, sceneCount, 'the demo clips imported');
+  const placeCommands = [
+    { id: 'sequence.open', params: { item: sequenceId } },
+    { id: 'timeline.place', params: { items: itemIds } },
+    { id: 'file.saveAs', params: { path: projectPath } }
+  ];
+  const now2 = Date.now();
+  const placeApproval = createFilmcraftApproval({ projectId: 'p-' + name, runId: 'r-place', toolName: 'filmcraft.run_batch', args: { projectId: 'p-' + name, runId: 'r-place', commands: placeCommands, projectPath, saveAs: undefined, timeoutMs: undefined }, approvedBy: 'Producer', now: now2 });
+  const placed = await callToolJson(client, 'filmcraft.run_batch', { projectId: 'p-' + name, runId: 'r-place', commands: placeCommands, projectPath, approval: placeApproval });
+  assert.equal(placed.parsed.ok, true, placed.text);
+  return { projectPath, sequenceId, itemIds };
+}
+
+test('live read-only surfaces: list, describe (with near matches), inspect_project, render_frame, probe_media', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-readonly-'));
+  try {
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'ReadOnly');
+      // list_commands: the filter narrows the surface.
+      const listed = await callToolJson(client, 'filmcraft.list_commands', { filter: 'transition', limit: 10 });
+      assert.equal(listed.isError, false, listed.text);
+      assert.ok(listed.parsed.count >= 1 && listed.parsed.count <= 10);
+      assert.ok(listed.parsed.commands.every(entry => (entry.id + entry.label).toLowerCase().includes('transition')));
+      const limited = await callToolJson(client, 'filmcraft.list_commands', { limit: 3 });
+      assert.equal(limited.parsed.count, 3, 'limit truncates the surface');
+      assert.ok(limited.parsed.total > 3);
+      // describe_command: known id round-trips; unknown id fails with near matches.
+      const described = await callToolJson(client, 'filmcraft.describe_command', { commandId: 'file.import' });
+      assert.equal(described.isError, false, described.text);
+      assert.equal(described.parsed.commandDescription.id, 'file.import');
+      const unknown = await callToolJson(client, 'filmcraft.describe_command', { commandId: 'file.expor' });
+      assert.equal(unknown.isError, true);
+      assert.match(unknown.text, /Unknown FilmCraft command id/);
+      assert.match(unknown.text, /file\.exportMedia/, 'near matches list the substring hits');
+      // inspect_project: the bin tree and known sequences are reported.
+      const inspected = await callToolJson(client, 'filmcraft.inspect_project', { projectPath });
+      assert.equal(inspected.isError, false, inspected.text);
+      assert.ok(inspected.parsed.sequences.some(entry => entry.item === inspected.parsed.project.activeSequence), 'the active sequence is among the tree sequences');
+      const missingProject = await callToolJson(client, 'filmcraft.inspect_project', { projectPath: path.join(root, 'nope.fcproj') });
+      assert.equal(missingProject.isError, true);
+      assert.match(missingProject.text, /does not exist/);
+      // render_frame: a verified PNG artifact with a sha256 receipt.
+      const framePath = path.join(root, 'frame.png');
+      const rendered = await callToolJson(client, 'filmcraft.render_frame', { projectPath, seconds: 0, outputPath: framePath });
+      assert.equal(rendered.isError, false, rendered.text);
+      assert.ok(rendered.parsed.artifact.byteSize > 0, 'the PNG is non-empty');
+      assert.equal(rendered.parsed.artifact.sha256, createHash('sha256').update(await readFile(framePath)).digest('hex'));
+      const overwriteFrame = await callToolJson(client, 'filmcraft.render_frame', { projectPath, seconds: 0, outputPath: framePath });
+      assert.equal(overwriteFrame.isError, true);
+      assert.match(overwriteFrame.text, /refusing to overwrite/);
+      // probe_media: the rendered PNG probes as an image (no --allow-offline flag).
+      const probed = await callToolJson(client, 'filmcraft.probe_media', { mediaPath: framePath });
+      assert.equal(probed.isError, false, probed.text);
+      assert.equal(probed.parsed.probe.kind, 'Still', 'the PNG probes as a still image');
+      const missingMedia = await callToolJson(client, 'filmcraft.probe_media', { mediaPath: path.join(root, 'missing.mp4') });
+      assert.equal(missingMedia.isError, true);
+      assert.match(missingMedia.text, /does not exist/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live apply_transition mutates through the gate with schema-resolved default args', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-transition-'));
+  try {
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'Transition', 2);
+      // The approval covers the RESOLVED op args (zod fills track='V1',
+      // clipOrdinal=1, effect='cross_dissolve', frames=24), but the call omits
+      // them — proving defaults land inside the digest identically.
+      const opArgs = { projectId: 'p-Transition', runId: 'r-apply', projectPath, track: 'V1', clipOrdinal: 1, effect: 'cross_dissolve', frames: 12, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Transition', runId: 'r-apply', toolName: 'filmcraft.apply_transition', args: opArgs, approvedBy: 'Producer' });
+      const applied = await callToolJson(client, 'filmcraft.apply_transition', { projectId: 'p-Transition', runId: 'r-apply', projectPath, frames: 12, approval });
+      assert.equal(applied.isError, false, applied.text);
+      assert.equal(applied.parsed.ok, true, applied.text);
+      assert.equal(applied.parsed.effect, 'cross_dissolve');
+      assert.equal(applied.parsed.frames, 12);
+      // The transition persists in the saved sequence.
+      const inspected = await callToolJson(client, 'filmcraft.inspect_sequence', { projectPath });
+      assert.match(JSON.stringify(inspected.parsed.sequence), /cross_dissolve|transition/i, 'the transition survives save/reopen');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

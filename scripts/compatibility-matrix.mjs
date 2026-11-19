@@ -37,7 +37,7 @@ function craftEntry(app) {
       }
     } catch { /* users root unreadable */ }
   }
-  return { id: app, available: Boolean(found), path: found, version: found ? probe(found).version : null, mcp: found ? (app === 'filmcraft' ? 'filmcraft-cli -- mcp' : 'effectcraft-cli mcp') : null };
+  return { id: app, available: Boolean(found), path: found, version: found ? probe(found).version : null, mcp: found ? app + '-cli mcp' : null };
 }
 
 const craft = detectCraftApplications();

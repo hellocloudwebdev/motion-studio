@@ -3,6 +3,14 @@
     "motion-studio": {
       "command": "node",
       "args": ["<MOTION_STUDIO_INSTALL>/scripts/mcp-launcher.mjs"]
+    },
+    "effectcraft-studio": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-studio-mcp-launcher.mjs", "effectcraft"]
+    },
+    "filmcraft-studio": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-studio-mcp-launcher.mjs", "filmcraft"]
     }
   }
 }

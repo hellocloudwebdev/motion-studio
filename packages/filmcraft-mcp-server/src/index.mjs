@@ -237,6 +237,7 @@ export function buildFilmcraftServer() {
       const described = extractJsonResult((await runFilmcraftCli(command, ['describe', commandId], { timeoutMs })).stdout, 'filmcraft-cli describe');
       return jsonText({ command, commandDescription: described });
     } catch (error) {
+      if (error.code === 'ENOENT') throw error; // the CLI is missing entirely, not the command id
       let nearMatches = [];
       try {
         nearMatches = extractJsonResult((await runFilmcraftCli(command, ['commands', commandId, '--json'], { timeoutMs })).stdout, 'filmcraft-cli commands').map(entry => entry?.id).filter(Boolean).slice(0, 10);

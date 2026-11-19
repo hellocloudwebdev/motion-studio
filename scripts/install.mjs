@@ -88,7 +88,7 @@ export function craftGuidance(detected) {
     ? { command: detected.effectcraft.path, mcpArgs: ['mcp'], status: 'ready', note: 'Alpha tool: drive it headless via `effectcraft-cli mcp`.' }
     : { command: null, status: 'needs-user-install' };
   craftMcp.filmcraft = detected?.filmcraft?.installed
-    ? { command: detected.filmcraft.path, mcpArgs: ['--', 'mcp'], status: 'ready', note: 'Alpha tool: drive it headless via `filmcraft-cli -- mcp`.' }
+    ? { command: detected.filmcraft.path, mcpArgs: ['mcp'], status: 'ready', note: 'Alpha tool: drive it headless via `filmcraft-cli mcp`.' }
     : { command: null, status: 'needs-user-install' };
   return { needsUserAction, openUrls, craftMcp, actions: {} };
 }

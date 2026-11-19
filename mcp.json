@@ -8,9 +8,17 @@
       "command": "node",
       "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-mcp-launcher.mjs", "effectcraft"]
     },
+    "effectcraft-studio": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-studio-mcp-launcher.mjs", "effectcraft"]
+    },
     "filmcraft": {
       "command": "node",
       "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-mcp-launcher.mjs", "filmcraft"]
+    },
+    "filmcraft-studio": {
+      "command": "node",
+      "args": ["<MOTION_STUDIO_INSTALL>/scripts/craft-studio-mcp-launcher.mjs", "filmcraft"]
     },
     "aftereffects": {
       "command": "node",

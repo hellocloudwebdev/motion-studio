@@ -23,7 +23,7 @@ test('honors env overrides for portable installs on every platform', () => {
   assert.equal(result.effectcraft.path, '/opt/craft/ec-cli');
   assert.equal(result.filmcraft.installed, true);
   assert.deepEqual(result.effectcraft.mcpArgs, ['mcp']);
-  assert.deepEqual(result.filmcraft.mcpArgs, ['--', 'mcp']);
+  assert.deepEqual(result.filmcraft.mcpArgs, ['mcp']);
   assert.equal(result.userActionsRequired.length, 0);
   assert.equal(result.note, null);
 });

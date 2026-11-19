@@ -1,20 +1,22 @@
 # Host integration
 
-Motion Studio exposes one provider-neutral core through host-specific configuration. The installer registers five local stdio services:
+Motion Studio exposes one provider-neutral core through host-specific configuration. The installer registers seven local stdio services:
 
 - `motion-studio`: Canonical IR, planning, routing, HyperFrames compilation, rendering, QA, host preflight and stage authorization.
-- `effectcraft`: EffectCraft's headless MCP server through `scripts/craft-mcp-launcher.mjs effectcraft` (`effectcraft-cli mcp`) — free default stack.
-- `filmcraft`: FilmCraft's headless MCP server through `scripts/craft-mcp-launcher.mjs filmcraft` (`filmcraft-cli -- mcp`) — free default stack.
+- `effectcraft`: EffectCraft's headless MCP server through `scripts/craft-mcp-launcher.mjs effectcraft` (`effectcraft-cli mcp`) — free default stack, pass-through surface.
+- `effectcraft-studio`: Motion Studio's first-party EffectCraft server through `scripts/craft-studio-mcp-launcher.mjs effectcraft` — validated tools, approval-gated mutations, verified renders. See [Craft MCP and UXP](CRAFT-MCP-AND-UXP.md).
+- `filmcraft`: FilmCraft's headless MCP server through `scripts/craft-mcp-launcher.mjs filmcraft` (`filmcraft-cli mcp`) — free default stack, pass-through surface.
+- `filmcraft-studio`: Motion Studio's first-party FilmCraft server through `scripts/craft-studio-mcp-launcher.mjs filmcraft` — validated tools, approval-gated mutations, verified exports. See [Craft MCP and UXP](CRAFT-MCP-AND-UXP.md).
 - `aftereffects`: `@kumoproductions/mcp-aftereffects` through `scripts/adobe-mcp-launcher.mjs aftereffects` — licensed optional stack.
 - `premiere-pro`: `premiere-pro-mcp` through `scripts/adobe-mcp-launcher.mjs premiere` — licensed optional stack.
 
-The craft and Adobe tools remain upstream dependencies; Motion Studio does not fork or reimplement their editor control surfaces.
+The craft and Adobe tools remain upstream dependencies; Motion Studio does not fork or reimplement their editor control surfaces (the studio servers wrap the CLIs, they do not replace them).
 
 ## Safe defaults
 
 - The craft CLIs are alpha tools: Motion Studio does not rely on provider-side read-only switches; instead every mutating tool call passes the craft approval gate.
 - The Adobe servers keep their hard onboarding defaults: AE starts with `AE_MCP_READONLY=1`, `AE_MCP_ENABLE_EVAL` is always removed by the launcher, Premiere starts with `PREMIERE_MCP_CAPABILITIES=inspect` and the inspection tool pack, and Premiere `unsafe-script` authority is never added by Motion Studio.
-- No shell is involved: the launchers spawn fixed argv (`effectcraft-cli mcp`, `filmcraft-cli -- mcp`, or the resolved Adobe npm entries).
+- No shell is involved: the launchers spawn fixed argv (`effectcraft-cli mcp`, `filmcraft-cli mcp`, or the resolved Adobe npm entries).
 - The Premiere UXP token (licensed stack) is read from a user-only secret file at runtime and is never placed in checked-in project or host MCP JSON. No credentials are needed for the craft stack.
 - All services use local stdio; no public TCP server is opened.
 
@@ -58,7 +60,7 @@ Generic stdio MCP JSON is written under the Motion Studio user config directory 
 
 ## Live validation
 
-Craft stack (free default): EffectCraft — launch the app (or use the headless CLI) with a test composition and confirm `effectcraft-cli mcp` advertises tools; render a short comp via `effectcraft-cli render` and inspect the output with FFprobe. FilmCraft — open a test project (or drive the JSON control channel with `--control <port>`) and confirm `filmcraft-cli -- mcp` advertises tools; import the Motion Studio FCPXML interchange and verify the assembled sequence before export.
+Craft stack (free default): EffectCraft — launch the app (or use the headless CLI) with a test composition and confirm `effectcraft-cli mcp` advertises tools; render a short comp via `effectcraft-cli render` and inspect the output with FFprobe. FilmCraft — open a test project (or drive the JSON control channel with `--control <port>`) and confirm `filmcraft-cli mcp` advertises tools; import the Motion Studio FCPXML interchange and verify the assembled sequence before export.
 
 Licensed Adobe stack: After Effects — launch AE, open a copied test project and confirm its scripting preference **Allow Scripts to Write Files and Access Network**; the MCP can list and inspect context in read-only mode. Premiere — open Premiere with a test project and active sequence; on 25.6+ install the pinned UXP connector in Creative Cloud Desktop and set the generated token in the panel; use the upstream read-only `verify_premiere_connection` check. Older Premiere versions can use the signed CEP connector installed through the upstream npm command.
 

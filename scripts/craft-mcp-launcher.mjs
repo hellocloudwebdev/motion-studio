@@ -2,7 +2,7 @@
 // FilmCraft / EffectCraft MCP launcher. Bridges the harness MCP configs to
 // the craft CLIs' headless MCP servers over stdio:
 //   effectcraft → `effectcraft-cli mcp`
-//   filmcraft   → `filmcraft-cli -- mcp`
+//   filmcraft   → `filmcraft-cli mcp`
 // Fixed argv, no shell, no arbitrary code execution surface.
 import { spawn } from 'node:child_process';
 import { craftCommandCandidates, craftMcpArgs } from '../packages/craft-mcp-client/src/index.mjs';

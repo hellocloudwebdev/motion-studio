@@ -39,7 +39,7 @@ test('resolveCraftCommand picks the first existing candidate and falls back to P
 });
 
 test('MCP argv matches each CLI contract exactly', () => {
-  assert.deepEqual(craftMcpArgs('filmcraft'), ['--', 'mcp'], 'FilmCraft exposes headless MCP as `filmcraft-cli -- mcp`');
+  assert.deepEqual(craftMcpArgs('filmcraft'), ['mcp'], 'FilmCraft exposes headless MCP as `filmcraft-cli mcp` (no `--`; flags after `--` are demoted to positionals upstream)');
   assert.deepEqual(craftMcpArgs('effectcraft'), ['mcp'], 'EffectCraft exposes headless MCP as `effectcraft-cli mcp`');
   assert.throws(() => craftMcpArgs('aftereffects'), /effectcraft or filmcraft/);
 });

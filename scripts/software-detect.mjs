@@ -128,7 +128,7 @@ export function detectCraftApplications({
       installed: Boolean(found),
       version: found ? versionOf(found, platform) : null,
       path: found,
-      mcpArgs: app === 'filmcraft' ? ['--', 'mcp'] : ['mcp']
+      mcpArgs: ['mcp']
     };
   };
   const effectcraft = detect('effectcraft');

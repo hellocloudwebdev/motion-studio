@@ -49,6 +49,8 @@
     "effectcraft": {
       "role": "specialist-compositing-and-vfx",
       "mcpCommand": "effectcraft-cli mcp",
+      "studioMcpPackage": "@motion-studio/effectcraft-mcp-server",
+      "studioMcpLauncher": "scripts/craft-studio-mcp-launcher.mjs effectcraft",
       "source": "https://github.com/storytold/effectcraft",
       "capabilities": [
         "compositing",
@@ -64,7 +66,9 @@
     },
     "filmcraft": {
       "role": "editorial-assembly",
-      "mcpCommand": "filmcraft-cli -- mcp",
+      "mcpCommand": "filmcraft-cli mcp",
+      "studioMcpPackage": "@motion-studio/filmcraft-mcp-server",
+      "studioMcpLauncher": "scripts/craft-studio-mcp-launcher.mjs filmcraft",
       "source": "https://github.com/storytold/filmcraft",
       "capabilities": [
         "timeline-editing",
