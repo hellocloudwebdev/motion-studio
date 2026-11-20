@@ -222,15 +222,15 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 **Goal:** Connect the creative agent roles so a natural-language idea becomes a complete, render-ready Canonical Video IR.
 
-- [ ] Production intake: audience, purpose, duration, language, platform, aspect ratio, brand rules, references and supplied assets; ask only essential clarifying questions.
-- [ ] Versioned production brief schema and validation.
-- [ ] Research workflow when factual claims are needed; persist source URLs, claim-level evidence, unsupported claims and media provenance/usage restrictions.
-- [ ] Creative direction: concepts, selected narrative, tone, visual language, hook, message hierarchy, pacing and CTA.
-- [ ] Scriptwriting: narration and on-screen copy kept separate; estimate/final frame ranges, speaking pace and scene timing.
-- [ ] Storyboarding: scene purpose, duration, composition, camera, typography, animation, transitions, asset and audio cues.
-- [ ] Project design system: brand tokens, typography, spacing, safe areas, motion presets, font availability and glyph coverage.
-- [ ] Generate and validate Canonical Video IR from the approved brief/script/storyboard/design system.
-- [ ] Version every approved production revision and preserve creative intent independently of renderer implementation.
+- [x] Production intake: audience, purpose, duration, language, platform, aspect ratio, brand rules, references and supplied assets; ask only essential clarifying questions. (`packages/creative-pipeline` `normalizeIntake` — validated request fields with explicit assumptions for defaults — plus the brief stage's `needsClarification`/`clarifyingQuestions` gate that pauses planning for material gaps; CLI `intake`.)
+- [x] Versioned production brief schema and validation. (`packages/production-planning` `createProductionBrief`/`validateProductionBrief` strict schema; approved planning revisions are versioned in the immutable revision journal.)
+- [x] Research workflow when factual claims are needed; persist source URLs, claim-level evidence, unsupported claims and media provenance/usage restrictions. (`generateProduction` research stage: sources carry HTTP(S) URL/publisher/retrievedAt/usageNotes, claims carry `sourceIds` resolved from cited URLs, `unsupportedClaims` persist separately, supplied assets carry rightsStatus/license; `validateResearchEvidence` in production-planning; web search stays behind the explicit spend opt-in `MOTION_STUDIO_ENABLE_WEB_SEARCH`.)
+- [x] Creative direction: concepts, selected narrative, tone, visual language, hook, message hierarchy, pacing and CTA. (direction schema: 2–3 concepts with hook/rationale/visualApproach/tone, selectedConceptIndex validated, messageHierarchy, pacing, callToAction.)
+- [x] Scriptwriting: narration and on-screen copy kept separate; estimate/final frame ranges, speaking pace and scene timing. (segments carry distinct `narration`/`onScreenText`; `calculateSegmentFrames` allocates integer frame ranges by word count; 70–210 WPM gate; `speakingRateWpm` recorded.)
+- [ ] Storyboarding: scene purpose, duration, composition, camera, typography, animation, transitions, asset and audio cues. (purpose/duration/composition/animation/transitions/asset cues implemented and scene-count-matched to the script; explicit camera cues and per-cue audio cue fields remain open.)
+- [ ] Project design system: brand tokens, typography, spacing, safe areas, motion presets, font availability and glyph coverage. (tokens/typography/safe areas/motion presets implemented with a 4.5:1 contrast gate; font availability and glyph-coverage checks remain open.)
+- [x] Generate and validate Canonical Video IR from the approved brief/script/storyboard/design system. (`generateProduction` → `buildCanonicalProject` → `validateProject` gate; generated IR failing validation throws before any render.)
+- [x] Version every approved production revision and preserve creative intent independently of renderer implementation. (`packages/production-planning/src/revision-journal.mjs` `appendPlanningRevision`/`approvePlanningRevision` — append-only journal, exact-hash approvals, tested; creative intent lives in the IR's `creative`/`production` blocks independent of any engine adapter.)
 
 **Deliverables:** connected creative-agent workflow, production brief/script/storyboard contracts, design-system generator, natural-language-to-IR CLI/MCP workflow and tests.
 
@@ -284,9 +284,9 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - [x] Independently inspect exported media. (2026-11-15: two FFprobe-verified exports — demo sequence 320×180 H.264 30 fps 10.0 s in 8.1 s, and the imported Motion Studio FCPXML sequence exported in 3.5 s.)
 
 **Governance**
-- [ ] Exact-operation approvals for writes; project/sequence scope; pre-edit checkpoints; post-edit readback.
-- [ ] No blind retries after uncertain operations and no arbitrary script execution by default.
-- [ ] Integrate the EffectCraft render queue / FilmCraft export for queued renders; manage explicit presets and queue state; verify outputs independently.
+- [x] Exact-operation approvals for writes; project/sequence scope; pre-edit checkpoints; post-edit readback. (25 `gateApproval` call sites across the two craft MCP servers — producer approvals are digest-bound to the exact resolved opArgs plus projectId/runId/toolName, so a scope or parameter change invalidates them; `renderEffectCraftScene` checkpoints the .ecproj into a bounded `checkpoints/` directory before writes; live tests read back saved projects (transitions, captions, gain, mixer state) after edits.)
+- [x] No blind retries after uncertain operations and no arbitrary script execution by default. (craft sessions and adapters never auto-retry a failed write — export/media failures return a refused receipt telling the producer what to fix (e.g. relink offline media) and fail closed; engine `run_script`/`run_command` passthroughs sit behind the same approval digest, and the repo-wide security invariant test bans shell-string execution in every shipped module.)
+- [x] Integrate the EffectCraft render queue / FilmCraft export for queued renders; manage explicit presets and queue state; verify outputs independently. (2026-11-20: `effectcraft.render_queue` queues 1–10 comp renders per explicit format preset and independently verifies every artifact with FFprobe + sha256, failing closed on any unverified output; `filmcraft.export_master` exports h264/hevc/prores/dnxhr/png/wav with FFprobe + sha256 receipts and refuses placeholder/offline media — `--allow-offline` is never passed.)
 - [x] Preserve the craft CLIs as the editor-control layer; Motion Studio owns orchestration, approvals, contracts and validation. (MCP servers driven through `@motion-studio/craft-mcp-client`; approval gate enforced in `connectCraftMcp`.)
 
 **Exit gate:** A workstation with both craft CLIs performs a real EffectCraft composition render, a FilmCraft sequence assembly and final export; Motion Studio reads back and verifies each result. **First pass achieved 2026-11-15** (render + assembly + export + MCP verified above); remaining: full IR-driven scene specs, asset imports, precise timing/transition work, and the FCPXML import direction once upstream ships it.
@@ -330,14 +330,14 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 **Audio and creative QA**
 - [x] Narration/music/SFX sync, loudness, clipping/distortion, silence, intelligibility and mix balance. (Sync/loudness/clipping/silence verified by the FFprobe/FFmpeg QA detectors (2026-11-19); mix balance and loudness matching now also operate at the editorial layer — 2026-11-20: `filmcraft.auto_match_loudness` (measured per-clip LUFS receipt), `filmcraft.generate_ducking` (Music/Ambience automation), `filmcraft.set_clip_audio_gain`, `filmcraft.inspect_mixer` (strips, volume/pan/mute/solo, automation modes); intelligibility remains a manual/OCR-proxy review.)
-- [ ] Brief/message alignment, hook, narrative progression, pacing, art direction consistency and CTA clarity.
+- [x] Brief/message alignment, hook, narrative progression, pacing, art direction consistency and CTA clarity. (`packages/core/src/creative-critic.mjs` — `heuristicCreativeCritique` + `runCreativeCritique` across the six dimensions: brief-alignment from narration↔brief content-word overlap, art direction (brand font/color consistency, repairable), pacing, continuity, CTA (fires when the objective implies an action); findings are `advisoryOnly`, capped in severity, repair hints restricted to registered repair ops; wired through the repair executor and reported by the CLI.)
 
 **Repair execution**
 - [x] Defect includes evidence, exact frame/time ranges, owning scene/layer/stage and severity. (integer frame ranges + scene attribution + owners, 2026-11-12)
 - [x] Generate smallest valid patch; validate changed IR/project; rerender affected components only; rerun relevant checks. (repair-executor + scoped renders, consistency probe passed)
 - [x] Escalate unresolved critical issues; retain repair history and regression evidence. (escalation reports JSON+MD; IR ledger + run-state)
 - [x] Reconcile retry policy: default maximum two automatic cycles vs configurable maximum three in 0.5. Choose one documented production policy before expanding retries. (2 = authoritative default from configs/quality-gates.json, implementation ceiling 3, documented in docs/DESIGN-REPAIR-EXECUTION.md §5)
-- [ ] Visual-critic output is advisory and cannot override deterministic gates.
+- [x] Visual-critic output is advisory and cannot override deterministic gates. (`packages/core/src/visual-critic.mjs` — every response is stamped `advisoryOnly: true, canOverrideDeterministicGates: false`; creative critique findings likewise never create auto-repairs beyond registered ops; acceptance still requires the deterministic render/QA/delivery gates.)
 
 Repair-evidence QA defects carry integer frame ranges, scene attribution, evidence paths and repair owners; the executable defect→patch→rerender→retest loop is implemented and locally verified (2026-11-12) including a real-render segment/full consistency probe. Multimodal creative-acceptance evidence and production acceptance of the repair loop on a narrated defect case remain open.
 
