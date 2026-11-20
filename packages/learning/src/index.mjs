@@ -1,3 +1,5 @@
+export { captureProductionLearning, patternToProposalCandidate } from './capture.mjs';
+
 const LOW_RISK_KINDS = new Set(['skill-content', 'template-content', 'reference-metadata', 'workflow-documentation']);
 const HIGH_RISK_KINDS = new Set(['executable-code', 'dependencies', 'permissions', 'secrets', 'core-agent', 'core-contract']);
 

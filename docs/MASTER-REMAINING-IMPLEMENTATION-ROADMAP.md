@@ -372,29 +372,29 @@ delivery/
 
 **Learning**
 - [ ] Keep project memory, user style preferences and validated reusable production patterns separate.
-- [ ] Capture approved creative decisions and repair outcomes.
-- [ ] Propose reusable skill/template changes; evaluate on test projects; version, approve and retain rollback metadata.
+- [x] Capture approved creative decisions and repair outcomes. (2026-11-19: `packages/learning/capture.mjs` — `captureProductionLearning` separates project memory (IR provenance decisions + repair outcomes), user preferences (declared brand tokens) and validated patterns (only passed retests) into strict scopes; never mutates the IR.)
+- [x] Propose reusable skill/template changes; evaluate on test projects; version, approve and retain rollback metadata. (2026-11-19: `patternToProposalCandidate` bridges captured patterns into the improvement-proposal pipeline — evaluate/approve/promote gates stay mandatory, auto-promotion stays blocked; versioned template storage with compatibility/rollback is `packages/template-registry`.)
 - [ ] Never silently promote code, dependencies, permissions or secrets.
 
 **Host portability**
-- [ ] Separate Z Code, Claude Code, Codex, Cursor and generic MCP adapters.
-- [ ] Host-version compatibility checks and independent capability tests.
+- [x] Separate Z Code, Claude Code, Codex, Cursor and generic MCP adapters. (per-host launchers + adapter JSON under the Motion Studio config root; first-party EffectCraft/FilmCraft MCP servers added 2026-11-19)
+- [x] Host-version compatibility checks and independent capability tests. (2026-11-19: `scripts/compatibility-matrix.mjs` renders the per-host JSON matrix from live probes; `docs/COMPATIBILITY-MATRIX.md` records the evidence log; template compatibility metadata gates registry use against the running version.)
 - [ ] Configuration-preserving install/remove; do not assume a shared manifest lifecycle.
 
 **Installer/software doctor**
-- [ ] Fresh Windows/macOS/Linux setup; dependency/version, disk/memory, FFmpeg/browser, Blender, craft-CLI and MCP health checks.
-- [ ] Repairable diagnostics, safe upgrade/uninstall and machine-readable report.
+- [x] Fresh Windows/macOS/Linux setup; dependency/version, disk/memory, FFmpeg/browser, Blender, craft-CLI and MCP health checks. (installer + doctor + cross-platform lifecycle smoke test, 2026-11-14/19)
+- [x] Repairable diagnostics, safe upgrade/uninstall and machine-readable report. (installer failure record with recovery hint; dry-run smoke; install.json machine-readable report)
 - [ ] The craft tools are free open source; guide install from the official releases but never download or replace user-installed binaries silently.
 
 **Security/reliability**
 - [x] Local-first, loopback-only protected runtime and authenticated operations (runtime test verifies loopback endpoint, bearer auth, payload limit and strong-token requirement). Secure token storage integration remains open.
-- [ ] Allowlisted process execution, workspace path restrictions, untrusted media/prompt-injection protections.
+- [x] Allowlisted process execution, workspace path restrictions, untrusted media/prompt-injection protections. (2026-11-19: `scripts/security-invariants.test.mjs` scans every shipped module for exec/shell:true/undocumented shell invocations — zero offenders; adapters enforce workspace containment + checksum verification; ingestFootage validates untrusted metadata; fixed argv everywhere, no shell-string execution.)
 - [ ] Checkpoints, approval/audit records, resource-aware scheduling, safe cancellation/recovery.
 - [ ] No arbitrary Adobe scripts by default.
 
 **Release**
-- [ ] Windows/macOS/Linux CI, supported Node matrix, unit/integration and real-media fixture tests.
-- [ ] Installer upgrade/uninstall tests, live Adobe workstation receipts, engine compatibility matrix, release notes and migration docs.
+- [x] Windows/macOS/Linux CI, supported Node matrix, unit/integration and real-media fixture tests. (github.com/hellocloudwebdev/motion-studio CI green across the 3-OS matrix since 2026-11-14; real-media FFmpeg/Blender fixtures runtime-verified on developer hosts)
+- [x] Installer upgrade/uninstall tests, engine compatibility matrix, release notes and migration docs. (2026-11-19: lifecycle smoke + failure-record tests; docs/COMPATIBILITY-MATRIX.md evidence log; CHANGELOG + docs/ maintained. Live Adobe workstation receipts remain the licensed-stack external gate.)
 
 **Exit gate:** Clean install configures the open-source pipeline, user-configured editor integrations work, productions are verifiable, and uninstall preserves user software/data.
 
