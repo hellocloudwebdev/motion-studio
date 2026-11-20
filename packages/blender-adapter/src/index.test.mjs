@@ -236,3 +236,35 @@ test('Blender render rejects imported assets missing from disk before spawning B
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('Blender particle content validates bounds and maps into the object spec', () => {
+  const emitted = structuredClone(scene);
+  emitted.layers[0].content.particles = { count: 300, seed: 7, size: 0.03, color: '#FFD166', speed: 1.5 };
+  const spec = build(emitted);
+  assert.deepEqual(spec.objects[0].particles, { count: 300, seed: 7, size: 0.03, color: '#FFD166', speed: 1.5 });
+  const defaults = build(scene);
+  assert.ok(!('particles' in defaults.objects[0]), 'no particle system without the content field');
+  const overCount = structuredClone(emitted); overCount.layers[0].content.particles.count = 5001;
+  assert.throws(() => build(overCount), /count must be an integer between 1 and 5000/);
+  const zeroCount = structuredClone(emitted); zeroCount.layers[0].content.particles.count = 0;
+  assert.throws(() => build(zeroCount), /count must be an integer/);
+  const badSeed = structuredClone(emitted); badSeed.layers[0].content.particles.seed = -1;
+  assert.throws(() => build(badSeed), /seed must be an integer/);
+  const badSize = structuredClone(emitted); badSize.layers[0].content.particles.size = 2;
+  assert.throws(() => build(badSize), /size must be a positive finite number up to 1/);
+  const badSpeed = structuredClone(emitted); badSpeed.layers[0].content.particles.speed = -0.5;
+  assert.throws(() => build(badSpeed), /speed must be a finite number between 0 and 5/);
+  const badColor = structuredClone(emitted); badColor.layers[0].content.particles.color = 'red';
+  assert.throws(() => build(badColor), /content\.particles\.color must be a #RRGGBB/);
+  const unknownField = structuredClone(emitted); unknownField.layers[0].content.particles.gravity = 1;
+  assert.throws(() => build(unknownField), /content\.particles declares unsupported fields: gravity/);
+  const assetSceneWithParticles = structuredClone(assetScene); assetSceneWithParticles.layers[0].content.particles = { count: 10 };
+  assert.throws(() => buildAsset(assetSceneWithParticles, { projectRoot: FIXTURE_ROOT }), /particles emit only from procedural primitives/);
+});
+
+test('Blender particle specs default seed, size, color and speed and carry them through', () => {
+  const emitted = structuredClone(scene);
+  emitted.layers[0].content.particles = { count: 64 };
+  const spec = build(emitted);
+  assert.deepEqual(spec.objects[0].particles, { count: 64, seed: 1, size: 0.02, color: '#72F2C2', speed: 1 });
+});

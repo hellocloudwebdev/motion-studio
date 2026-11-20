@@ -4,9 +4,15 @@
     "id": "blender-contract-fixtures",
     "name": "Blender contract fixtures (P2.1)",
     "revision": 1,
-    "objective": "Deterministic low-power fixtures covering the expanded Blender scene contract: camera move, lighting/material variation, imported approved asset, and alpha output.",
-    "frameRate": { "numerator": 30, "denominator": 1 },
-    "canvas": { "width": 480, "height": 270 },
+    "objective": "Deterministic low-power fixtures covering the expanded Blender scene contract: camera move, lighting/material variation, imported approved asset, alpha output, and a bounded particle emitter.",
+    "frameRate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "canvas": {
+      "width": 480,
+      "height": 270
+    },
     "totalDurationFrames": 48
   },
   "creative": {
@@ -15,7 +21,10 @@
     "message": "Not a creative production."
   },
   "brand": {
-    "colors": { "primary": "#4ADE80", "accent": "#0E2A3A" }
+    "colors": {
+      "primary": "#4ADE80",
+      "accent": "#0E2A3A"
+    }
   },
   "assets": [
     {
@@ -30,7 +39,11 @@
         "creator": "motion-studio blender-contract-fixtures",
         "source": "Generated locally with Blender 5.3.0 bpy.ops.export_scene.gltf (plain 2m cube, one Principled material); regenerable byte-for-byte via generate-reference-cube.py.",
         "description": "Approved imported-asset fixture for the Blender adapter contract.",
-        "tags": ["fixture", "generated-locally", "blender"],
+        "tags": [
+          "fixture",
+          "generated-locally",
+          "blender"
+        ],
         "license": "MIT",
         "rightsStatus": "approved"
       }
@@ -44,11 +57,29 @@
       "durationFrames": 12,
       "intent": "Camera integer keyframes: location-only keys that keep the auto-aim-at-origin convention.",
       "camera": {
-        "location": [0, -8, 2],
+        "location": [
+          0,
+          -8,
+          2
+        ],
         "lens": 50,
         "keyframes": [
-          { "frame": 0, "location": [-3.5, -7, 1.5] },
-          { "frame": 11, "location": [3.5, -7, 2.5] }
+          {
+            "frame": 0,
+            "location": [
+              -3.5,
+              -7,
+              1.5
+            ]
+          },
+          {
+            "frame": 11,
+            "location": [
+              3.5,
+              -7,
+              2.5
+            ]
+          }
         ]
       },
       "layers": [
@@ -59,10 +90,35 @@
           "content": {
             "primitive": "cube",
             "color": "#4ADE80",
-            "transform": { "location": [0, 0, 0], "scale": [1, 1, 1] },
+            "transform": {
+              "location": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            },
             "keyframes": [
-              { "frame": 0, "rotation": [0, 0, 0] },
-              { "frame": 11, "rotation": [0, 0, 1.5708] }
+              {
+                "frame": 0,
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "frame": 11,
+                "rotation": [
+                  0,
+                  0,
+                  1.5708
+                ]
+              }
             ]
           }
         }
@@ -76,8 +132,28 @@
       "intent": "Lighting rig override (area + point with colors) and Principled material parameters within validated ranges.",
       "lighting": {
         "lights": [
-          { "type": "area", "location": [4, -5, 6], "energy": 900, "color": "#FFE1B8", "size": 4 },
-          { "type": "point", "location": [-4, -2, 3], "energy": 450, "color": "#9BC7FF", "size": 1.5 }
+          {
+            "type": "area",
+            "location": [
+              4,
+              -5,
+              6
+            ],
+            "energy": 900,
+            "color": "#FFE1B8",
+            "size": 4
+          },
+          {
+            "type": "point",
+            "location": [
+              -4,
+              -2,
+              3
+            ],
+            "energy": 450,
+            "color": "#9BC7FF",
+            "size": 1.5
+          }
         ]
       },
       "layers": [
@@ -88,11 +164,35 @@
           "content": {
             "primitive": "uv_sphere",
             "color": "#C0C7CE",
-            "material": { "metallic": 0.9, "roughness": 0.25, "emission": 0.6 },
-            "transform": { "location": [0, 0, 0] },
+            "material": {
+              "metallic": 0.9,
+              "roughness": 0.25,
+              "emission": 0.6
+            },
+            "transform": {
+              "location": [
+                0,
+                0,
+                0
+              ]
+            },
             "keyframes": [
-              { "frame": 0, "rotation": [0, 0, 0] },
-              { "frame": 11, "rotation": [0, 3.1416, 0] }
+              {
+                "frame": 0,
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "frame": 11,
+                "rotation": [
+                  0,
+                  3.1416,
+                  0
+                ]
+              }
             ]
           }
         }
@@ -112,10 +212,30 @@
           "assetId": "fixture-reference-cube",
           "content": {
             "color": "#F5A623",
-            "transform": { "location": [0, 0, 0] },
+            "transform": {
+              "location": [
+                0,
+                0,
+                0
+              ]
+            },
             "keyframes": [
-              { "frame": 0, "rotation": [0, 0, 0] },
-              { "frame": 11, "rotation": [0, 0, 1.5708] }
+              {
+                "frame": 0,
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "frame": 11,
+                "rotation": [
+                  0,
+                  0,
+                  1.5708
+                ]
+              }
             ]
           }
         }
@@ -127,7 +247,9 @@
       "startFrame": 36,
       "durationFrames": 12,
       "intent": "outputContract.alpha drives film_transparent RGBA PNGs, verified via ffprobe pix_fmt rgba.",
-      "outputContract": { "alpha": true },
+      "outputContract": {
+        "alpha": true
+      },
       "layers": [
         {
           "id": "alpha-cone",
@@ -136,17 +258,94 @@
           "content": {
             "primitive": "cone",
             "color": "#0E2A3A",
-            "transform": { "location": [0, 0, 0] },
+            "transform": {
+              "location": [
+                0,
+                0,
+                0
+              ]
+            },
             "keyframes": [
-              { "frame": 0, "location": [0, 0, 0] },
-              { "frame": 11, "location": [0, 0, 1] }
+              {
+                "frame": 0,
+                "location": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "frame": 11,
+                "location": [
+                  0,
+                  0,
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "particles",
+      "name": "Bounded particle emitter fixture",
+      "startFrame": 48,
+      "durationFrames": 12,
+      "intent": "content.particles emits seeded Newton particles from a primitive volume, rendered as instanced emissive spheres.",
+      "layers": [
+        {
+          "id": "particle-cube",
+          "kind": "3d",
+          "engineHint": "blender",
+          "content": {
+            "primitive": "cube",
+            "color": "#0E2A3A",
+            "transform": {
+              "location": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.6,
+                0.6,
+                0.6
+              ]
+            },
+            "particles": {
+              "count": 300,
+              "seed": 7,
+              "size": 0.03,
+              "color": "#FFD166",
+              "speed": 1.5
+            },
+            "keyframes": [
+              {
+                "frame": 0,
+                "location": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "frame": 11,
+                "location": [
+                  0,
+                  0,
+                  0.4
+                ]
+              }
             ]
           }
         }
       ]
     }
   ],
-  "audio": { "tracks": [] },
+  "audio": {
+    "tracks": []
+  },
   "delivery": {
     "primaryTargetId": "fixture-480p",
     "targets": [
@@ -157,10 +356,17 @@
         "audioCodec": "aac",
         "width": 480,
         "height": 270,
-        "frameRate": { "numerator": 30, "denominator": 1 },
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
         "audioRequired": false
       }
     ]
   },
-  "qa": { "defects": [], "repairHistory": [], "gates": [] }
+  "qa": {
+    "defects": [],
+    "repairHistory": [],
+    "gates": []
+  }
 }

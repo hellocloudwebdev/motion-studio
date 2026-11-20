@@ -107,3 +107,16 @@ test('outputContract.renderer cycles selects the path-traced engine', async t =>
   assert.equal(receipt.frameCount, 12);
   assert.equal(receipt.verified, true);
 });
+
+test('particles fixture renders a seeded emitter whose frames visibly evolve', async t => {
+  if (!(await blenderToolchainAvailable())) return t.skip('Blender toolchain is required.');
+  const receipt = await renderFixture('particles');
+  assert.equal(receipt.verified, true);
+  assert.equal(receipt.frameCount, 12);
+  assert.equal(receipt.width, 480);
+  assert.equal(receipt.height, 270);
+  assert.deepEqual(receipt.metadata.particleObjects, ['particle-cube'], 'the receipt records which objects emitted particles');
+  assert.deepEqual(receipt.retriedFrames, []);
+  // Particles move between frames, so first and last frame must differ.
+  assert.notEqual(await decodedFrameSignature(receipt.firstFrame.file), await decodedFrameSignature(receipt.lastFrame.file));
+});

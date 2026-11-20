@@ -11,7 +11,13 @@ const CAMERA_FIELDS = new Set(['location', 'lens', 'rotation', 'keyframes']);
 const CAMERA_KEYFRAME_FIELDS = new Set(['frame', 'location', 'rotation']);
 const MATERIAL_FIELDS = new Set(['metallic', 'roughness', 'emission']);
 const MATERIAL_RANGES = { metallic: [0, 1], roughness: [0, 1], emission: [0, 10] };
-const CONTENT_FIELDS = new Set(['primitive', 'object', 'color', 'transform', 'keyframes', 'material']);
+const CONTENT_FIELDS = new Set(['primitive', 'object', 'color', 'transform', 'keyframes', 'material', 'particles']);
+// Bounded particle workflow: emit-only Newton particles from the object's
+// volume, rendered as instanced emissive spheres. Deterministic via seed;
+// no collisions/dynamics/baking.
+const PARTICLE_FIELDS = new Set(['count', 'seed', 'size', 'color', 'speed']);
+const PARTICLE_DEFAULTS = { seed: 1, size: 0.02, color: '#72F2C2', speed: 1 };
+const MAX_PARTICLES = 5000;
 const KEYFRAME_FIELDS = new Set(['frame', 'location', 'rotation', 'scale']);
 const MAX_LIGHTS = 8;
 const MAX_LIGHT_ENERGY = 100000;
@@ -101,7 +107,43 @@ def make_object(item):
     obj.scale = transform.get('scale', (1, 1, 1))
     obj.data.materials.append(material(item['id'] + '-material', item.get('color', '#72F2C2'), item.get('material')))
     keyframe_object(obj, item.get('keyframes', []))
+    make_particles(item, obj)
     return obj
+
+def make_particles(item, emitter):
+    # Bounded particle workflow: emit-only Newton particles from the emitter
+    # volume, rendered as instanced emissive spheres, deterministic via seed.
+    particles = item.get('particles')
+    if not particles:
+        return None
+    modifier = emitter.modifiers.new(name='MotionStudioParticles', type='PARTICLE_SYSTEM')
+    # Blender 5.x removed the ParticleSystemModifier.settings shortcut; the
+    # settings live on the modifier's particle_system, and so does seed.
+    settings = modifier.particle_system.settings
+    modifier.particle_system.seed = int(particles['seed'])
+    settings.count = int(particles['count'])
+    settings.frame_start = 0
+    settings.frame_end = max(1, spec['durationFrames'] - 1)
+    settings.lifetime = spec['durationFrames']
+    settings.particle_size = 1.0
+    settings.emit_from = 'VOLUME'
+    settings.normal_factor = float(particles['speed'])
+    settings.factor_random = min(0.5, float(particles['speed']) * 0.25)
+    instance = bpy.data.objects.new(item['id'] + '-particle-instance', None)
+    instance.empty_display_size = 0.001
+    bpy.context.scene.collection.objects.link(instance)
+    mesh = bpy.data.meshes.new(item['id'] + '-particle-mesh')
+    mesh_obj = bpy.data.objects.new(item['id'] + '-particle-mesh-object', mesh)
+    bpy.context.scene.collection.objects.link(mesh_obj)
+    import bmesh
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=1, radius=float(particles['size']))
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh_obj.data.materials.append(material(item['id'] + '-particle-material', particles['color'], {'emission': 1}))
+    settings.instance_object = mesh_obj
+    settings.render_type = 'OBJECT'
+    return modifier
 
 def import_asset(item):
     asset = item['asset']
@@ -239,7 +281,7 @@ for frame in range(start, end + 1):
     scene.render.filepath = os.path.join(spec['outputDirectory'], 'frame_' + str(frame).zfill(4))
     bpy.ops.render.render(write_still=True)
 with open(spec['metadataPath'], 'w', encoding='utf-8') as handle:
-    json.dump({'width': spec['width'], 'height': spec['height'], 'fpsNumerator': spec['fpsNumerator'], 'fpsDenominator': spec['fpsDenominator'], 'durationFrames': spec['durationFrames'], 'alpha': spec['alpha'], 'quality': spec.get('quality') or {}, 'requestedRenderer': requested_renderer, 'renderer': render_engine, 'blenderVersion': bpy.app.version_string}, handle, indent=2)
+    json.dump({'width': spec['width'], 'height': spec['height'], 'fpsNumerator': spec['fpsNumerator'], 'fpsDenominator': spec['fpsDenominator'], 'durationFrames': spec['durationFrames'], 'alpha': spec['alpha'], 'quality': spec.get('quality') or {}, 'requestedRenderer': requested_renderer, 'renderer': render_engine, 'particleObjects': [item['id'] for item in spec['objects'] if item.get('particles')], 'blenderVersion': bpy.app.version_string}, handle, indent=2)
 `;
 
 function safeProjectId(value) {
@@ -341,6 +383,25 @@ function validateMaterial(material, label) {
   }
   return Object.keys(validated).length ? validated : null;
 }
+// Bounded particle validation: emit-only Newton particles from the object
+// volume, rendered as instanced emissive spheres, deterministic via seed.
+function validateParticles(particles, label) {
+  if (!particles || typeof particles !== 'object' || Array.isArray(particles)) throw new Error(label + ' content.particles must be an object when provided.');
+  const unknown = Object.keys(particles).filter(field => !PARTICLE_FIELDS.has(field));
+  if (unknown.length) throw new Error(label + ' content.particles declares unsupported fields: ' + unknown.join(', ') + '. Supported: ' + [...PARTICLE_FIELDS].join(', ') + '.');
+  const count = particles.count;
+  if (!Number.isInteger(count) || count < 1 || count > MAX_PARTICLES) throw new Error(label + ' content.particles.count must be an integer between 1 and ' + MAX_PARTICLES + '.');
+  const seed = particles.seed ?? PARTICLE_DEFAULTS.seed;
+  if (!Number.isInteger(seed) || seed < 0 || seed > 999999) throw new Error(label + ' content.particles.seed must be an integer between 0 and 999999.');
+  const size = particles.size ?? PARTICLE_DEFAULTS.size;
+  if (!Number.isFinite(size) || size <= 0 || size > 1) throw new Error(label + ' content.particles.size must be a positive finite number up to 1.');
+  const speed = particles.speed ?? PARTICLE_DEFAULTS.speed;
+  if (!Number.isFinite(speed) || speed < 0 || speed > 5) throw new Error(label + ' content.particles.speed must be a finite number between 0 and 5.');
+  const color = particles.color ?? PARTICLE_DEFAULTS.color;
+  validateHexColor(color, label + ' content.particles.color');
+  return { count, seed, size, color, speed };
+}
+
 function buildPrimitiveObject(layer, content, transform, keyframes, materialParams, project) {
   const primitive = content.primitive || content.object;
   if (!primitive) throw new Error('3D layer ' + layer.id + ' must declare a supported primitive or reference an imported asset with layer.assetId.');
@@ -349,10 +410,12 @@ function buildPrimitiveObject(layer, content, transform, keyframes, materialPara
   if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(color)) throw new Error('3D layer ' + layer.id + ' must declare a hex color or project brand primary/accent color.');
   const object = { id: safeProjectId(layer.id), primitive, color, transform: validatedTransform(transform, '3D layer ' + layer.id), keyframes };
   if (materialParams) object.material = materialParams;
+  if (content.particles !== undefined) object.particles = validateParticles(content.particles, '3D layer ' + layer.id);
   return object;
 }
 function buildAssetObject(layer, content, transform, keyframes, materialParams, project, projectRoot) {
   if (materialParams) throw new Error('3D layer ' + layer.id + ' imports an asset; material parameter overrides apply only to procedural primitives (a color override is supported).');
+  if (content.particles !== undefined) throw new Error('3D layer ' + layer.id + ' imports an asset; particles emit only from procedural primitives — declare a primitive emitter.');
   if (content.primitive || content.object) throw new Error('3D layer ' + layer.id + ' cannot declare both assetId and a primitive; imported assets replace procedural geometry.');
   if (typeof layer.assetId !== 'string' || !layer.assetId.trim()) throw new Error('3D layer ' + layer.id + ' assetId must be a non-empty string when provided.');
   if (!projectRoot) throw new Error('3D layer ' + layer.id + ' references asset ' + layer.assetId + ' but no projectRoot was provided to resolve imported assets.');
