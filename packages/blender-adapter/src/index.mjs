@@ -161,7 +161,26 @@ for obj in list(bpy.data.objects): bpy.data.objects.remove(obj, do_unlink=True)
 scene = bpy.context.scene
 available_engines = {item.identifier for item in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items}
 render_engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in available_engines else 'BLENDER_EEVEE'
+requested_renderer = spec.get('renderer') or 'eevee'
+if requested_renderer == 'cycles':
+    # Cycles registers through its add-on, so it is absent from the static RNA
+    # enum; assigning it is the only reliable capability check (TypeError when
+    # the add-on is disabled).
+    try:
+        scene.render.engine = 'CYCLES'
+        render_engine = 'CYCLES'
+    except TypeError:
+        pass
 scene.render.engine = render_engine
+quality = spec.get('quality') or {}
+samples = quality.get('samples')
+if isinstance(samples, int) and samples > 0:
+    if render_engine == 'CYCLES':
+        try: scene.cycles.samples = samples
+        except Exception: pass
+    else:
+        try: scene.eevee.taa_render_samples = samples
+        except Exception: pass
 scene.render.resolution_x = spec['width']; scene.render.resolution_y = spec['height']; scene.render.resolution_percentage = 100
 scene.render.fps = spec['fpsNumerator']; scene.render.fps_base = spec['fpsDenominator']
 scene.render.image_settings.file_format = 'PNG'; scene.render.image_settings.color_mode = 'RGBA' if spec['alpha'] else 'RGB'; scene.render.film_transparent = spec['alpha']
@@ -220,7 +239,7 @@ for frame in range(start, end + 1):
     scene.render.filepath = os.path.join(spec['outputDirectory'], 'frame_' + str(frame).zfill(4))
     bpy.ops.render.render(write_still=True)
 with open(spec['metadataPath'], 'w', encoding='utf-8') as handle:
-    json.dump({'width': spec['width'], 'height': spec['height'], 'fpsNumerator': spec['fpsNumerator'], 'fpsDenominator': spec['fpsDenominator'], 'durationFrames': spec['durationFrames'], 'alpha': spec['alpha'], 'renderer': render_engine, 'blenderVersion': bpy.app.version_string}, handle, indent=2)
+    json.dump({'width': spec['width'], 'height': spec['height'], 'fpsNumerator': spec['fpsNumerator'], 'fpsDenominator': spec['fpsDenominator'], 'durationFrames': spec['durationFrames'], 'alpha': spec['alpha'], 'quality': spec.get('quality') or {}, 'requestedRenderer': requested_renderer, 'renderer': render_engine, 'blenderVersion': bpy.app.version_string}, handle, indent=2)
 `;
 
 function safeProjectId(value) {
@@ -358,7 +377,12 @@ function buildAssetObject(layer, content, transform, keyframes, materialParams, 
   return object;
 }
 
-export function buildBlenderSceneSpec(project, scene, { outputDirectory, metadataPath, projectRoot } = {}) {
+// M1.5 render quality: EEVEE/Cycles sample counts per named profile. Output
+// dimensions and duration are contract-fixed; quality only changes sampling.
+export const BLENDER_QUALITY_PROFILES = { draft: 16, standard: 64, high: 128 };
+const BLENDER_RENDERERS = new Set(['eevee', 'cycles']);
+
+export function buildBlenderSceneSpec(project, scene, { outputDirectory, metadataPath, projectRoot, quality } = {}) {
   if (!project?.project || !scene?.id || !Number.isInteger(scene.durationFrames) || scene.durationFrames <= 0) throw new Error('A valid project and scene with integer-frame duration are required.');
   const fps = project.project.frameRate, canvas = project.project.canvas;
   if (!outputDirectory || !metadataPath) throw new Error('Output frame directory and metadata path are required.');
@@ -383,11 +407,16 @@ export function buildBlenderSceneSpec(project, scene, { outputDirectory, metadat
   const outputContract = scene.outputContract;
   if (outputContract !== undefined && outputContract !== null && (typeof outputContract !== 'object' || Array.isArray(outputContract))) throw new Error('Scene outputContract must be an object when provided.');
   if (outputContract?.alpha !== undefined && typeof outputContract.alpha !== 'boolean') throw new Error('Scene outputContract.alpha must be a boolean when provided.');
+  if (outputContract?.renderer !== undefined && !BLENDER_RENDERERS.has(outputContract.renderer)) throw new Error('Scene outputContract.renderer must be one of eevee or cycles.');
   const lighting = validateLighting(scene.lighting);
+  const qualityName = String(quality ?? 'standard');
+  if (!BLENDER_QUALITY_PROFILES[qualityName]) throw new Error('Blender render quality must be one of ' + Object.keys(BLENDER_QUALITY_PROFILES).join(', ') + '.');
   return {
     schemaVersion: '1.0', projectId: safeProjectId(project.project.id), sceneId: safeProjectId(scene.id),
     width: canvas.width, height: canvas.height, fpsNumerator: fps.numerator, fpsDenominator: fps.denominator,
     durationFrames: scene.durationFrames, alpha: Boolean(outputContract?.alpha),
+    quality: { name: qualityName, samples: BLENDER_QUALITY_PROFILES[qualityName] },
+    ...(outputContract?.renderer ? { renderer: outputContract.renderer } : {}),
     camera: validateCamera(scene.camera, scene.durationFrames),
     ...(lighting ? { lighting } : {}),
     objects, outputDirectory: path.resolve(outputDirectory), metadataPath: path.resolve(metadataPath)
@@ -473,8 +502,10 @@ async function runBlender({ engineRoot, specPath, driverPath, threads, signal, o
   });
 }
 
-export async function renderBlenderScene(project, scene, { projectRoot, signal, onLine = () => {}, threads } = {}) {
+export async function renderBlenderScene(project, scene, { projectRoot, signal, onLine = () => {}, threads, quality } = {}) {
   if (!projectRoot) throw new Error('A projectRoot is required for Blender output isolation.');
+  const qualityName = String(quality ?? 'standard');
+  if (!BLENDER_QUALITY_PROFILES[qualityName]) throw new Error('Blender render quality must be one of ' + Object.keys(BLENDER_QUALITY_PROFILES).join(', ') + '.');
   const projectId = safeProjectId(project?.project?.id), sceneId = safeProjectId(scene?.id);
   const root = path.resolve(projectRoot), { engineRoot, framesDir, specPath, driverPath, metadataPath } = blenderEnginePaths(root, sceneId);
   const rootRelative = path.relative(root, engineRoot);
@@ -482,7 +513,7 @@ export async function renderBlenderScene(project, scene, { projectRoot, signal, 
   if (threads !== undefined && (!Number.isInteger(threads) || threads < 1 || threads > 64)) throw new Error('threads must be a positive integer when provided.');
   await rm(framesDir, { recursive: true, force: true });
   await mkdir(framesDir, { recursive: true });
-  const spec = buildBlenderSceneSpec(project, scene, { outputDirectory: framesDir, metadataPath, projectRoot: root });
+  const spec = buildBlenderSceneSpec(project, scene, { outputDirectory: framesDir, metadataPath, projectRoot: root, quality: qualityName });
   for (const object of spec.objects) if (object.asset) await assertImportedAssetFile(root, object.asset);
   await writeFile(specPath, JSON.stringify(spec, null, 2) + '\n');
   await writeFile(driverPath, PYTHON_DRIVER, 'utf8');
@@ -500,7 +531,7 @@ export async function renderBlenderScene(project, scene, { projectRoot, signal, 
       if (signal?.aborted) throw new Error('Blender render aborted via AbortSignal.');
       retriedFrames.push(frame);
       try {
-        await renderBlenderFrame(project, scene, { projectRoot: root, frame, signal, onLine, threads });
+        await renderBlenderFrame(project, scene, { projectRoot: root, frame, signal, onLine, threads, quality: qualityName });
       } catch (error) {
         if (signal?.aborted) throw new Error('Blender render aborted via AbortSignal.');
         lastRecoveryError = error;
@@ -527,7 +558,7 @@ export async function renderBlenderScene(project, scene, { projectRoot, signal, 
   const frameMetadata = probe.streams?.[0];
   if (!frameMetadata || frameMetadata.width !== project.project.canvas.width || frameMetadata.height !== project.project.canvas.height) throw new Error('Blender frame dimensions do not match the project canvas.');
   return {
-    projectId, sceneId, engine: 'blender', renderer: metadata.renderer, blenderVersion: metadata.blenderVersion, threads: threads ?? null, frameRate: project.project.frameRate,
+    projectId, sceneId, engine: 'blender', renderer: metadata.renderer, requestedRenderer: metadata.requestedRenderer || null, quality: metadata.quality || { name: qualityName, samples: BLENDER_QUALITY_PROFILES[qualityName] }, blenderVersion: metadata.blenderVersion, threads: threads ?? null, frameRate: project.project.frameRate,
     durationFrames: scene.durationFrames, width: metadata.width, height: metadata.height, alpha: metadata.alpha,
     framesDirectory: framesDir, frameCount: evidence.length, firstFrame: evidence[0], lastFrame: evidence[evidence.length - 1], retriedFrames,
     frameEvidenceDigest: createHash('sha256').update(JSON.stringify(evidence)).digest('hex'), frameMetadata, metadata, process: { code: result.code, logTail: (result.stderr || result.stdout).slice(-4000) }, verified: true
@@ -537,16 +568,18 @@ export async function renderBlenderScene(project, scene, { projectRoot, signal, 
 // Recovery primitive: re-render exactly one frame of a scene into the standard
 // frames directory using the driver's single-frame spec flag. Used by the
 // renderBlenderScene recovery pass and available for targeted re-renders.
-export async function renderBlenderFrame(project, scene, { projectRoot, frame, signal, onLine = () => {}, threads } = {}) {
+export async function renderBlenderFrame(project, scene, { projectRoot, frame, signal, onLine = () => {}, threads, quality } = {}) {
   if (!projectRoot) throw new Error('A projectRoot is required for Blender output isolation.');
   if (!Number.isInteger(frame) || frame < 0) throw new Error('frame must be a non-negative integer.');
   if (!Number.isInteger(scene?.durationFrames) || frame >= scene.durationFrames) throw new Error('frame ' + frame + ' falls outside the scene duration.');
   if (threads !== undefined && (!Number.isInteger(threads) || threads < 1 || threads > 64)) throw new Error('threads must be a positive integer when provided.');
+  const qualityName = String(quality ?? 'standard');
+  if (!BLENDER_QUALITY_PROFILES[qualityName]) throw new Error('Blender render quality must be one of ' + Object.keys(BLENDER_QUALITY_PROFILES).join(', ') + '.');
   const projectId = safeProjectId(project?.project?.id), sceneId = safeProjectId(scene?.id);
   const root = path.resolve(projectRoot), { engineRoot, framesDir, specPath, driverPath, metadataPath } = blenderEnginePaths(root, sceneId);
   const rootRelative = path.relative(root, engineRoot);
   if (rootRelative.startsWith('..') || path.isAbsolute(rootRelative)) throw new Error('Blender output path escaped the project root.');
-  const spec = buildBlenderSceneSpec(project, scene, { outputDirectory: framesDir, metadataPath, projectRoot: root });
+  const spec = buildBlenderSceneSpec(project, scene, { outputDirectory: framesDir, metadataPath, projectRoot: root, quality: qualityName });
   for (const object of spec.objects) if (object.asset) await assertImportedAssetFile(root, object.asset);
   await mkdir(framesDir, { recursive: true });
   await writeFile(specPath, JSON.stringify({ ...spec, singleFrame: frame }, null, 2) + '\n');

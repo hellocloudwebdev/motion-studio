@@ -1,4 +1,4 @@
-import { access, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { access, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -7,6 +7,39 @@ import { analyzeRenderedMedia } from '../../render-manager/src/media-analysis.mj
 
 function hashFile(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function safeFilename(value) { return String(value || 'asset').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'asset'; }
+
+// Roadmap M1.8: editor/engine project files are only packaged when the
+// production actually created them. The caller lists them explicitly (or
+// discovers candidates with discoverEngineProjects); buildDeliveryPackage
+// verifies each one lives inside the project workspace before copying it in.
+const ENGINE_IDS_BY_EXTENSION = new Map([
+  ['.ecproj', 'effectcraft'],
+  ['.fcproj', 'filmcraft'],
+  ['.blend', 'blender'],
+  ['.aep', 'after-effects'],
+  ['.prproj', 'premiere-pro']
+]);
+
+export async function discoverEngineProjects({ projectRoot, subdirs = ['engines', 'work'], maxDepth = 4 } = {}) {
+  const root = path.resolve(String(projectRoot || ''));
+  if (!root) throw new Error('discoverEngineProjects requires a projectRoot.');
+  const found = [];
+  async function walk(dir, depth) {
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name === 'checkpoints' || entry.name === 'deliverables') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { if (depth < maxDepth) await walk(full, depth + 1); }
+      else if (entry.isFile()) {
+        const engineId = ENGINE_IDS_BY_EXTENSION.get(path.extname(entry.name).toLowerCase());
+        if (engineId) found.push({ engine: engineId, path: full });
+      }
+    }
+  }
+  for (const subdir of subdirs) await walk(path.join(root, subdir), 1);
+  return found;
+}
 
 // Roadmap P3.3 per-target aspect handling. 'contain' (the default) is encoded
 // natively by finalizeMedia (scale-to-fit + black pad bars, no distortion).
@@ -82,7 +115,7 @@ async function resolveAssetFile(sourceProjectDir, uri) {
   return resolved;
 }
 
-export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], variantSources = {}, signal } = {}) {
+export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], variantSources = {}, engineProjects = [], signal } = {}) {
   if (!project?.project?.id || !project?.delivery?.targets?.length) throw new Error('A valid project and at least one output profile are required.');
   const source = path.resolve(sourceVideo), root = path.resolve(projectRoot);
   let packageRoot = path.resolve(outputRoot || path.join(root, 'deliverables'));
@@ -179,6 +212,42 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   const portableProjectPath = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'project-portable.json'));
   const portableProjectBytes = Buffer.from(JSON.stringify(portableProject, null, 2) + '\n');
   await writeFile(portableProjectPath, portableProjectBytes);
+  // M1.8: the editorial manifest ships as a project artifact (not only QA
+  // evidence), and engine projects created during production are packaged
+  // conditionally — exactly the files the caller lists, each verified inside
+  // the project workspace and hash-recorded before it enters the package.
+  const projectBundleRoot = assertInside(packageRoot, path.join(packageRoot, 'project'));
+  await mkdir(projectBundleRoot, { recursive: true });
+  const editorialProjectPath = editorialAssembly ? await assertNoSymlinkPath(packageRoot, path.join(projectBundleRoot, 'editorial-assembly.json')) : null;
+  if (editorialProjectPath) await writeFile(editorialProjectPath, Buffer.from(JSON.stringify(editorialAssembly, null, 2) + '\n'));
+  const engineProjectRoot = path.join(projectBundleRoot, 'engine-projects');
+  const packagedEngineProjects = [];
+  if (engineProjects.length) {
+    await mkdir(engineProjectRoot, { recursive: true });
+    await assertNoSymlinkPath(packageRoot, engineProjectRoot);
+    const allowedRoots = [await realpath(path.resolve(root))];
+    const usedNames = new Set();
+    for (const entry of engineProjects) {
+      const engineId = /^[a-z][a-z0-9-]*$/i.test(String(entry?.engine || '')) ? String(entry.engine).toLowerCase() : null;
+      if (!engineId) throw new Error('Engine project reference requires a plain engine id such as effectcraft, filmcraft or blender.');
+      const sourcePath = path.resolve(String(entry?.path || ''));
+      let realSource;
+      try { realSource = await realpath(sourcePath); }
+      catch { throw new Error('Engine project reference not found: ' + sourcePath); }
+      if (!allowedRoots.some(allowed => contained(allowed, realSource))) throw new Error('Engine project reference escapes the project workspace: ' + sourcePath);
+      if (!(await stat(realSource)).isFile()) throw new Error('Engine project reference must be a regular file: ' + sourcePath);
+      const bytes = await readFile(realSource);
+      if (!bytes.length) throw new Error('Engine project reference is empty: ' + sourcePath);
+      const extension = path.extname(realSource);
+      const stem = engineId + '-' + path.basename(realSource).slice(0, path.basename(realSource).length - extension.length);
+      let name = stem + extension, suffix = 2;
+      while (usedNames.has(name)) name = stem + '-' + suffix++ + extension;
+      usedNames.add(name);
+      const target = await assertNoSymlinkPath(packageRoot, path.join(engineProjectRoot, name));
+      await writeFile(target, bytes);
+      packagedEngineProjects.push({ engine: engineId, sourcePath, packagePath: path.relative(packageRoot, target).split(path.sep).join('/'), sha256: hashFile(bytes), byteSize: bytes.length, ...(entry.sceneId ? { sceneId: String(entry.sceneId) } : {}) });
+    }
+  }
   const manifestPath = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'asset-manifest.json'));
   await writeFile(manifestPath, JSON.stringify({ projectId: project.project.id, assets: assetManifest }, null, 2) + '\n');
   const evidenceRoot = path.join(packageRoot, 'evidence');
@@ -249,6 +318,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     variants, thumbnail,
     captions: captionFiles, captionValidation, sourceProject: { path: projectCopy, sha256: hashFile(sourceProjectBytes), canonicalIrSha256 },
     portableProject: { path: portableProjectPath, sha256: hashFile(portableProjectBytes) },
+    projectBundle: { editorialAssembly: editorialProjectPath ? path.relative(packageRoot, editorialProjectPath).split(path.sep).join('/') : null, engineProjects: packagedEngineProjects },
     assetManifest: manifestPath, provenance: project.provenance || { sources: [], software: [], decisions: [] },
     evidence: { renderManifest: renderEvidencePath, qaReport: qaEvidencePath, editorialAssembly: editorialEvidencePath, operationHistory: operationHistoryPath, softwareVersions: softwareEvidencePath, qaFrames: frameEvidence.length ? path.relative(packageRoot, qaFramesDirectory).split(path.sep).join('/') : null },
     renderManifest: renderManifest || null, qaReport: renderManifest?.qa || project.qa || null,
@@ -262,13 +332,14 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     `- Canonical IR SHA-256: ${canonicalIrSha256}`,
     `- Variants: ${variants.length}`,
     `- Referenced assets packaged: ${assetManifest.filter(asset => asset.included).length}/${assetManifest.length}`,
+    `- Engine project references: ${packagedEngineProjects.length ? packagedEngineProjects.map(engineProject => engineProject.engine + ':' + engineProject.packagePath).join(', ') : 'none created'}`,
     `- Captions: ${captionFiles.length ? captionFiles.map(file => path.basename(file)).join(', ') : 'none'}`,
     `- Caption validation: passed (${captionValidation.cueCount} cues; frame bounds, UTF-8 and millisecond timing)`,
     '', 'See `delivery-receipt.json`, `integrity-manifest.json`, and the evidence files for detailed verification.'
   ].join('\n') + '\n';
   const reportPath = await assertNoSymlinkPath(packageRoot, path.join(packageRoot, 'DELIVERY-REPORT.md'));
   await writeFile(reportPath, humanReport);
-  const integrityFiles = [...variants.map(variant => variant.output), thumbnail, ...captionFiles, ...assetManifest.filter(asset => asset.included && asset.packagePath).map(asset => path.join(packageRoot, asset.packagePath)), projectCopy, portableProjectPath, manifestPath, ...evidenceFiles, reportPath];
+  const integrityFiles = [...variants.map(variant => variant.output), thumbnail, ...captionFiles, ...assetManifest.filter(asset => asset.included && asset.packagePath).map(asset => path.join(packageRoot, asset.packagePath)), projectCopy, portableProjectPath, manifestPath, ...(editorialProjectPath ? [editorialProjectPath] : []), ...packagedEngineProjects.map(engineProject => path.join(packageRoot, engineProject.packagePath)), ...evidenceFiles, reportPath];
   const integrity = { schemaVersion: '1.0', projectId: project.project.id, files: [] };
   for (const file of integrityFiles) {
     const bytes = await readFile(file);

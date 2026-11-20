@@ -16,7 +16,7 @@ import { exportEditorialInterchange } from '../../../packages/editorial-intercha
 import { importInterchangeIntoFilmCraft } from '../../../packages/editorial-interchange/src/filmcraft-commands.mjs';
 import { renderEffectCraftScene } from '../../../packages/effectcraft-adapter/src/index.mjs';
 import { aggregateProductionStats } from '../../../packages/orchestrator/src/failure-tracking.mjs';
-import { buildDeliveryPackage } from '../../../packages/delivery-manager/src/index.mjs';
+import { buildDeliveryPackage, discoverEngineProjects } from '../../../packages/delivery-manager/src/index.mjs';
 import { audioInputsFromProject } from '../../../packages/delivery-manager/src/audio-inputs.mjs';
 import { createOpenRouterProvider, generateProduction } from '../../../packages/creative-pipeline/src/index.mjs';
 import { renderThreeJsScene } from '../../../packages/threejs-adapter/src/index.mjs';
@@ -320,7 +320,7 @@ if (command === 'assets') {
     }
   } else if (command === 'deliver') {
     const sourceVideo = args.find(x => !x.startsWith('--'));
-    if (!sourceVideo) throw new Error('Usage: motion-studio deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high]');
+    if (!sourceVideo) throw new Error('Usage: motion-studio deliver <project.json> <rendered.mp4> [--reflow] [--quality draft|standard|high] [--no-engine-projects]');
     const target = paths(project, file);
     let renderManifest = null;
     try { renderManifest = JSON.parse(await readFile(path.resolve(sourceVideo) + '.render.json', 'utf8')); } catch {}
@@ -335,7 +335,10 @@ if (command === 'assets') {
           quality: option('--quality', 'draft')
         })
       : {};
-    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, editorialAssembly: assembly, operationHistory: project.qa?.repairHistory || [], audioInputs: await audioInputsFromProject(project, file), variantSources });
+    // M1.8: engine projects created during the production (EffectCraft/FilmCraft/
+    // Blender/Adobe) are conditionally packaged from the workspace; --no-engine-projects
+    // opts out when a producer wants a media-only bundle.
+    const delivery = await buildDeliveryPackage({ project, projectFile: file, sourceVideo, projectRoot: target.projectRoot, outputRoot: option('--output', path.join(target.projectRoot, 'deliverables')), renderManifest, editorialAssembly: assembly, operationHistory: project.qa?.repairHistory || [], audioInputs: await audioInputsFromProject(project, file), variantSources, engineProjects: flags().has('--no-engine-projects') ? [] : await discoverEngineProjects({ projectRoot: target.projectRoot }) });
     print(delivery);
     if (!delivery.acceptance.passed) process.exitCode = 2;
   } else if (command === 'compile' || command === 'render') {

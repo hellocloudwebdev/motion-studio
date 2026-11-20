@@ -181,6 +181,29 @@ test('Blender outputContract.alpha must be boolean and maps into the spec', () =
   assert.throws(() => build(malformed), /outputContract must be an object/);
 });
 
+test('Blender quality profiles map to named sample counts and reject unknown profiles', () => {
+  const draft = build(scene, { quality: 'draft' });
+  assert.deepEqual(draft.quality, { name: 'draft', samples: 16 });
+  assert.deepEqual(build(scene).quality, { name: 'standard', samples: 64 });
+  assert.deepEqual(build(scene, { quality: 'high' }).quality, { name: 'high', samples: 128 });
+  assert.throws(() => build(scene, { quality: 'ultra' }), /quality must be one of draft, standard, high/);
+});
+
+test('Blender outputContract.renderer accepts only eevee or cycles and maps into the spec', () => {
+  const cycles = structuredClone(scene); cycles.outputContract = { renderer: 'cycles' };
+  assert.equal(build(cycles).renderer, 'cycles');
+  const eevee = structuredClone(scene); eevee.outputContract = { renderer: 'eevee' };
+  assert.equal(build(eevee).renderer, 'eevee');
+  assert.ok(!('renderer' in build(scene)), 'the spec omits renderer when the contract does not declare one');
+  const unknown = structuredClone(scene); unknown.outputContract = { renderer: 'mentalray' };
+  assert.throws(() => build(unknown), /renderer must be one of eevee or cycles/);
+});
+
+test('Blender render entry points validate the quality profile before spawning', async () => {
+  await assert.rejects(() => renderBlenderScene(project, scene, { projectRoot: 'unused', quality: 'extreme' }), /quality must be one of draft, standard, high/);
+  await assert.rejects(() => renderBlenderFrame(project, scene, { projectRoot: 'unused', frame: 0, quality: 4 }), /quality must be one of draft, standard, high/);
+});
+
 test('Blender frame recovery planner schedules exactly one retry per missing or empty frame', () => {
   const partial = planBlenderFrameRecovery(3, [{ frame: 0, bytes: 10 }, { frame: 1, bytes: 0 }, { frame: 2, bytes: 20 }]);
   assert.deepEqual(partial.missing, [1]);

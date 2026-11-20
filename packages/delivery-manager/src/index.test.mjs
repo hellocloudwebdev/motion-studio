@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildDeliveryPackage, verifyDeliveryPackage } from './index.mjs';
+import { buildDeliveryPackage, discoverEngineProjects, verifyDeliveryPackage } from './index.mjs';
 import { runMediaCommand } from '../../ffmpeg/src/index.mjs';
 
 async function makeVideo(file, durationSeconds = 2) {
@@ -307,5 +307,73 @@ test('full acceptance bundle: narrated audio, editorial evidence and reproducibl
     }
     assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery-a'))).passed, true);
     assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery-b'))).passed, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('M1.8: editorial manifest and engine projects ship as project artifacts, conditionally', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-m18-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const assembly = { assemblyVersion: '1.0.0', project: input.project, sequence: { durationFrames: 60 }, scenes: [], clips: [] };
+    // The production created an EffectCraft composition and a FilmCraft
+    // handoff under the workspace work/ tree; discovery must find both and
+    // skip the checkpoint copies.
+    await mkdir(path.join(root, 'work', 'engine', 'checkpoints'), { recursive: true });
+    await mkdir(path.join(root, 'engines'), { recursive: true });
+    const ecprojBytes = Buffer.from('ecproj-scene-content'), fcprojBytes = Buffer.from('fcproj-handoff-content');
+    const ecproj = path.join(root, 'work', 'engine', 'Main.ecproj');
+    await writeFile(ecproj, ecprojBytes);
+    await writeFile(path.join(root, 'work', 'engine', 'checkpoints', 'Main.ecproj'), Buffer.from('stale-checkpoint'));
+    const fcproj = path.join(root, 'engines', 'handoff.fcproj');
+    await writeFile(fcproj, fcprojBytes);
+    const discovered = await discoverEngineProjects({ projectRoot: root });
+    assert.deepEqual(discovered.map(item => item.engine).sort(), ['effectcraft', 'filmcraft'], 'discovery finds exactly the two live engine projects');
+    const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly: assembly, operationHistory: [], engineProjects: discovered });
+    assert.equal(result.acceptance.passed, true);
+    assert.deepEqual(JSON.parse(await readFile(path.join(root, 'delivery', 'project', 'editorial-assembly.json'), 'utf8')), assembly, 'the editorial manifest ships as a project artifact');
+    assert.equal(result.projectBundle.editorialAssembly, 'project/editorial-assembly.json');
+    assert.equal(result.projectBundle.engineProjects.length, 2);
+    const packagedEcproj = result.projectBundle.engineProjects.find(item => item.engine === 'effectcraft');
+    assert.equal(packagedEcproj.packagePath, 'project/engine-projects/effectcraft-Main.ecproj');
+    assert.equal(packagedEcproj.sha256, createHash('sha256').update(ecprojBytes).digest('hex'));
+    assert.equal((await readFile(path.join(root, 'delivery', packagedEcproj.packagePath))).equals(ecprojBytes), true, 'the engine project bytes are packaged unmodified');
+    assert.equal((await readFile(path.join(root, 'delivery', 'project', 'engine-projects', 'filmcraft-handoff.fcproj'), 'utf8')), 'fcproj-handoff-content');
+    assert.match(await readFile(path.join(root, 'delivery', 'DELIVERY-REPORT.md'), 'utf8'), /Engine project references: (effectcraft|filmcraft):project\/engine-projects\/(effectcraft|filmcraft)-/);
+    assert.equal((await verifyDeliveryPackage(path.join(root, 'delivery'))).passed, true, 'the integrity manifest covers the new project artifacts');
+    // Without created engine projects the package carries no references.
+    const bare = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery-bare'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly: assembly, operationHistory: [] });
+    assert.deepEqual(bare.projectBundle.engineProjects, []);
+    assert.equal(bare.projectBundle.editorialAssembly, 'project/editorial-assembly.json');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('M1.8: engine project references must live inside the project workspace', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-m18-escape-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const input = project();
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input));
+    await makeVideo(sourceVideo);
+    const outside = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-outside-'));
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    try {
+      await writeFile(path.join(outside, 'escape.ecproj'), Buffer.from('outside'));
+      await assert.rejects(
+        () => buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly: null, operationHistory: [], engineProjects: [{ engine: 'effectcraft', path: path.join(outside, 'escape.ecproj') }] }),
+        /escapes the project workspace/
+      );
+      await assert.rejects(
+        () => buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly: null, operationHistory: [], engineProjects: [{ engine: 'not an engine id!', path: path.join(root, 'source.mp4') }] }),
+        /plain engine id/
+      );
+    } finally { await rm(outside, { recursive: true, force: true }); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

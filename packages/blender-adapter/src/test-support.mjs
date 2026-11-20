@@ -35,6 +35,21 @@ export function decodedFrameSignature(file) {
   });
 }
 
+// Decode one 1x1 pixel of a PNG as raw RGBA bytes — proves real per-pixel
+// alpha (film_transparent) instead of trusting the container pix_fmt label.
+export function cornerPixelRgba(file) {
+  return new Promise((resolve, reject) => {
+    let stderrTail = '';
+    const child = spawn('ffmpeg', ['-v', 'error', '-i', file, '-vf', 'crop=1:1:0:0', '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], { shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = [];
+    child.stdout.on('data', chunk => chunks.push(chunk));
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', chunk => { stderrTail += chunk; });
+    child.once('error', reject);
+    child.once('close', code => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error('FFmpeg could not crop ' + file + ': ' + stderrTail)));
+  });
+}
+
 // On Windows a just-killed Blender child can keep directory handles busy for a
 // moment after the abort settles, so temp-root cleanup retries briefly on the
 // transient lock codes instead of failing the test.
