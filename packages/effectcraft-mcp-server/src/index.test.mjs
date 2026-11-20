@@ -27,7 +27,38 @@ const EXPECTED_TOOLS = [
   'effectcraft.render_scene',
   'effectcraft.render_comp',
   'effectcraft.run_command',
-  'effectcraft.run_batch'
+  'effectcraft.run_batch',
+  'effectcraft.add_mask',
+  'effectcraft.set_track_matte',
+  'effectcraft.set_blend_mode',
+  'effectcraft.set_parent',
+  'effectcraft.add_marker',
+  'effectcraft.set_work_area',
+  'effectcraft.render_queue',
+  'effectcraft.export_lottie',
+  'effectcraft.export_timeline',
+  'effectcraft.import_timeline',
+  'effectcraft.list_fonts'
+];
+
+const GATED_TOOLS = [
+  'effectcraft.run_command',
+  'effectcraft.run_batch',
+  'effectcraft.add_mask',
+  'effectcraft.set_track_matte',
+  'effectcraft.set_blend_mode',
+  'effectcraft.set_parent',
+  'effectcraft.add_marker',
+  'effectcraft.set_work_area',
+  'effectcraft.import_timeline'
+];
+
+// Verified artifact generation and pure reads stay approval-free.
+const UNGATED_TOOLS = [
+  'effectcraft.render_queue',
+  'effectcraft.export_lottie',
+  'effectcraft.export_timeline',
+  'effectcraft.list_fonts'
 ];
 
 // Fixed approval timestamp: far in the past, so approvals created with it are
@@ -74,20 +105,24 @@ function projectFixture() {
   };
 }
 
-test('registers exactly the twelve effectcraft tools under one server name', async () => {
+test('registers exactly the twenty-three effectcraft tools under one server name', async () => {
   await withClient(async client => {
     const tools = await client.listTools();
     const names = tools.tools.map(tool => tool.name);
-    assert.equal(names.length, 12, 'exactly twelve tools are registered');
-    assert.equal(new Set(names).size, 12, 'no duplicate tool names');
+    assert.equal(names.length, 23, 'exactly twenty-three tools are registered');
+    assert.equal(new Set(names).size, 23, 'no duplicate tool names');
     assert.deepEqual([...names].sort(), [...EXPECTED_TOOLS].sort());
     // Read-only planning tools must not demand approval fields in their schema.
     const plan = tools.tools.find(tool => tool.name === 'effectcraft.plan_scene');
     assert.ok(!('approval' in plan.inputSchema.properties), 'planning is approval-free');
     // Mutating tools take the uniform approval gate fields.
-    for (const mutating of ['effectcraft.run_command', 'effectcraft.run_batch']) {
+    for (const mutating of GATED_TOOLS) {
       const schema = tools.tools.find(tool => tool.name === mutating).inputSchema.properties;
       assert.ok('approval' in schema && 'projectId' in schema && 'runId' in schema, mutating + ' requires approval/projectId/runId');
+    }
+    for (const ungated of UNGATED_TOOLS) {
+      const schema = tools.tools.find(tool => tool.name === ungated).inputSchema.properties;
+      assert.ok(!('approval' in schema), ungated + ' stays approval-free');
     }
     // The render surface is the verified subset of the CLI formats (no
     // image-sequence formats: single frames belong to render_frame).
@@ -116,6 +151,17 @@ test('mutating tools refuse a missing approval with governance guidance', async 
     assert.match(result.text, /governanceGate/);
     assert.match(result.text, /Producer approval is required/);
     assert.match(result.text, /createCraftOperationApproval|createEffectCraftApproval/);
+  });
+});
+
+test('the new gated tools refuse a missing approval before touching the engine', async () => {
+  await withClient(async client => {
+    const result = await callToolJson(client, 'effectcraft.add_mask', { projectId: 'p1', runId: 'r1', projectPath: 'missing.ecproj', compId: 'Main', layer: 'MS-TITLE', shape: 'rect', rect: [0, 0, 10, 10] });
+    assert.equal(result.isError, true, 'no approval means no mutation');
+    assert.match(result.text, /governanceGate/);
+    assert.match(result.text, /effectcraft\.add_mask/, 'the guidance names the exact tool');
+    assert.match(result.text, /Producer approval is required/);
+    assert.equal(result.parsed.results, undefined, 'no session was run');
   });
 });
 
@@ -238,7 +284,7 @@ test('http mode serves the MCP surface on 127.0.0.1 and enforces the optional to
     const listed = await mcpPost(base, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, 'secret-test-token');
     assert.equal(listed.status, 200);
     const names = (listed.json?.result?.tools || []).map(tool => tool.name);
-    assert.equal(names.length, 12);
+    assert.equal(names.length, 23);
     assert.deepEqual([...names].sort(), [...EXPECTED_TOOLS].sort());
 
     const called = await mcpPost(base, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'effectcraft.plan_scene', arguments: { project: projectFixture(), sceneId: 'scene-01' } } }, 'secret-test-token');
@@ -267,7 +313,7 @@ test('http mode without a configured token needs no header', async () => {
     assert.equal(initialized.json?.result?.serverInfo?.name, 'motion-studio-effectcraft');
     const listed = await mcpPost(base, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     assert.equal(listed.status, 200);
-    assert.equal((listed.json?.result?.tools || []).length, 12);
+    assert.equal((listed.json?.result?.tools || []).length, 23);
   } finally {
     child.kill();
     await new Promise(resolve => child.once('exit', resolve));
@@ -296,13 +342,13 @@ const FFPROBE_AVAILABLE = spawnSync('ffprobe', ['-version'], { encoding: 'utf8' 
 
 // Shared live helper: build a saved project with one comp containing a
 // background solid and a title text layer. Returns { projectPath, compName }.
-async function buildFixtureProject(client, root, name) {
+async function buildFixtureProject(client, root, name, compName = 'Main') {
   const projectPath = path.join(root, name + '.ecproj');
   const commands = [
     // EffectCraft's file.newProject accepts no parameters (unlike FilmCraft),
     // and no explicit file.saveAs step: run_batch appends it from saveAs.
     { id: 'file.newProject', params: {} },
-    { id: 'comp.new', params: { name: 'Main', width: 320, height: 180, frameRate: 30, duration: 2, background: '#101820' } },
+    { id: 'comp.new', params: { name: compName, width: 320, height: 180, frameRate: 30, duration: 2, background: '#101820' } },
     { id: 'layer.newSolid', params: { name: 'MS-BG', color: '#101820', width: 320, height: 180 } },
     { id: 'layer.newText', params: { name: 'MS-TITLE', text: 'Motion Studio', position: [60, 60], size: 24, fill: '#ffffff' } }
   ];
@@ -312,7 +358,7 @@ async function buildFixtureProject(client, root, name) {
   assert.equal(built.isError, false, built.text);
   assert.equal(built.parsed.ok, true, built.text);
   assert.ok(existsSync(projectPath), 'the project was saved to disk');
-  return { projectPath, compName: 'Main' };
+  return { projectPath, compName };
 }
 
 test('live check_engine resolves the CLI and verifies the MCP connection', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
@@ -429,4 +475,209 @@ test('live render_comp renders a comp and passes independent FFprobe verificatio
     });
     assert.ok(Date.now() - started < 60000, 'the live render stays under 60 s');
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// Fresh approval for one of the gated tools over the exact resolved opArgs
+// (zod defaults spelled out, undefined fields included) — the digest the gate
+// checks is over this object.
+function approveGate(toolName, args) {
+  return createEffectCraftApproval({ projectId: args.projectId, runId: args.runId, toolName, args, approvedBy: 'Producer', now: Date.now() });
+}
+
+test('live add_mask adds a rect mask to a real project and returns the mask id', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-mask-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'MaskEdit');
+      const opArgs = { projectId: 'p-MaskEdit', runId: 'r-mask', projectPath, compId: compName, layer: 'MS-TITLE', shape: 'rect', rect: [0, 0, 120, 40], roundness: undefined, vertices: undefined, mode: undefined, timeoutMs: undefined };
+      const result = await callToolJson(client, 'effectcraft.add_mask', { ...opArgs, approval: approveGate('effectcraft.add_mask', opArgs) });
+      assert.equal(result.isError, false, result.text);
+      assert.equal(result.parsed.ok, true, result.text);
+      assert.equal(typeof result.parsed.mask, 'number', 'layer.addMask reports the created mask id: ' + result.text);
+      assert.equal(result.parsed.results[1].ok, true, 'the mask step succeeded');
+      assert.equal(result.parsed.savePath, projectPath, 'the project was saved back');
+      // rect AND vertices together is a usage error, refused before any session.
+      const both = { ...opArgs, vertices: [[0, 0], [60, 0], [60, 30]] };
+      const conflict = await callToolJson(client, 'effectcraft.add_mask', { ...both, approval: approveGate('effectcraft.add_mask', both) });
+      assert.equal(conflict.isError, true);
+      assert.match(conflict.text, /exactly one of rect/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live set_blend_mode verifies the mode through a props readback', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-blend-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'Blend');
+      const opArgs = { projectId: 'p-Blend', runId: 'r-blend', projectPath, compId: compName, layer: 'MS-TITLE', mode: 'Multiply', timeoutMs: undefined };
+      const result = await callToolJson(client, 'effectcraft.set_blend_mode', { ...opArgs, approval: approveGate('effectcraft.set_blend_mode', opArgs) });
+      assert.equal(result.isError, false, result.text);
+      assert.equal(result.parsed.ok, true, result.text);
+      assert.equal(result.parsed.verified.blendMode, 'Multiply', 'the saved layer reads back with the mode: ' + result.text);
+      assert.equal(result.parsed.verified.expected, 'Multiply');
+      assert.equal(result.parsed.verified.matches, true);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live set_track_matte and set_parent run approved sessions and report step results', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-matte-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'Matte');
+      const matteArgs = { projectId: 'p-Matte', runId: 'r-matte', projectPath, compId: compName, layer: 'MS-TITLE', matteLayer: 'MS-BG', kind: 'alpha', timeoutMs: undefined };
+      const matte = await callToolJson(client, 'effectcraft.set_track_matte', { ...matteArgs, approval: approveGate('effectcraft.set_track_matte', matteArgs) });
+      assert.equal(matte.isError, false, matte.text);
+      assert.equal(matte.parsed.ok, true, matte.text);
+      assert.equal(matte.parsed.results[1].id, 'layer.setTrackMatte');
+      assert.equal(matte.parsed.results[1].ok, true, 'the silent matte step still succeeded');
+      assert.equal(matte.parsed.results[1].silent, true, 'silent steps report null results');
+      assert.equal(matte.parsed.kind, 'alpha');
+      const parentArgs = { projectId: 'p-Matte', runId: 'r-parent', projectPath, compId: compName, layer: 'MS-TITLE', parentLayer: 'MS-BG', compensate: false, timeoutMs: undefined };
+      const parent = await callToolJson(client, 'effectcraft.set_parent', { ...parentArgs, approval: approveGate('effectcraft.set_parent', parentArgs) });
+      assert.equal(parent.isError, false, parent.text);
+      assert.equal(parent.parsed.ok, true, parent.text);
+      assert.equal(parent.parsed.results[1].id, 'layer.setParent');
+      assert.equal(parent.parsed.results[1].ok, true, 'the silent parent step still succeeded');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live add_marker and set_work_area save receipts (and refuse inverted work areas)', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-marker-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'Markers');
+      const markerArgs = { projectId: 'p-Markers', runId: 'r-marker', projectPath, compId: compName, seconds: 1, comment: 'beat one', timeoutMs: undefined };
+      const marker = await callToolJson(client, 'effectcraft.add_marker', { ...markerArgs, approval: approveGate('effectcraft.add_marker', markerArgs) });
+      assert.equal(marker.isError, false, marker.text);
+      assert.equal(marker.parsed.ok, true, marker.text);
+      assert.equal(marker.parsed.marker.time, 1, 'comp.addMarker reports the placed time: ' + marker.text);
+      assert.equal(marker.parsed.comment, 'beat one');
+      const workArgs = { projectId: 'p-Markers', runId: 'r-work', projectPath, compId: compName, start: 0.5, end: 1.5, timeoutMs: undefined };
+      const work = await callToolJson(client, 'effectcraft.set_work_area', { ...workArgs, approval: approveGate('effectcraft.set_work_area', workArgs) });
+      assert.equal(work.isError, false, work.text);
+      assert.equal(work.parsed.ok, true, work.text);
+      assert.deepEqual(work.parsed.workArea, { start: 0.5, end: 1.5 }, 'comp.workArea echoes the range: ' + work.text);
+      const inverted = { ...workArgs, start: 1.5, end: 0.5 };
+      const refused = await callToolJson(client, 'effectcraft.set_work_area', { ...inverted, approval: approveGate('effectcraft.set_work_area', inverted) });
+      assert.equal(refused.isError, true);
+      assert.match(refused.text, /end must be greater than start/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live render_queue renders two jobs and passes independent FFprobe verification', { skip: CLI_AVAILABLE && FFPROBE_AVAILABLE ? false : 'effectcraft-cli and ffprobe are required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-rqueue-'));
+  try {
+    const started = Date.now();
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'Queue');
+      const firstOutput = path.join(root, 'queue-a.mp4');
+      const secondOutput = path.join(root, 'queue-b.mp4');
+      const queued = await callToolJson(client, 'effectcraft.render_queue', { projectPath, jobs: [
+        { compId: compName, outputPath: firstOutput, format: 'h264' },
+        { compId: compName, outputPath: secondOutput, format: 'h264' }
+      ] });
+      assert.equal(queued.isError, false, queued.text);
+      assert.equal(queued.parsed.allVerified, true, queued.text);
+      assert.equal(queued.parsed.jobs.length, 2, 'every job gets a receipt');
+      for (const [index, job] of queued.parsed.jobs.entries()) {
+        assert.equal(job.verified, true, JSON.stringify(job.failures));
+        assert.equal(job.media.width, 320);
+        assert.equal(job.media.height, 180);
+        assert.ok(job.media.durationSeconds > 0, 'the render has a probeable duration');
+        assert.ok(job.byteSize > 0);
+        const onDisk = index === 0 ? firstOutput : secondOutput;
+        assert.equal(job.sha256, createHash('sha256').update(await readFile(onDisk)).digest('hex'), 'the receipt sha256 matches the on-disk artifact');
+      }
+      // A queued render to an existing output is refused before any session.
+      const overwrite = await callToolJson(client, 'effectcraft.render_queue', { projectPath, jobs: [{ compId: compName, outputPath: firstOutput }] });
+      assert.equal(overwrite.isError, true);
+      assert.match(overwrite.text, /refusing to overwrite/);
+    });
+    assert.ok(Date.now() - started < 60000, 'the two-job render queue stays under 60 s');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live export_lottie writes valid JSON and refuses overwrites and bad extensions', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-lottie-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'Lottie');
+      const lottiePath = path.join(root, 'main.json');
+      const exported = await callToolJson(client, 'effectcraft.export_lottie', { projectPath, compId: compName, outputPath: lottiePath });
+      assert.equal(exported.isError, false, exported.text);
+      assert.equal(exported.parsed.ok, true, exported.text);
+      assert.equal(exported.parsed.frames, 60, 'the 2 s / 30 fps comp exports 60 frames: ' + exported.text);
+      assert.ok(exported.parsed.layers >= 1, 'the comp layers are reported');
+      assert.equal(exported.parsed.lottie.name, compName);
+      assert.equal(exported.parsed.lottie.width, 320);
+      assert.equal(exported.parsed.lottie.height, 180);
+      assert.equal(exported.parsed.artifact.sha256, createHash('sha256').update(await readFile(lottiePath)).digest('hex'));
+      const onDisk = JSON.parse(await readFile(lottiePath, 'utf8'));
+      assert.equal(onDisk.nm, compName, 'the artifact parses as JSON and names the comp');
+      const overwrite = await callToolJson(client, 'effectcraft.export_lottie', { projectPath, compId: compName, outputPath: lottiePath });
+      assert.equal(overwrite.isError, true);
+      assert.match(overwrite.text, /refusing to overwrite/);
+      const badExtension = await callToolJson(client, 'effectcraft.export_lottie', { projectPath, compId: compName, outputPath: path.join(root, 'main.txt') });
+      assert.equal(badExtension.isError, true);
+      assert.match(badExtension.text, /\.json or \.lottie/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live export_timeline writes an FCPXML that starts with the XML declaration', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-timeline-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, compName } = await buildFixtureProject(client, root, 'Timeline');
+      const timelinePath = path.join(root, 'timeline.fcpxml');
+      const exported = await callToolJson(client, 'effectcraft.export_timeline', { projectPath, compId: compName, outputPath: timelinePath, format: 'fcpxml' });
+      assert.equal(exported.isError, false, exported.text);
+      assert.equal(exported.parsed.ok, true, exported.text);
+      const content = await readFile(timelinePath, 'utf8');
+      assert.match(content.trimStart(), /^<\?xml/, 'the FCPXML starts with the XML declaration');
+      assert.ok(exported.parsed.artifact.byteSize > 0);
+      assert.equal(exported.parsed.export.format, 'fcpxml');
+      assert.ok(exported.parsed.export.sequences >= 1, 'the export reports its sequence count');
+      const overwrite = await callToolJson(client, 'effectcraft.export_timeline', { projectPath, compId: compName, outputPath: timelinePath, format: 'fcpxml' });
+      assert.equal(overwrite.isError, true);
+      assert.match(overwrite.text, /refusing to overwrite/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live import_timeline round-trips an exported FCPXML into a second project', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-ecmcp-import-'));
+  try {
+    await withClient(async client => {
+      const source = await buildFixtureProject(client, root, 'RoundTripSource');
+      const target = await buildFixtureProject(client, root, 'RoundTripTarget', 'Other');
+      const timelinePath = path.join(root, 'roundtrip.fcpxml');
+      const exported = await callToolJson(client, 'effectcraft.export_timeline', { projectPath: source.projectPath, compId: source.compName, outputPath: timelinePath, format: 'fcpxml' });
+      assert.equal(exported.isError, false, exported.text);
+      const importArgs = { projectId: 'p-RoundTripTarget', runId: 'r-import', projectPath: target.projectPath, timelinePath, format: 'auto', timeoutMs: undefined };
+      const imported = await callToolJson(client, 'effectcraft.import_timeline', { ...importArgs, approval: approveGate('effectcraft.import_timeline', importArgs) });
+      assert.equal(imported.isError, false, imported.text);
+      assert.equal(imported.parsed.ok, true, imported.text);
+      assert.ok(imported.parsed.compsCreated >= 1, 'the imported comp shows up in the info summary: ' + imported.text);
+      assert.ok(imported.parsed.comps.includes(source.compName), 'the imported comp keeps its name');
+      assert.match(imported.parsed.summary, /Composition/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live list_fonts queries the headless font catalog', { skip: CLI_AVAILABLE ? false : 'effectcraft-cli is required on the host.' }, async () => {
+  await withClient(async client => {
+    const queried = await callToolJson(client, 'effectcraft.list_fonts', { query: 'Arial' });
+    assert.equal(queried.isError, false, queried.text);
+    assert.ok(queried.parsed.count >= 1, 'the query matches at least one family');
+    assert.ok(queried.parsed.families.some(family => family.family === 'Arial'));
+    assert.ok(queried.parsed.families.every(family => Array.isArray(family.styles) && family.styles.length >= 1));
+    const full = await callToolJson(client, 'effectcraft.list_fonts', {});
+    assert.equal(full.isError, false, full.text);
+    assert.ok(full.parsed.count >= queried.parsed.count, 'an unfiltered query covers the filtered surface');
+  });
 });

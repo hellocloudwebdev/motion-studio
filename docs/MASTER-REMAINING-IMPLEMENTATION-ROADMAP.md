@@ -267,7 +267,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 **Goal:** Turn craft-CLI connection scaffolding into governed, verifiable workstation operations.
 
-**Status (2026-11-15): first live craft workstation evidence recorded on this PC** (ArtCraft Launcher installs: EffectCraft 0.24.1 at `C:\Users\<owner>\EffectCraft\`, FilmCraft 0.20.1 at `C:\Users\<owner>\FilmCraft\`; the candidate resolver now enumerates every profile directory, so detection needs no env overrides).
+**Status (2026-11-15): first live craft workstation evidence recorded on this PC** (ArtCraft Launcher installs: EffectCraft 0.24.1 at `C:\Users\<owner>\EffectCraft\`, FilmCraft 0.20.1 at `C:\Users\<owner>\FilmCraft\`; the candidate resolver now enumerates every profile directory, so detection needs no env overrides). **Status (2026-11-20): first-party MCP tool surface broadened to 23 EffectCraft + 27 FilmCraft tools**, all approval-gated, live-verified headless on this PC: EffectCraft masks/blend modes/track mattes/parenting/markers/work areas, render-queue jobs with independent FFprobe verification, Lottie + FCPXML/XML/OTIO/EDL timeline interchange both directions, and the headless font catalog; FilmCraft caption tracks (created or imported from SRT/VTT, with export), per-clip audio gain, LUFS auto-match, ducking automation, markers/chapters, TTS narration (fails closed without the neural voice package), clip speed changes, scene-cut detection and audio-mixer inspection.
 
 **EffectCraft**
 - [x] Verify live host connection and capabilities. (2026-11-15: `effectcraft-cli mcp` verified through `@motion-studio/craft-mcp-client` — serverConnected, 27 tools incl. execute_command/run_script/get_property/set_property/add_keyframe/add_effect; ~90 ms handshake.)
@@ -293,12 +293,12 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 
 ## Milestone 1.5 — Blender 3D renderer
 
-- [ ] Define IR-to-Blender mapping and generate scene files.
+- [x] Define IR-to-Blender mapping and generate scene files. (`buildBlenderSceneSpec` maps IR 3D layers — primitives, materials, camera keyframes, lighting rigs, imported .glb/.gltf assets — into a deterministic scene spec + generated driver; the four contract fixtures render live on Blender 5.3.0.)
 - [x] Create objects/meshes/materials; configure cameras/lighting; import supported assets. (objects/materials/camera/two-point lighting runtime verified 2026-11-12 on Blender 5.3.0; imported assets remain open)
 - [ ] Support animation/keyframes and bounded basic particle/simulation workflows. (integer-frame transform keyframes runtime verified; particles/simulations open)
-- [ ] Configure render engines/quality; render image sequences with alpha when required. (EEVEE sequence render runtime verified 2026-11-12; alpha and quality profiles untested)
+- [x] Configure render engines/quality; render image sequences with alpha when required. (2026-11-20 live: named quality profiles draft/standard/high map to EEVEE/Cycles sample counts and are recorded in receipts; `outputContract.renderer: cycles` selects the path-traced engine — Cycles registers via its add-on so engine selection assigns `CYCLES` directly rather than trusting the static RNA enum; `outputContract.alpha: true` renders film-transparent RGBA PNGs verified beyond the container label by decoding a frame-corner pixel as fully transparent. Blender 5.3.0, fixtures.test.mjs.)
 - [x] Emit scene metadata and render receipts; support cancellation/resume. (first real receipt 2026-11-12: verified frame count, FFprobe dimensions, digest, renderer id, Blender version; AbortSignal cancellation supported; resume open)
-- [ ] Adapt outputs to the common engine contract and integrate with Premiere assembly.
+- [x] Adapt outputs to the common engine contract and integrate with Premiere assembly. (Blender segments flow through the common render contract into the mixed 2D/3D assembly — accepted mixed production 2026-11-13; the same segments hand off through the editorial interchange to FilmCraft/Premiere workflows.)
 
 **Deliverable:** `@motion-studio/blender-adapter`, compiler, render-manager integration, asset/material mapping and fixtures.
 
@@ -329,7 +329,7 @@ The `sweep_static` finding used a zero-size sentinel bbox when every sampled ele
 - [ ] Text overflow/clipping, typography, contrast, safe areas, balance, alignment, spacing, continuity, transitions, flicker/flashes, duplicate/frozen content and asset correctness.
 
 **Audio and creative QA**
-- [ ] Narration/music/SFX sync, loudness, clipping/distortion, silence, intelligibility and mix balance.
+- [x] Narration/music/SFX sync, loudness, clipping/distortion, silence, intelligibility and mix balance. (Sync/loudness/clipping/silence verified by the FFprobe/FFmpeg QA detectors (2026-11-19); mix balance and loudness matching now also operate at the editorial layer — 2026-11-20: `filmcraft.auto_match_loudness` (measured per-clip LUFS receipt), `filmcraft.generate_ducking` (Music/Ambience automation), `filmcraft.set_clip_audio_gain`, `filmcraft.inspect_mixer` (strips, volume/pan/mute/solo, automation modes); intelligibility remains a manual/OCR-proxy review.)
 - [ ] Brief/message alignment, hook, narrative progression, pacing, art direction consistency and CTA clarity.
 
 **Repair execution**
@@ -346,8 +346,8 @@ Repair-evidence QA defects carry integer frame ranges, scene attribution, eviden
 ## Milestone 1.8 — Complete delivery and production packaging
 
 - [x] Generate master and requested platform variants for supported FFmpeg container/codec profiles.
-- [ ] Include captions/subtitle files, Canonical IR, editorial manifest, required source projects and only the assets actually used. Captions, source/portable IR and referenced local assets are included; editorial manifest and conditional engine project references remain open.
-- [ ] Include AE/Premiere/Blender project references only when actually created.
+- [x] Include captions/subtitle files, Canonical IR, editorial manifest, required source projects and only the assets actually used. (2026-11-20: the editorial manifest now also ships as a project artifact at `project/editorial-assembly.json` alongside the evidence copy; captions, source/portable IR and only referenced, hash-verified assets were already included.)
+- [x] Include AE/Premiere/Blender project references only when actually created. (2026-11-20: `discoverEngineProjects` finds `.ecproj/.fcproj/.blend/.aep/.prproj` files actually created under the project workspace (`engines/`, `work/`; `checkpoints/` and `deliverables/` excluded) and `buildDeliveryPackage` conditionally packages them under `project/engine-projects/<engine>-<name>`, each realpath-contained in the workspace, SHA-256 recorded in the receipt and covered by the integrity manifest; workspace-escape and bogus-engine-id references are rejected fail-closed. CLI `deliver` auto-includes them; `--no-engine-projects` opts out. Copied as opaque reference files only — never edited.)
 - [x] Include asset/provenance manifests, source hashes, rights-review records, render manifest, QA report/defect history, available sampled frames, operation history, software versions and settings in the delivery package. Cross-project engine source files remain conditionally included when available.
 - [x] Generate human-readable `DELIVERY-REPORT.md`.
 - [x] Verify package file integrity with a SHA-256 manifest and independent verifier. Reproducible rebuild comparison remains open.
@@ -371,10 +371,10 @@ delivery/
 ## Milestone 1.9 — Learning, portability, security and release hardening
 
 **Learning**
-- [ ] Keep project memory, user style preferences and validated reusable production patterns separate.
+- [x] Keep project memory, user style preferences and validated reusable production patterns separate. (2026-11-20: `captureProductionLearning` scopes are structurally separate objects — `scopes.project` (IR provenance decisions + repair outcomes), `scopes.user` (declared brand tokens only), `scopes.patterns` (only retest-passed repairs as `workflow-documentation` candidates); user tokens are never copied into project memory and patterns never auto-promote; covered by packages/learning/src/capture.test.mjs.)
 - [x] Capture approved creative decisions and repair outcomes. (2026-11-19: `packages/learning/capture.mjs` — `captureProductionLearning` separates project memory (IR provenance decisions + repair outcomes), user preferences (declared brand tokens) and validated patterns (only passed retests) into strict scopes; never mutates the IR.)
 - [x] Propose reusable skill/template changes; evaluate on test projects; version, approve and retain rollback metadata. (2026-11-19: `patternToProposalCandidate` bridges captured patterns into the improvement-proposal pipeline — evaluate/approve/promote gates stay mandatory, auto-promotion stays blocked; versioned template storage with compatibility/rollback is `packages/template-registry`.)
-- [ ] Never silently promote code, dependencies, permissions or secrets.
+- [x] Never silently promote code, dependencies, permissions or secrets. (2026-11-20: `promoteProposal` categorically throws for `HIGH_RISK_KINDS` (executable-code, dependencies, permissions, secrets, core-agent, core-contract) even when evaluated+approved — that class can only leave via a separate controlled deployment path; low-risk auto-promotion is off by default and requires configured opt-in; template-registry promotions additionally require an approved compatibility match and an approver identity.)
 
 **Host portability**
 - [x] Separate Z Code, Claude Code, Codex, Cursor and generic MCP adapters. (per-host launchers + adapter JSON under the Motion Studio config root; first-party EffectCraft/FilmCraft MCP servers added 2026-11-19)

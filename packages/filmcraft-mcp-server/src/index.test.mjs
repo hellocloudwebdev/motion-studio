@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,7 +28,53 @@ const EXPECTED_TOOLS = [
   'filmcraft.apply_transition',
   'filmcraft.run_command',
   'filmcraft.run_batch',
-  'filmcraft.export_master'
+  'filmcraft.export_master',
+  'filmcraft.inspect_mixer',
+  'filmcraft.list_tts_voices',
+  'filmcraft.add_captions',
+  'filmcraft.import_captions',
+  'filmcraft.set_clip_audio_gain',
+  'filmcraft.auto_match_loudness',
+  'filmcraft.generate_ducking',
+  'filmcraft.create_tts_narration',
+  'filmcraft.download_tts_voices',
+  'filmcraft.add_markers',
+  'filmcraft.export_captions',
+  'filmcraft.export_frame',
+  'filmcraft.detect_scene_cuts',
+  'filmcraft.speed_clip'
+];
+
+const MUTATING_TOOLS = [
+  'filmcraft.import_interchange',
+  'filmcraft.apply_transition',
+  'filmcraft.run_command',
+  'filmcraft.run_batch',
+  'filmcraft.add_captions',
+  'filmcraft.import_captions',
+  'filmcraft.set_clip_audio_gain',
+  'filmcraft.auto_match_loudness',
+  'filmcraft.generate_ducking',
+  'filmcraft.create_tts_narration',
+  'filmcraft.download_tts_voices',
+  'filmcraft.add_markers',
+  'filmcraft.detect_scene_cuts',
+  'filmcraft.speed_clip'
+];
+
+const READ_ONLY_TOOLS = [
+  'filmcraft.check_engine',
+  'filmcraft.list_commands',
+  'filmcraft.describe_command',
+  'filmcraft.inspect_project',
+  'filmcraft.inspect_sequence',
+  'filmcraft.render_frame',
+  'filmcraft.probe_media',
+  'filmcraft.plan_editorial_assembly',
+  'filmcraft.inspect_mixer',
+  'filmcraft.list_tts_voices',
+  'filmcraft.export_captions',
+  'filmcraft.export_frame'
 ];
 
 // Fixed approval timestamp: 2023-11-14, far in the past, so approvals created
@@ -69,24 +115,32 @@ function projectFixture() {
   };
 }
 
-test('registers exactly the thirteen filmcraft tools under one server name', async () => {
+test('registers exactly the twenty-seven filmcraft tools under one server name', async () => {
   await withClient(async client => {
     const tools = await client.listTools();
     const names = tools.tools.map(tool => tool.name);
-    assert.equal(names.length, 13, 'exactly thirteen tools are registered');
-    assert.equal(new Set(names).size, 13, 'no duplicate tool names');
+    assert.equal(names.length, 27, 'exactly twenty-seven tools are registered');
+    assert.equal(new Set(names).size, 27, 'no duplicate tool names');
     assert.deepEqual([...names].sort(), [...EXPECTED_TOOLS].sort());
     // Read-only planning tools must not demand approval fields in their schema.
     const plan = tools.tools.find(tool => tool.name === 'filmcraft.plan_editorial_assembly');
     assert.ok(!('approval' in plan.inputSchema.properties), 'planning is approval-free');
     // Mutating tools take the uniform approval gate fields.
-    for (const mutating of ['filmcraft.import_interchange', 'filmcraft.apply_transition', 'filmcraft.run_command', 'filmcraft.run_batch']) {
+    for (const mutating of MUTATING_TOOLS) {
       const schema = tools.tools.find(tool => tool.name === mutating).inputSchema.properties;
       assert.ok('approval' in schema && 'projectId' in schema && 'runId' in schema, mutating + ' requires approval/projectId/runId');
+    }
+    // The read-only/artifact surface stays approval-free.
+    for (const readonly of READ_ONLY_TOOLS) {
+      const schema = tools.tools.find(tool => tool.name === readonly).inputSchema.properties;
+      assert.ok(!('approval' in schema), readonly + ' must not demand an approval field');
     }
     // The export surface is the approved subset of the CLI formats.
     const exportFormat = tools.tools.find(tool => tool.name === 'filmcraft.export_master').inputSchema.properties.format;
     assert.deepEqual([...(exportFormat.enum ?? [])].sort(), ['h264', 'hevc', 'prores', 'dnxhr', 'png', 'wav'].sort());
+    // Caption export formats match the CLI's caption writer surface.
+    const captionFormat = tools.tools.find(tool => tool.name === 'filmcraft.export_captions').inputSchema.properties.format;
+    assert.deepEqual([...(captionFormat.enum ?? [])].sort(), ['srt', 'vtt', 'scc', 'mcc', 'stl', 'ttml', 'dfxp'].sort());
   });
 });
 
@@ -110,6 +164,50 @@ test('mutating tools refuse a missing approval with governance guidance', async 
     assert.match(result.text, /governanceGate/);
     assert.match(result.text, /Producer approval is required/);
     assert.match(result.text, /createCraftOperationApproval|createFilmcraftApproval/);
+  });
+});
+
+test('new mutating tools refuse a missing approval before any engine process', async () => {
+  await withClient(async client => {
+    for (const [toolName, args] of [
+      ['filmcraft.add_captions', { cues: [{ text: 'x', seconds: 0 }] }],
+      ['filmcraft.set_clip_audio_gain', { clipOrdinal: 1, db: -6 }],
+      ['filmcraft.add_markers', { markers: [{ seconds: 0 }] }],
+      ['filmcraft.speed_clip', { clipOrdinal: 1, speedPercent: 150 }],
+      ['filmcraft.download_tts_voices', {}]
+    ]) {
+      const result = await callToolJson(client, toolName, { projectId: 'p1', runId: 'r1', projectPath: path.join(os.tmpdir(), 'never-' + Math.random().toString(36).slice(2) + '.fcproj'), ...args });
+      assert.equal(result.isError, true, toolName + ' must refuse without approval');
+      assert.match(result.text, /governanceGate/, toolName + ' reports the governance gate');
+      assert.equal(result.parsed.stepResults, undefined, toolName + ' ran no session');
+    }
+  });
+});
+
+test('add_captions validates cue timing before any engine process', async () => {
+  await withClient(async client => {
+    const cues = [{ text: 'A', seconds: 0, durationSeconds: 2 }, { text: 'B', seconds: 1, durationSeconds: 1 }];
+    const projectPath = path.join(os.tmpdir(), 'never-overlap.fcproj');
+    const approval = createFilmcraftApproval({
+      projectId: 'p-cues', runId: 'r-cues', toolName: 'filmcraft.add_captions',
+      args: { projectId: 'p-cues', runId: 'r-cues', projectPath, sequenceId: undefined, trackFormat: 'Subtitle', trackName: undefined, language: undefined, cues, style: undefined, timeoutMs: undefined },
+      approvedBy: 'Producer'
+    });
+    const result = await callToolJson(client, 'filmcraft.add_captions', { projectId: 'p-cues', runId: 'r-cues', projectPath, cues, approval });
+    assert.equal(result.isError, true, 'overlapping cues are rejected');
+    assert.match(result.text, /overlap/i);
+    assert.ok(!existsSync(projectPath), 'no project file was touched');
+    // Equal-second cues are not automatically overlapping when the first ends in time.
+    const tight = [{ text: 'A', seconds: 0, durationSeconds: 1 }, { text: 'B', seconds: 1, durationSeconds: 0.5 }];
+    const tightApproval = createFilmcraftApproval({
+      projectId: 'p-cues', runId: 'r-tight', toolName: 'filmcraft.add_captions',
+      args: { projectId: 'p-cues', runId: 'r-tight', projectPath, sequenceId: undefined, trackFormat: 'Subtitle', trackName: undefined, language: undefined, cues: tight, style: undefined, timeoutMs: undefined },
+      approvedBy: 'Producer'
+    });
+    const tightResult = await callToolJson(client, 'filmcraft.add_captions', { projectId: 'p-cues', runId: 'r-tight', projectPath, cues: tight, approval: tightApproval });
+    // Reaches file validation (past the overlap guard) and fails on the missing project.
+    assert.equal(tightResult.isError, true);
+    assert.match(tightResult.text, /does not exist/, 'non-overlapping cues pass timing validation');
   });
 });
 
@@ -223,7 +321,7 @@ test('http mode serves the MCP surface on 127.0.0.1 and enforces the optional to
     const listed = await mcpPost(base, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, 'secret-test-token');
     assert.equal(listed.status, 200);
     const names = (listed.json?.result?.tools || []).map(tool => tool.name);
-    assert.equal(names.length, 13);
+    assert.equal(names.length, 27);
     assert.deepEqual([...names].sort(), [...EXPECTED_TOOLS].sort());
 
     const called = await mcpPost(base, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'filmcraft.plan_editorial_assembly', arguments: { project: projectFixture() } } }, 'secret-test-token');
@@ -252,7 +350,7 @@ test('http mode without a configured token needs no header', async () => {
     assert.equal(initialized.json?.result?.serverInfo?.name, 'motion-studio-filmcraft');
     const listed = await mcpPost(base, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     assert.equal(listed.status, 200);
-    assert.equal((listed.json?.result?.tools || []).length, 13);
+    assert.equal((listed.json?.result?.tools || []).length, 27);
   } finally {
     child.kill();
     await new Promise(resolve => child.once('exit', resolve));
@@ -561,6 +659,260 @@ test('live apply_transition mutates through the gate with schema-resolved defaul
       // The transition persists in the saved sequence.
       const inspected = await callToolJson(client, 'filmcraft.inspect_sequence', { projectPath });
       assert.match(JSON.stringify(inspected.parsed.sequence), /cross_dissolve|transition/i, 'the transition survives save/reopen');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live add_captions creates a track, adds timed cues and lists them back', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-captions-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, sequenceId } = await buildDemoProject(client, root, 'Captions', 1);
+      const cues = [
+        { text: 'Hello world', seconds: 0, durationSeconds: 1 },
+        { text: 'Second cue', seconds: 1.2, durationSeconds: 0.8 }
+      ];
+      const opArgs = { projectId: 'p-Captions', runId: 'r-add', projectPath, sequenceId, trackFormat: 'Subtitle', trackName: 'Test Cues', language: 'en', cues, style: { size: 42, color: '#ffcc00' }, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Captions', runId: 'r-add', toolName: 'filmcraft.add_captions', args: opArgs, approvedBy: 'Producer' });
+      const added = await callToolJson(client, 'filmcraft.add_captions', { projectId: 'p-Captions', runId: 'r-add', projectPath, sequenceId, trackName: 'Test Cues', language: 'en', cues, style: { size: 42, color: '#ffcc00' }, approval });
+      assert.equal(added.isError, false, added.text);
+      assert.equal(added.parsed.ok, true, added.text);
+      assert.ok(Number.isInteger(added.parsed.trackId), 'the caption track id is reported');
+      assert.equal(added.parsed.trackFormat, 'Subtitle');
+      assert.equal(added.parsed.count, 2);
+      assert.equal(added.parsed.cues[0].text, 'Hello world');
+      assert.equal(added.parsed.cues[0].start, 0, 'cue times are reported in ticks');
+      assert.equal(added.parsed.cues[1].start, Math.round(1.2 * 254016000000));
+      // Round-trip: the saved project lists the track from a separate session.
+      const listApproval = createFilmcraftApproval({ projectId: 'p-Captions', runId: 'r-list', toolName: 'filmcraft.run_command', args: { projectId: 'p-Captions', runId: 'r-list', commandId: 'captions.list', params: {}, projectPath, save: false, timeoutMs: undefined }, approvedBy: 'Producer' });
+      const listed = await callToolJson(client, 'filmcraft.run_command', { projectId: 'p-Captions', runId: 'r-list', commandId: 'captions.list', params: {}, projectPath, save: false, approval: listApproval });
+      assert.equal(listed.isError, false, listed.text);
+      const tracks = listed.parsed.results.find(entry => entry.id === 'captions.list')?.result?.tracks ?? [];
+      const track = tracks.find(entry => entry.id === added.parsed.trackId);
+      assert.ok(track, 'the caption track persists in the saved project');
+      assert.equal(track.captions.length, 2);
+      assert.equal(track.style.size, 42, 'the style was applied to the new track');
+      assert.equal(track.style.color, '#ffcc00ff', 'the color is stored with full alpha');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live import_captions and export_captions round-trip a verified srt/vtt artifact', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-capio-'));
+  try {
+    const srtPath = path.join(root, 'fixture.srt');
+    await writeFile(srtPath, '1\n00:00:00,000 --> 00:00:01,000\nImported cue one\n\n2\n00:00:01,200 --> 00:00:02,000\nImported cue two\n\n', 'utf8');
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'CapImport', 1);
+      const opArgs = { projectId: 'p-CapImport', runId: 'r-import', projectPath, path: srtPath, name: 'Reimported', language: 'en', timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-CapImport', runId: 'r-import', toolName: 'filmcraft.import_captions', args: opArgs, approvedBy: 'Producer' });
+      const imported = await callToolJson(client, 'filmcraft.import_captions', { projectId: 'p-CapImport', runId: 'r-import', projectPath, path: srtPath, name: 'Reimported', language: 'en', approval });
+      assert.equal(imported.isError, false, imported.text);
+      assert.ok(Number.isInteger(imported.parsed.trackId), 'the imported track id is reported');
+      assert.equal(imported.parsed.count, 2);
+      assert.match(imported.parsed.format, /SubRip/);
+
+      // Export back to srt and verify the artifact bytes + sha256 receipt.
+      const outPath = path.join(root, 'roundtrip.srt');
+      const exported = await callToolJson(client, 'filmcraft.export_captions', { projectPath, outputPath: outPath, format: 'srt' });
+      assert.equal(exported.isError, false, exported.text);
+      assert.ok(exported.parsed.artifact.byteSize > 0, 'the srt artifact is non-empty');
+      const onDisk = await readFile(outPath, 'utf8');
+      assert.match(onDisk, /Imported cue one/, 'the exported srt contains the imported cues');
+      assert.equal(exported.parsed.artifact.sha256, createHash('sha256').update(await readFile(outPath)).digest('hex'));
+      const overwrite = await callToolJson(client, 'filmcraft.export_captions', { projectPath, outputPath: outPath, format: 'srt' });
+      assert.equal(overwrite.isError, true);
+      assert.match(overwrite.text, /refusing to overwrite/);
+
+      // vtt export gets the WEBVTT header verified.
+      const vttPath = path.join(root, 'roundtrip.vtt');
+      const vtt = await callToolJson(client, 'filmcraft.export_captions', { projectPath, outputPath: vttPath, format: 'vtt' });
+      assert.equal(vtt.isError, false, vtt.text);
+      assert.match(await readFile(vttPath, 'utf8'), /^WEBVTT/, 'the vtt artifact starts with its header');
+      // Exporting a project without captions fails closed with the engine error.
+      const emptyRoot = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-capempty-'));
+      try {
+        const empty = await callToolJson(client, 'filmcraft.export_captions', { projectPath: path.join(emptyRoot, 'nope.fcproj'), outputPath: path.join(emptyRoot, 'nope.srt') });
+        assert.equal(empty.isError, true);
+        assert.match(empty.text, /does not exist/);
+      } finally { await rm(emptyRoot, { recursive: true, force: true }); }
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live set_clip_audio_gain sets gain by ordinal and the saved project reports it', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-gain-'));
+  try {
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'Gain', 1);
+      const opArgs = { projectId: 'p-Gain', runId: 'r-gain', projectPath, clipOrdinal: 1, clipId: undefined, mode: 'set', db: -6, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Gain', runId: 'r-gain', toolName: 'filmcraft.set_clip_audio_gain', args: opArgs, approvedBy: 'Producer' });
+      const gained = await callToolJson(client, 'filmcraft.set_clip_audio_gain', { projectId: 'p-Gain', runId: 'r-gain', projectPath, clipOrdinal: 1, db: -6, approval });
+      assert.equal(gained.isError, false, gained.text);
+      assert.ok(Number.isInteger(gained.parsed.clipId) && gained.parsed.clipId >= 1);
+      const receipt = (gained.parsed.gainDb ?? []).find(entry => entry.clip === gained.parsed.clipId);
+      assert.equal(receipt?.gainDb, -6, 'the engine receipt reports the applied gain');
+      assert.equal(gained.parsed.mode, 'set');
+      // Readback: the saved audio clip carries the gain in the sequence inspect.
+      const inspected = await callToolJson(client, 'filmcraft.inspect_sequence', { projectPath });
+      const item = inspected.parsed.sequence.audio.flatMap(track => track.items ?? []).find(entry => entry.clip === gained.parsed.clipId);
+      assert.ok(item, 'the addressed audio clip exists in the saved sequence');
+      assert.equal(item.gainDb, -6, 'the gain survives save/reopen');
+      // An ordinal beyond the clip count fails with the known count.
+      const badApproval = createFilmcraftApproval({ projectId: 'p-Gain', runId: 'r-bad', toolName: 'filmcraft.set_clip_audio_gain', args: { projectId: 'p-Gain', runId: 'r-bad', projectPath, clipOrdinal: 5, clipId: undefined, mode: 'set', db: -6, timeoutMs: undefined }, approvedBy: 'Producer' });
+      const bad = await callToolJson(client, 'filmcraft.set_clip_audio_gain', { projectId: 'p-Gain', runId: 'r-bad', projectPath, clipOrdinal: 5, db: -6, approval: badApproval });
+      assert.equal(bad.isError, true);
+      assert.match(bad.text, /ordinal 5 does not exist/);
+      assert.match(bad.text, /1 clip/, 'the failure names the known clip count');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live auto_match_loudness returns a measured per-clip receipt', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-lufs-'));
+  try {
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'Loudness', 1);
+      const opArgs = { projectId: 'p-Loudness', runId: 'r-match', projectPath, clipOrdinal: 1, targetLufs: -16, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Loudness', runId: 'r-match', toolName: 'filmcraft.auto_match_loudness', args: opArgs, approvedBy: 'Producer' });
+      const matched = await callToolJson(client, 'filmcraft.auto_match_loudness', { projectId: 'p-Loudness', runId: 'r-match', projectPath, clipOrdinal: 1, approval });
+      assert.equal(matched.isError, false, matched.text);
+      assert.equal(matched.parsed.ok, true, matched.text);
+      assert.equal(matched.parsed.targetLufs, -16);
+      assert.equal(matched.parsed.clips.length, 1);
+      const receipt = matched.parsed.clips[0];
+      assert.ok(Number.isInteger(receipt.clip), 'the matched clip id is reported');
+      assert.ok(Number.isFinite(receipt.gainDb), 'the applied gain is reported');
+      assert.ok(Math.abs(receipt.measuredLufs - (-16)) <= 1, 'the clip was measured and matched to the target: ' + JSON.stringify(receipt));
+      assert.equal(receipt.targetLufs, -16);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live export_frame writes a verified png with sha256 and refuses overwrite', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-eframe-'));
+  try {
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'Frame', 1);
+      const framePath = path.join(root, 'frame.png');
+      const exported = await callToolJson(client, 'filmcraft.export_frame', { projectPath, outputPath: framePath, format: 'png', seconds: 0.5 });
+      assert.equal(exported.isError, false, exported.text);
+      assert.ok(exported.parsed.artifact.byteSize > 0, 'the frame is non-empty');
+      assert.equal(exported.parsed.artifact.sha256, createHash('sha256').update(await readFile(framePath)).digest('hex'), 'the sha256 matches the on-disk frame');
+      assert.equal(exported.parsed.frame.width, 320, 'the frame receipt echoes the engine result');
+      const overwrite = await callToolJson(client, 'filmcraft.export_frame', { projectPath, outputPath: framePath, format: 'png', seconds: 0.5 });
+      assert.equal(overwrite.isError, true);
+      assert.match(overwrite.text, /refusing to overwrite/);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live add_markers adds comments and chapters and inspect reports the count', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-markers-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, sequenceId } = await buildDemoProject(client, root, 'Markers', 1);
+      const markers = [
+        { seconds: 0.5, name: 'Mark A', color: 'red' },
+        { seconds: 1.5, name: 'Chapter One', chapter: true }
+      ];
+      const opArgs = { projectId: 'p-Markers', runId: 'r-add', projectPath, sequenceId, markers, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Markers', runId: 'r-add', toolName: 'filmcraft.add_markers', args: opArgs, approvedBy: 'Producer' });
+      const added = await callToolJson(client, 'filmcraft.add_markers', { projectId: 'p-Markers', runId: 'r-add', projectPath, sequenceId, markers, approval });
+      assert.equal(added.isError, false, added.text);
+      assert.equal(added.parsed.markerCount, 2, added.text);
+      assert.ok(added.parsed.markerIds.every(id => Number.isInteger(id)), 'each marker id is reported');
+      // Count via the read-only sequence inspect (temp-copy activation).
+      const inspected = await callToolJson(client, 'filmcraft.inspect_sequence', { projectPath, sequenceId });
+      const persisted = inspected.parsed.sequence.markers ?? [];
+      assert.equal(persisted.length, 2, 'both markers persist in the saved sequence');
+      assert.deepEqual(persisted.map(entry => entry.kind).sort(), ['Chapter', 'Comment']);
+      assert.ok(persisted.some(entry => entry.name === 'Chapter One' && entry.start === Math.round(1.5 * 254016000000)), 'the chapter tick time is persisted');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live tts voices list and create_tts_narration fails closed without the voice package', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  await withClient(async client => {
+    const voices = await callToolJson(client, 'filmcraft.list_tts_voices', {});
+    assert.equal(voices.isError, false, voices.text);
+    assert.equal(typeof voices.parsed.defaultVoice, 'string', 'the engine default voice is reported');
+    assert.equal(voices.parsed.maxTextBytes, 65536);
+    assert.equal(voices.parsed.package?.id, 'kokoro-82m');
+    assert.ok(Array.isArray(voices.parsed.languages) && voices.parsed.languages.length >= 1);
+    assert.equal(typeof voices.parsed.installed, 'boolean');
+    if (voices.parsed.installed === false) {
+      assert.ok(Number.isFinite(voices.parsed.missingBytes) && voices.parsed.missingBytes > 0, 'the missing download size is reported');
+      assert.match(voices.parsed.guidance, /download_tts_voices/);
+      // create_tts_narration must refuse BEFORE opening the project or mutating it.
+      const projectPath = path.join(os.tmpdir(), 'motion-fcmcp-tts-' + Math.random().toString(36).slice(2) + '.fcproj');
+      const opArgs = { projectId: 'p-Tts', runId: 'r-tts', projectPath, text: 'Narration line', voice: undefined, pitch: undefined, pace: undefined, track: 'A1', atSeconds: undefined, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Tts', runId: 'r-tts', toolName: 'filmcraft.create_tts_narration', args: opArgs, approvedBy: 'Producer' });
+      const refused = await callToolJson(client, 'filmcraft.create_tts_narration', { projectId: 'p-Tts', runId: 'r-tts', projectPath, text: 'Narration line', approval });
+      assert.equal(refused.isError, true, 'narration is refused without the voice package');
+      assert.equal(refused.parsed.refused, true);
+      assert.ok(refused.parsed.missingBytes > 0, 'the refusal carries the missing download size');
+      assert.match(refused.parsed.guidance, /download_tts_voices/);
+      assert.ok(!existsSync(projectPath), 'no project file was created or touched');
+    }
+  });
+});
+
+test('live speed_clip changes speed with persisted verification and detect_scene_cuts reports its job', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-speed-'));
+  try {
+    await withClient(async client => {
+      const { projectPath } = await buildDemoProject(client, root, 'Speed', 1);
+      const opArgs = { projectId: 'p-Speed', runId: 'r-speed', projectPath, clipOrdinal: 1, speedPercent: 150, reverse: false, maintainPitch: undefined, interpolation: undefined, timeoutMs: undefined };
+      const approval = createFilmcraftApproval({ projectId: 'p-Speed', runId: 'r-speed', toolName: 'filmcraft.speed_clip', args: opArgs, approvedBy: 'Producer' });
+      const sped = await callToolJson(client, 'filmcraft.speed_clip', { projectId: 'p-Speed', runId: 'r-speed', projectPath, clipOrdinal: 1, speedPercent: 150, approval });
+      assert.equal(sped.isError, false, sped.text);
+      assert.equal(sped.parsed.verified, true, 'the persisted speed was verified: ' + sped.text);
+      assert.equal(sped.parsed.speed, 150);
+      assert.equal(sped.parsed.observedSpeed, 1.5, 'the engine stores speed as a factor');
+      // Scene edit detection on the same clip: the demo footage has no cuts,
+      // but the receipt must report the analyzed clip and frame count.
+      const detectOpArgs = { projectId: 'p-Speed', runId: 'r-detect', projectPath, clipOrdinal: 1, sensitivity: 50, minShotFrames: 6, generateMarkers: false, timeoutMs: undefined };
+      const detectApproval = createFilmcraftApproval({ projectId: 'p-Speed', runId: 'r-detect', toolName: 'filmcraft.detect_scene_cuts', args: detectOpArgs, approvedBy: 'Producer' });
+      const detected = await callToolJson(client, 'filmcraft.detect_scene_cuts', { projectId: 'p-Speed', runId: 'r-detect', projectPath, clipOrdinal: 1, approval: detectApproval });
+      assert.equal(detected.isError, false, detected.text);
+      assert.equal(detected.parsed.clipId, sped.parsed.clipId, 'the clip id is stable across sessions');
+      assert.ok(Array.isArray(detected.parsed.cuts) && Array.isArray(detected.parsed.mediaCuts));
+      assert.ok(detected.parsed.receipt.frames >= 200, 'the analyzed frame count is reported');
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live inspect_mixer reports strips and clipModes without touching the project', { skip: CLI_AVAILABLE ? false : 'filmcraft-cli is required on the host.' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-fcmcp-mixer-'));
+  try {
+    await withClient(async client => {
+      const { projectPath, sequenceId } = await buildDemoProject(client, root, 'Mixer', 1);
+      const before = (await stat(projectPath)).size;
+      const viaId = await callToolJson(client, 'filmcraft.inspect_mixer', { projectPath, sequenceId });
+      assert.equal(viaId.isError, false, viaId.text);
+      assert.equal(viaId.parsed.inspectedViaTempCopy, true, 'the explicit sequence was activated in a temp copy');
+      assert.ok(viaId.parsed.strips.length >= 4, 'audio strips and the Mix strip are reported');
+      const mixStrip = viaId.parsed.strips.find(strip => strip.ref === 'Mix');
+      assert.ok(mixStrip, 'the Mix strip is present');
+      assert.equal(mixStrip.kind, 'mix');
+      const a1 = viaId.parsed.strips.find(strip => strip.ref === 'A1');
+      assert.ok(a1, 'the first audio strip is reported');
+      assert.equal(a1.volumeDb, 0);
+      assert.equal(a1.muted, false);
+      assert.ok(Array.isArray(viaId.parsed.clipModes) && viaId.parsed.clipModes.length >= 1, 'clip modes are reported');
+      // Compact strips only carry the documented fields.
+      assert.deepEqual(Object.keys(viaId.parsed.strips[0]).sort(), ['kind', 'mode', 'muted', 'name', 'pan', 'ref', 'solo', 'volumeDb']);
+      // The saved-active variant inspects directly (no temp copy needed).
+      const active = await callToolJson(client, 'filmcraft.inspect_mixer', { projectPath });
+      assert.equal(active.isError, false, active.text);
+      assert.ok(active.parsed.strips.length >= 4);
+      assert.equal(active.parsed.inspectedViaTempCopy, undefined);
+      // Unknown sequence ids fail with the known list.
+      const unknown = await callToolJson(client, 'filmcraft.inspect_mixer', { projectPath, sequenceId: 999999 });
+      assert.equal(unknown.isError, true);
+      assert.match(unknown.text, /Unknown sequence id/);
+      assert.equal((await stat(projectPath)).size, before, 'the project file was never modified');
     });
   } finally { await rm(root, { recursive: true, force: true }); }
 });

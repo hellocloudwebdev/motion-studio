@@ -23,15 +23,30 @@ import { validateProject } from '../../core/src/index.mjs';
 // argv arrays with shell:false — never a shell, never a string command line.
 // The CLI surface verified live on 0.24.1: `commands [--filter] [--enabled]
 // --json`, `info`, `get`, `props`, `run --commands`, `render-frame`,
-// `render`, `mcp`. There is deliberately no `export` subcommand (that is
-// FilmCraft) and prop.set does not take expressions — the adapter plans
-// prop.setExpression steps instead.
+// `render`, `mcp`, plus the mask/marker/work-area/blend/matte/parent,
+// renderQueue, text.fonts and Lottie/timeline interchange commands (all
+// probed headless; renderQueue.add/file.exportLottie/file.exportTimeline
+// honor their comp param in reopened sessions without comp.open). There is
+// deliberately no `export` subcommand (that is FilmCraft) and prop.set does
+// not take expressions — the adapter plans prop.setExpression steps instead.
 
 const SERVER_NAME = 'motion-studio-effectcraft';
 const SERVER_VERSION = '1.0.0-alpha.1';
 const DEFAULT_TIMEOUT_MS = 120000;
 const MAX_TIMEOUT_MS = 600000;
 const RENDER_FORMATS = ['h264', 'hevc', 'av1', 'prores', 'webm'];
+const MASK_SHAPES = ['rect', 'ellipse', 'rounded', 'polygon', 'star'];
+const TRACK_MATTE_KINDS = ['alpha', 'alphaInverted', 'luma', 'lumaInverted', 'preserve'];
+// The blend-mode enum layer.setBlendMode accepts on 0.24.1 (common AE surface;
+// values pass through unchanged — the props readback echoes them verbatim).
+const BLEND_MODES = [
+  'Normal', 'Multiply', 'Screen', 'Overlay', 'Add', 'Lighten', 'Darken', 'ColorDodge', 'ColorBurn',
+  'HardLight', 'SoftLight', 'Difference', 'Exclusion', 'Hue', 'Saturation', 'Color', 'Luminosity',
+  'StencilAlpha', 'StencilLuma', 'SilhouetteAlpha', 'SilhouetteLuma', 'AlphaAdd', 'ClassicColorBurn',
+  'ClassicColorDodge', 'LinearBurn', 'LinearDodge', 'LinearLight', 'PinLight', 'VividLight', 'HardMix'
+];
+const TIMELINE_EXPORT_FORMATS = ['fcpxml', 'xml', 'otio', 'edl'];
+const TIMELINE_IMPORT_FORMATS = ['auto', 'fcpxml', 'xml', 'otio', 'edl', 'aaf', 'omf'];
 const HTTP_HOST = '127.0.0.1';
 const HTTP_PATH = '/mcp';
 const TOKEN_HEADER = 'x-motion-studio-token';
@@ -172,6 +187,24 @@ async function runSession(command, { projectPath, steps, timeoutMs, signal, labe
   } finally {
     await rm(phaseRoot, { recursive: true, force: true });
   }
+}
+
+// Shared body for the gated single-session mutation tools: one journaled
+// session whose LAST step is file.saveAs back into the project; success builds
+// a receipt from the attributed step results, failure comes back as a
+// structured isError payload with per-step attribution (run_command's shape).
+async function runApprovedSession(command, { label, projectPath, steps, timeoutMs, receipt }) {
+  let results;
+  try {
+    results = await runSession(command, { projectPath, steps, timeoutMs, label });
+  } catch (error) {
+    return {
+      isError: true,
+      content: [{ type: 'text', text: JSON.stringify({ ok: false, projectPath, error: error.message, stepResults: error.stdout ? attributeStepResults(steps, error.stdout) : [] }, null, 2) }]
+    };
+  }
+  const failed = results.find(entry => !entry.ok);
+  return jsonText({ ...(await receipt(results)), ok: !failed, results });
 }
 
 // Same sandbox the canonical video.* render tools use: project workspaces
@@ -458,6 +491,363 @@ export function buildEffectCraftServer() {
         content: [{ type: 'text', text: JSON.stringify({ ok: false, stepCount: steps.length, projectPath: resolvedProject ?? null, savedAs: saveAs ? path.resolve(saveAs) : null, error: error.message, stepResults: error.stdout ? attributeStepResults(steps, error.stdout) : [] }, null, 2) }]
       };
     }
+  });
+
+  server.tool('effectcraft.add_mask', 'Add a mask to one layer of a saved .ecproj comp — layer.addMask (rect/ellipse/rounded/polygon/star) or mask.new from 3–200 vertices — then save the project back. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    layer: z.string().min(1),
+    shape: z.enum(MASK_SHAPES),
+    rect: z.array(z.number()).length(4).optional(),
+    roundness: z.number().min(0).optional(),
+    vertices: z.array(z.array(z.number()).length(2)).min(3).max(200).optional(),
+    mode: z.string().max(40).optional(),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, compId, layer, shape, rect, roundness, vertices, mode, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, compId, layer, shape, rect, roundness, vertices, mode, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.add_mask', opArgs });
+    if (gated) return gated;
+    if (Boolean(rect) === Boolean(vertices)) throw new Error('Provide exactly one of rect (layer space [x, y, w, h] for the layer.addMask shapes) or vertices (the mask.new path).');
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const maskStep = rect !== undefined
+      ? { id: 'layer.addMask', params: { layer, shape, rect, ...(roundness !== undefined ? { roundness } : {}), ...(mode !== undefined ? { mode } : {}) } }
+      : { id: 'mask.new', params: { layer, vertices, closed: true, ...(mode !== undefined ? { mode } : {}) } };
+    const steps = [
+      { id: 'comp.open', params: { comp: compId } },
+      maskStep,
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'add-mask', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async results => ({
+        projectId, runId, approvedBy: approval.approvedBy ?? null,
+        projectPath: resolvedProject, compId, layer, shape,
+        path: rect !== undefined ? 'layer.addMask' : 'mask.new',
+        mask: results[1]?.result?.mask ?? null,
+        savePath: resolvedProject
+      })
+    });
+  });
+
+  server.tool('effectcraft.set_track_matte', 'Set the track matte of one layer in a saved .ecproj comp (layer.setTrackMatte with a matte layer and an alpha/luma kind), then save the project back. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    layer: z.string().min(1),
+    matteLayer: z.string().min(1),
+    kind: z.enum(TRACK_MATTE_KINDS).default('alpha'),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, compId, layer, matteLayer, kind, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, compId, layer, matteLayer, kind, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.set_track_matte', opArgs });
+    if (gated) return gated;
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const steps = [
+      { id: 'comp.open', params: { comp: compId } },
+      { id: 'layer.setTrackMatte', params: { layer, matte: matteLayer, kind } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'track-matte', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async () => ({
+        projectId, runId, approvedBy: approval.approvedBy ?? null,
+        projectPath: resolvedProject, compId, layer, matteLayer, kind, savePath: resolvedProject
+      })
+    });
+  });
+
+  server.tool('effectcraft.set_blend_mode', 'Set the blend mode of one layer in a saved .ecproj comp (layer.setBlendMode), save the project back and re-read the layer props to verify the mode. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    layer: z.string().min(1),
+    mode: z.enum(BLEND_MODES),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, compId, layer, mode, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, compId, layer, mode, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.set_blend_mode', opArgs });
+    if (gated) return gated;
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const steps = [
+      { id: 'comp.open', params: { comp: compId } },
+      { id: 'layer.setBlendMode', params: { layer, mode } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'blend-mode', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async () => {
+        const propsOutput = await runEffectCraftCli(command, ['--project', resolvedProject, 'props', compId, layer, '--json'], { timeoutMs });
+        const blendMode = JSON.parse(propsOutput.stdout)?.blendMode ?? null;
+        return {
+          projectId, runId, approvedBy: approval.approvedBy ?? null,
+          projectPath: resolvedProject, compId, layer, mode,
+          verified: { blendMode, expected: mode, matches: blendMode === mode },
+          savePath: resolvedProject
+        };
+      }
+    });
+  });
+
+  server.tool('effectcraft.set_parent', 'Parent one layer of a saved .ecproj comp to another layer (layer.setParent, optionally compensating for the transform), then save the project back. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    layer: z.string().min(1),
+    parentLayer: z.string().min(1),
+    compensate: z.boolean().default(false),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, compId, layer, parentLayer, compensate, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, compId, layer, parentLayer, compensate, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.set_parent', opArgs });
+    if (gated) return gated;
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const steps = [
+      { id: 'comp.open', params: { comp: compId } },
+      { id: 'layer.setParent', params: { layer, parent: parentLayer, compensate } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'set-parent', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async () => ({
+        projectId, runId, approvedBy: approval.approvedBy ?? null,
+        projectPath: resolvedProject, compId, layer, parentLayer, compensate, savePath: resolvedProject
+      })
+    });
+  });
+
+  server.tool('effectcraft.add_marker', 'Add a composition marker at a time in seconds to a saved .ecproj comp (comp.addMarker), then save the project back. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    seconds: z.number().min(0).max(86400),
+    comment: z.string().max(500).optional(),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, compId, seconds, comment, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, compId, seconds, comment, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.add_marker', opArgs });
+    if (gated) return gated;
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const steps = [
+      { id: 'comp.open', params: { comp: compId } },
+      { id: 'comp.addMarker', params: { time: seconds, ...(comment !== undefined ? { comment } : {}) } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'add-marker', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async results => ({
+        projectId, runId, approvedBy: approval.approvedBy ?? null,
+        projectPath: resolvedProject, compId,
+        seconds, comment: comment ?? null,
+        marker: results[1]?.result ?? null,
+        savePath: resolvedProject
+      })
+    });
+  });
+
+  server.tool('effectcraft.set_work_area', 'Set the work area of a saved .ecproj comp (comp.workArea, start/end in seconds), then save the project back. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    start: z.number().min(0),
+    end: z.number().min(0),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, compId, start, end, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, compId, start, end, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.set_work_area', opArgs });
+    if (gated) return gated;
+    if (end <= start) throw new Error('end must be greater than start.');
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const steps = [
+      { id: 'comp.open', params: { comp: compId } },
+      { id: 'comp.workArea', params: { start, end } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'work-area', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async results => ({
+        projectId, runId, approvedBy: approval.approvedBy ?? null,
+        projectPath: resolvedProject, compId, start, end,
+        workArea: results[1]?.result ?? null,
+        savePath: resolvedProject
+      })
+    });
+  });
+
+  server.tool('effectcraft.render_queue', 'Queue 1–10 comp renders through the engine render queue (renderQueue.add per job, then renderQueue.render) and independently verify every artifact with FFprobe plus a sha256 receipt. Fail-closed: isError when any output is unverified.', {
+    projectPath: z.string().min(1),
+    jobs: z.array(z.object({
+      compId: z.string().min(1),
+      outputPath: z.string().min(1),
+      format: z.enum(RENDER_FORMATS).optional(),
+      resolution: z.enum(['full', 'half', 'third', 'quarter']).optional()
+    })).min(1).max(10),
+    timeoutMs: timeoutSchema
+  }, async ({ projectPath, jobs, timeoutMs }) => {
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const resolvedJobs = jobs.map(job => ({ ...job, outputPath: validateOutputPath(job.outputPath, 'The render output path for comp ' + job.compId) }));
+    for (const job of resolvedJobs) await mkdir(path.dirname(job.outputPath), { recursive: true });
+    const steps = resolvedJobs.map(job => ({
+      // renderQueue.add resolves the comp by id|name and honors format/
+      // resolution directly — no comp.open needed even in reopened sessions
+      // (probed on 0.24.1).
+      id: 'renderQueue.add',
+      params: { comp: job.compId, output: job.outputPath, ...(job.format ? { format: job.format } : {}), ...(job.resolution ? { resolution: job.resolution } : {}) }
+    }));
+    steps.push({ id: 'renderQueue.render', params: { wait: true } }, { id: 'renderQueue.list', params: {} });
+    const results = await runSession(command, { projectPath: resolvedProject, steps, timeoutMs, label: 'render-queue' });
+    const failed = results.find(entry => !entry.ok);
+    if (failed) throw new Error('renderQueue session failed at step ' + failed.id + ': ' + JSON.stringify(results).slice(0, 800));
+    const jobReceipts = [];
+    for (const [index, job] of resolvedJobs.entries()) {
+      const failures = [];
+      let media = null, byteSize = null, sha256 = null;
+      try {
+        const info = await stat(job.outputPath);
+        if (!info.isFile() || info.size === 0) throw new Error('the artifact is missing or empty');
+        byteSize = info.size;
+        sha256 = await sha256File(job.outputPath);
+        media = await probeMedia(job.outputPath);
+        if (!media.videoCodec || !(media.width > 0) || !(media.height > 0)) failures.push({ code: 'MEDIA_VIDEO_MISSING', message: 'The render has no probeable video stream (codec + dimensions).' });
+        if (!(media.durationSeconds > 0)) failures.push({ code: 'MEDIA_DURATION_INVALID', message: 'The render has no probeable duration.' });
+      } catch (error) {
+        failures.push({ code: 'ARTIFACT_UNVERIFIED', message: error.message });
+      }
+      jobReceipts.push({
+        compId: job.compId, outputPath: job.outputPath,
+        format: job.format ?? null, resolution: job.resolution ?? null,
+        status: results[index]?.result?.status ?? null,
+        sha256, byteSize, media, verified: failures.length === 0, failures
+      });
+    }
+    const allVerified = jobReceipts.every(job => job.verified);
+    const receipt = {
+      ok: allVerified,
+      projectPath: resolvedProject,
+      jobs: jobReceipts,
+      allVerified,
+      completedAt: new Date().toISOString()
+    };
+    return { ...jsonText(receipt), isError: !allVerified };
+  });
+
+  server.tool('effectcraft.export_lottie', 'Export a saved .ecproj comp as Lottie JSON (.json/.lottie) via file.exportLottie, then verify the artifact exists, parses as JSON and record its sha256. Sandboxed artifact generation; read-only for the project.', {
+    projectPath: z.string().min(1),
+    compId: z.string().min(1),
+    outputPath: z.string().min(1),
+    includeExpressions: z.boolean().default(false),
+    textAsShapes: z.boolean().default(false),
+    timeoutMs: timeoutSchema
+  }, async ({ projectPath, compId, outputPath, includeExpressions, textAsShapes, timeoutMs }) => {
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const resolvedOutput = validateOutputPath(outputPath, 'The Lottie output path');
+    if (!/\.(json|lottie)$/i.test(resolvedOutput)) throw new Error('The Lottie output path must end in .json or .lottie: ' + resolvedOutput);
+    await mkdir(path.dirname(resolvedOutput), { recursive: true });
+    const steps = [{ id: 'file.exportLottie', params: { comp: compId, path: resolvedOutput, includeExpressions, textAsShapes } }];
+    const results = await runSession(command, { projectPath: resolvedProject, steps, timeoutMs, label: 'export-lottie' });
+    const failed = results.find(entry => !entry.ok);
+    if (failed) throw new Error('file.exportLottie failed: ' + JSON.stringify(results).slice(0, 800));
+    const info = await stat(resolvedOutput);
+    if (!info.isFile() || info.size === 0) throw new Error('file.exportLottie reported success but the artifact is missing or empty: ' + resolvedOutput);
+    let lottie;
+    try {
+      lottie = JSON.parse(await readFile(resolvedOutput, 'utf8'));
+    } catch (error) {
+      throw new Error('The exported Lottie is not valid JSON (' + resolvedOutput + '): ' + error.message);
+    }
+    return jsonText({
+      ok: true, projectPath: resolvedProject, compId, outputPath: resolvedOutput,
+      includeExpressions, textAsShapes,
+      artifact: { path: resolvedOutput, byteSize: info.size, sha256: await sha256File(resolvedOutput) },
+      frames: Number.isFinite(lottie?.op) && Number.isFinite(lottie?.ip) ? Math.round(lottie.op - lottie.ip) : null,
+      layers: Array.isArray(lottie?.layers) ? lottie.layers.length : null,
+      lottie: { version: lottie?.v ?? null, name: lottie?.nm ?? null, width: lottie?.w ?? null, height: lottie?.h ?? null, frameRate: lottie?.fr ?? null, markers: Array.isArray(lottie?.markers) ? lottie.markers.length : null },
+      warnings: results[0]?.result?.warnings ?? []
+    });
+  });
+
+  server.tool('effectcraft.export_timeline', 'Export a saved .ecproj comp as a timeline interchange file (file.exportTimeline: fcpxml|xml|otio|edl), then verify it exists, is non-empty and (for fcpxml/xml) starts with the XML declaration. Sandboxed artifact generation; read-only for the project.', {
+    projectPath: z.string().min(1),
+    compId: z.string().min(1).optional(),
+    outputPath: z.string().min(1),
+    format: z.enum(TIMELINE_EXPORT_FORMATS).default('fcpxml'),
+    timeoutMs: timeoutSchema
+  }, async ({ projectPath, compId, outputPath, format, timeoutMs }) => {
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const resolvedOutput = validateOutputPath(outputPath, 'The timeline output path');
+    await mkdir(path.dirname(resolvedOutput), { recursive: true });
+    const steps = [{ id: 'file.exportTimeline', params: { ...(compId ? { comp: compId } : {}), path: resolvedOutput, format } }];
+    const results = await runSession(command, { projectPath: resolvedProject, steps, timeoutMs, label: 'export-timeline' });
+    const failed = results.find(entry => !entry.ok);
+    if (failed) throw new Error('file.exportTimeline failed: ' + JSON.stringify(results).slice(0, 800));
+    const info = await stat(resolvedOutput);
+    if (!info.isFile() || info.size === 0) throw new Error('file.exportTimeline reported success but the artifact is missing or empty: ' + resolvedOutput);
+    const xmlDeclared = format === 'fcpxml' || format === 'xml';
+    const content = xmlDeclared ? await readFile(resolvedOutput, 'utf8') : null;
+    if (xmlDeclared && !content.trimStart().startsWith('<?xml')) throw new Error('The exported timeline does not start with the XML declaration: ' + resolvedOutput);
+    return jsonText({
+      ok: true, projectPath: resolvedProject, compId: compId ?? null, outputPath: resolvedOutput, format,
+      artifact: { path: resolvedOutput, byteSize: info.size, sha256: await sha256File(resolvedOutput) },
+      export: results[0]?.result ?? null
+    });
+  });
+
+  server.tool('effectcraft.import_timeline', 'Import a timeline interchange file (.xml/.fcpxml/.otio/.edl/.aaf/.omf) into a saved .ecproj via file.importTimeline, save the project back and report the comps the CLI info summary shows. Requires producer approval.', {
+    approval: projectSchema.optional(), projectId: z.string().min(1), runId: z.string().min(1),
+    projectPath: z.string().min(1),
+    timelinePath: z.string().min(1),
+    format: z.enum(TIMELINE_IMPORT_FORMATS).default('auto'),
+    timeoutMs: timeoutSchema
+  }, async ({ approval, projectId, runId, projectPath, timelinePath, format, timeoutMs }) => {
+    const opArgs = { projectId, runId, projectPath, timelinePath, format, timeoutMs };
+    const gated = gateApproval({ approval, projectId, runId, toolName: 'effectcraft.import_timeline', opArgs });
+    if (gated) return gated;
+    const command = await resolveCommand();
+    const resolvedProject = requireExistingFile(projectPath, 'The .ecproj project path');
+    const resolvedTimeline = requireExistingFile(timelinePath, 'The timeline file');
+    const steps = [
+      { id: 'file.importTimeline', params: { path: resolvedTimeline, format } },
+      { id: 'file.saveAs', params: { path: resolvedProject } }
+    ];
+    return runApprovedSession(command, {
+      label: 'import-timeline', projectPath: resolvedProject, steps, timeoutMs,
+      receipt: async results => {
+        const infoOutput = await runEffectCraftCli(command, ['--project', resolvedProject, 'info'], { timeoutMs });
+        const summary = infoOutput.stdout.trim();
+        const comps = summary.split(/\r?\n/)
+          .map(line => line.match(/^\s*item\s+\d+\s+Composition\s+(.+?)\s*$/))
+          .filter(Boolean)
+          .map(match => match[1]);
+        return {
+          projectId, runId, approvedBy: approval.approvedBy ?? null,
+          projectPath: resolvedProject, timelinePath: resolvedTimeline, format,
+          compsCreated: comps.length, comps, summary,
+          imported: results[0]?.result ?? null,
+          savePath: resolvedProject
+        };
+      }
+    });
+  });
+
+  server.tool('effectcraft.list_fonts', 'List the engine font catalog (text.fonts, headless-safe) with an optional substring query: families, styles and origin (bundled/system/user). Read-only.', {
+    query: z.string().min(1).max(120).optional(),
+    timeoutMs: timeoutSchema
+  }, async ({ query, timeoutMs }) => {
+    const command = await resolveCommand();
+    const steps = [{ id: 'text.fonts', params: query ? { query } : {} }];
+    const results = await runSession(command, { steps, timeoutMs, label: 'fonts' });
+    const step = results[0];
+    if (!step.ok || !step.result) throw new Error('text.fonts returned no font data.');
+    return jsonText({ command, query: query ?? null, count: step.result.count, families: step.result.families, added: step.result.added ?? null });
   });
 
   return server;
