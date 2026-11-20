@@ -14,10 +14,20 @@
  * approvedCall); the tool is then called with
  * { approval, projectId, runId, ...opArgs }.
  *
+ * Cards: Engine, Tool console (command browser + run_command), Import
+ * interchange, Inspect, Export master + Export frame (ungated), Probe media,
+ * Captions (add_captions/import_captions gated, export_captions ungated),
+ * Audio mix (inspect_mixer read-only; set_clip_audio_gain /
+ * auto_match_loudness / generate_ducking gated), Narration (TTS)
+ * (list_tts_voices read-only; download_tts_voices + create_tts_narration
+ * gated), Markers & timing (add_markers / speed_clip / detect_scene_cuts
+ * gated), Receipt log.
+ *
  * Ungated tools run without an approval: read-only inspections
- * (inspect_project, inspect_sequence, probe_media, list_commands,
- * describe_command, check_engine) and verified artifact generation
- * (export_master).
+ * (inspect_project, inspect_sequence, inspect_mixer, probe_media,
+ * list_commands, describe_command, check_engine, list_tts_voices) and
+ * verified artifact generation (export_master, export_captions,
+ * export_frame).
  */
 (function () {
     'use strict';
@@ -29,6 +39,15 @@
         runCommandTool: 'filmcraft.run_command',
         settingsPath: 'plugin-data:/motion-studio-settings.json'
     };
+
+    // Enum surfaces mirrored from packages/filmcraft-mcp-server/src/index.mjs
+    // — keep both sides in sync so the selects always send schema-valid values.
+    var CAPTION_EXPORT_FORMATS = ['srt', 'vtt', 'scc', 'mcc', 'stl', 'ttml', 'dfxp'];
+    var CAPTION_TRACK_FORMATS = ['Subtitle', 'CEA-608', 'CEA-708', 'Teletext'];
+    var GAIN_MODES = ['set', 'adjust', 'normalizeMax', 'normalizeAll'];
+    var TTS_PITCHES = ['extraLow', 'low', 'default', 'high', 'extraHigh'];
+    var FRAME_FORMATS = ['png', 'jpeg', 'tiff', 'bmp'];
+    var SPEED_INTERPOLATIONS = ['frameSampling', 'frameBlending', 'opticalFlow'];
 
     var mcp = (typeof window !== 'undefined' && window.MotionStudioMcpClient) ||
         (typeof globalThis !== 'undefined' && globalThis.MotionStudioMcpClient) ||
@@ -66,6 +85,28 @@
         for (var i = 0; i < options.length; i++) {
             var option = el('option', null, options[i][1]);
             option.value = options[i][0];
+            select.appendChild(option);
+        }
+        return select;
+    }
+
+    function makeModeSelect(values) {
+        var options = [];
+        for (var i = 0; i < values.length; i++) options.push([values[i], values[i]]);
+        return makeSelect(options);
+    }
+
+    // Tri-state select for fields the server schema marks optional WITHOUT a
+    // default: blank sends undefined so the approval digest matches the
+    // server's zod-resolved opArgs.
+    function makeOptionalSelect(values, blankLabel) {
+        var select = el('select');
+        var blank = el('option', null, blankLabel || '— (engine default)');
+        blank.value = '';
+        select.appendChild(blank);
+        for (var i = 0; i < values.length; i++) {
+            var option = el('option', null, values[i]);
+            option.value = values[i];
             select.appendChild(option);
         }
         return select;
@@ -727,6 +768,769 @@
         }));
         card.appendChild(runButton);
         card.appendChild(result);
+
+        card.appendChild(el('div', 'field-label', 'Export frame (filmcraft.export_frame — ungated, one frame of the saved-active sequence)'));
+        var frameOutput = makeInput('text', 'output .png/.jpeg/.tiff/.bmp path');
+        var frameFormat = makeModeSelect(FRAME_FORMATS);
+        var frameSeconds = makeInput('number', 'seconds (optional, 0–86400)');
+        card.appendChild(makeField('outputPath', frameOutput));
+        var frameRow = el('div', 'row');
+        var frameA = el('div');
+        var frameB = el('div');
+        frameA.appendChild(makeField('format', frameFormat));
+        frameB.appendChild(makeField('seconds (optional)', frameSeconds));
+        frameRow.appendChild(frameA);
+        frameRow.appendChild(frameB);
+        card.appendChild(frameRow);
+        var frameResult = el('div');
+        var frameButton = el('button', 'primary', 'Export frame');
+        frameButton.addEventListener('click', guard('export_frame', function () {
+            var path = projectPath.value.trim();
+            var output = frameOutput.value.trim();
+            if (!path || !output) {
+                showCardResult(frameResult, false, 'projectPath and outputPath are required.');
+                return;
+            }
+            var atSeconds = parseNumberInput(frameSeconds);
+            if (atSeconds !== undefined && (isNaN(atSeconds) || atSeconds < 0 || atSeconds > 86400)) {
+                showCardResult(frameResult, false, 'seconds must be a number between 0 and 86400.');
+                return;
+            }
+            showCardResult(frameResult, null, 'export_frame running…');
+            // export_frame is verified artifact generation — no approval needed.
+            callToolTracked('filmcraft.export_frame', { projectPath: path, outputPath: output, format: frameFormat.value, seconds: atSeconds }).then(function (res) {
+                showReceiptResult(frameResult, res, ['outputPath', 'seconds']);
+            }, function (err) {
+                showCardResult(frameResult, false, err.message);
+            });
+        }));
+        card.appendChild(frameButton);
+        card.appendChild(frameResult);
+        root.appendChild(card);
+    }
+
+    // --------------------------------------------------- field parsing helpers
+    // Number inputs: blank means "not provided" — optional opArgs keys must
+    // stay present as undefined so the approval digest matches the server
+    // (the server destructures every field into its opArgs object, so a
+    // missing key and an undefined key digest identically there); anything
+    // else must parse to a finite number or NaN comes back for the caller to
+    // reject with a clear message BEFORE any call is made.
+    function parseNumberInput(input) {
+        var raw = String(input.value === undefined || input.value === null ? '' : input.value).trim();
+        if (!raw) return undefined;
+        var value = Number(raw);
+        return isFinite(value) ? value : NaN;
+    }
+
+    function parseJsonText(raw, what) {
+        try {
+            return { ok: true, value: JSON.parse(raw) };
+        } catch (err) {
+            return { ok: false, error: what + ' must be valid JSON: ' + (err && err.message ? err.message : String(err)) };
+        }
+    }
+
+    function isInteger(value) {
+        return isFinite(value) && value === Math.floor(value);
+    }
+
+    // The gate digests the zod-parsed payload: unknown keys are stripped and
+    // missing optional keys never materialize, so nested objects (cues,
+    // markers, style, queue jobs) are rebuilt with exactly the keys the user
+    // provided. present-as-undefined is only correct at the TOP level of
+    // opArgs, where the server destructures every field into its digest.
+    function normalizeCaptionsCues(cues) {
+        return cues.map(function (cue) {
+            var normalized = { text: cue.text, seconds: cue.seconds };
+            if (cue.durationSeconds !== undefined) normalized.durationSeconds = cue.durationSeconds;
+            return normalized;
+        });
+    }
+
+    function normalizeCaptionsStyle(style) {
+        var normalized = {};
+        if (style.font !== undefined) normalized.font = style.font;
+        if (style.size !== undefined) normalized.size = style.size;
+        if (style.color !== undefined) normalized.color = style.color;
+        return normalized;
+    }
+
+    function validateCaptionsCues(cues) {
+        if (!Array.isArray(cues) || cues.length < 1 || cues.length > 500) {
+            return 'cues must be a JSON array of 1–500 {text, seconds} cues.';
+        }
+        for (var i = 0; i < cues.length; i++) {
+            var cue = cues[i];
+            var where = 'cues[' + i + ']';
+            if (!cue || typeof cue !== 'object' || Array.isArray(cue)) return where + ' must be a JSON object.';
+            if (typeof cue.text !== 'string' || !cue.text.trim() || cue.text.length > 2000) return where + '.text must be a string of 1–2000 characters.';
+            if (typeof cue.seconds !== 'number' || !isFinite(cue.seconds) || cue.seconds < 0 || cue.seconds > 86400) return where + '.seconds must be a number between 0 and 86400.';
+            if (cue.durationSeconds !== undefined && (typeof cue.durationSeconds !== 'number' || !isFinite(cue.durationSeconds) || cue.durationSeconds < 0.1 || cue.durationSeconds > 3600)) return where + '.durationSeconds must be a number between 0.1 and 3600.';
+        }
+        return null;
+    }
+
+    function validateCaptionsStyle(style) {
+        if (!style || typeof style !== 'object' || Array.isArray(style)) {
+            return 'style must be a JSON object like {"font": "Arial", "size": 40, "color": "#FFFFFF"}.';
+        }
+        if (style.font !== undefined && (typeof style.font !== 'string' || !style.font.trim() || style.font.length > 80)) return 'style.font must be a string of 1–80 characters.';
+        if (style.size !== undefined && (typeof style.size !== 'number' || !isFinite(style.size) || style.size < 4 || style.size > 400)) return 'style.size must be a number between 4 and 400.';
+        if (style.color !== undefined && (typeof style.color !== 'string' || !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(style.color))) return 'style.color must be a #RRGGBB or #RRGGBBAA hex string.';
+        return null;
+    }
+
+    function normalizeMarkers(markers) {
+        return markers.map(function (marker) {
+            var normalized = { seconds: marker.seconds };
+            if (marker.name !== undefined) normalized.name = marker.name;
+            if (marker.comment !== undefined) normalized.comment = marker.comment;
+            if (marker.color !== undefined) normalized.color = marker.color;
+            if (marker.chapter !== undefined) normalized.chapter = marker.chapter;
+            return normalized;
+        });
+    }
+
+    function validateMarkers(markers) {
+        if (!Array.isArray(markers) || markers.length < 1 || markers.length > 200) {
+            return 'markers must be a JSON array of 1–200 {seconds, …} entries.';
+        }
+        for (var i = 0; i < markers.length; i++) {
+            var marker = markers[i];
+            var where = 'markers[' + i + ']';
+            if (!marker || typeof marker !== 'object' || Array.isArray(marker)) return where + ' must be a JSON object.';
+            if (typeof marker.seconds !== 'number' || !isFinite(marker.seconds) || marker.seconds < 0 || marker.seconds > 86400) return where + '.seconds must be a number between 0 and 86400.';
+            if (marker.name !== undefined && (typeof marker.name !== 'string' || !marker.name.trim() || marker.name.length > 120)) return where + '.name must be a string of 1–120 characters.';
+            if (marker.comment !== undefined && (typeof marker.comment !== 'string' || !marker.comment.trim() || marker.comment.length > 500)) return where + '.comment must be a string of 1–500 characters.';
+            if (marker.color !== undefined && (typeof marker.color !== 'string' || !marker.color.trim() || marker.color.length > 40)) return where + '.color must be a string of 1–40 characters.';
+            if (marker.chapter !== undefined && typeof marker.chapter !== 'boolean') return where + '.chapter must be true or false.';
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------- captions
+    function buildCaptionsCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Captions'));
+        card.appendChild(el('div', 'card-sub', 'Create or import caption tracks (gated mutations) and export captions (ungated) — one Run per row, projectPath shared.'));
+        var projectPath = makeInput('text', 'path to .prproj / .fcproj');
+        card.appendChild(makeField('projectPath', projectPath));
+
+        card.appendChild(el('div', 'field-label', 'Add caption track (filmcraft.add_captions — gated)'));
+        var addSequenceId = makeInput('number', 'sequence id (optional)');
+        var addTrackFormat = makeModeSelect(CAPTION_TRACK_FORMATS);
+        var addTrackName = makeInput('text', 'track name (optional, max 80)');
+        var addLanguage = makeInput('text', 'language (optional, e.g. en-US)');
+        var addCues = el('textarea');
+        addCues.placeholder = '[{"text": "Hello", "seconds": 0, "durationSeconds": 3}]';
+        var addStyle = makeInput('text', '{"font": "Arial", "size": 40, "color": "#FFFFFF"} (optional)');
+        card.appendChild(makeField('sequenceId (optional)', addSequenceId));
+        card.appendChild(makeField('trackFormat', addTrackFormat));
+        card.appendChild(makeField('trackName (optional)', addTrackName));
+        card.appendChild(makeField('language (optional)', addLanguage));
+        card.appendChild(makeField('cues (JSON array, min 1, validated before send)', addCues));
+        card.appendChild(makeField('style (JSON object, optional)', addStyle));
+        var addResult = el('div');
+        var addButton = el('button', 'primary', 'Add captions');
+        addButton.addEventListener('click', guard('add_captions', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(addResult, false, 'projectPath is required.');
+                return;
+            }
+            var sequenceId = parseNumberInput(addSequenceId);
+            if (sequenceId !== undefined && !isInteger(sequenceId)) {
+                showCardResult(addResult, false, 'sequenceId must be an integer (blank targets the saved-active sequence).');
+                return;
+            }
+            var cuesRaw = addCues.value.trim();
+            if (!cuesRaw) {
+                showCardResult(addResult, false, 'cues is required: a JSON array of at least one {text, seconds} cue.');
+                return;
+            }
+            var parsedCues = parseJsonText(cuesRaw, 'cues');
+            if (!parsedCues.ok) {
+                showCardResult(addResult, false, parsedCues.error);
+                return;
+            }
+            var cueError = validateCaptionsCues(parsedCues.value);
+            if (cueError) {
+                showCardResult(addResult, false, cueError);
+                return;
+            }
+            var style = undefined;
+            var styleRaw = addStyle.value.trim();
+            if (styleRaw) {
+                var parsedStyle = parseJsonText(styleRaw, 'style');
+                if (!parsedStyle.ok) {
+                    showCardResult(addResult, false, parsedStyle.error);
+                    return;
+                }
+                var styleError = validateCaptionsStyle(parsedStyle.value);
+                if (styleError) {
+                    showCardResult(addResult, false, styleError);
+                    return;
+                }
+                style = normalizeCaptionsStyle(parsedStyle.value);
+            }
+            showCardResult(addResult, null, 'add_captions running…');
+            approvedCall('filmcraft.add_captions', {
+                projectPath: path,
+                sequenceId: sequenceId,
+                trackFormat: addTrackFormat.value,
+                trackName: addTrackName.value.trim() || undefined,
+                language: addLanguage.value.trim() || undefined,
+                cues: normalizeCaptionsCues(parsedCues.value),
+                style: style
+            }).then(function (res) {
+                showReceiptResult(addResult, res, ['trackId', 'trackFormat', 'count']);
+            }, function (err) {
+                showCardResult(addResult, false, err.message);
+            });
+        }));
+        card.appendChild(addButton);
+        card.appendChild(addResult);
+
+        card.appendChild(el('div', 'field-label', 'Import captions (filmcraft.import_captions — gated, .srt / .vtt)'));
+        var importPath = makeInput('text', 'path to .srt / .vtt');
+        var importName = makeInput('text', 'track name (optional, max 80)');
+        var importLanguage = makeInput('text', 'language (optional)');
+        card.appendChild(makeField('path', importPath));
+        card.appendChild(makeField('name (optional)', importName));
+        card.appendChild(makeField('language (optional)', importLanguage));
+        var importResult = el('div');
+        var importButton = el('button', 'primary', 'Import captions');
+        importButton.addEventListener('click', guard('import_captions', function () {
+            var path = projectPath.value.trim();
+            var captionPath = importPath.value.trim();
+            if (!path || !captionPath) {
+                showCardResult(importResult, false, 'projectPath and path are required.');
+                return;
+            }
+            showCardResult(importResult, null, 'import_captions running…');
+            approvedCall('filmcraft.import_captions', {
+                projectPath: path,
+                path: captionPath,
+                name: importName.value.trim() || undefined,
+                language: importLanguage.value.trim() || undefined
+            }).then(function (res) {
+                showReceiptResult(importResult, res, ['trackId', 'format', 'count']);
+            }, function (err) {
+                showCardResult(importResult, false, err.message);
+            });
+        }));
+        card.appendChild(importButton);
+        card.appendChild(importResult);
+
+        card.appendChild(el('div', 'field-label', 'Export captions (filmcraft.export_captions — ungated, saved-active sequence)'));
+        var exportOutput = makeInput('text', 'output path');
+        var exportFormat = makeModeSelect(CAPTION_EXPORT_FORMATS);
+        var exportTrack = makeInput('number', 'caption track number (optional)');
+        card.appendChild(makeField('outputPath', exportOutput));
+        card.appendChild(makeField('format', exportFormat));
+        card.appendChild(makeField('track (optional)', exportTrack));
+        var exportResult = el('div');
+        var exportButton = el('button', 'primary', 'Export captions');
+        exportButton.addEventListener('click', guard('export_captions', function () {
+            var path = projectPath.value.trim();
+            var output = exportOutput.value.trim();
+            if (!path || !output) {
+                showCardResult(exportResult, false, 'projectPath and outputPath are required.');
+                return;
+            }
+            var track = parseNumberInput(exportTrack);
+            if (track !== undefined && !isInteger(track)) {
+                showCardResult(exportResult, false, 'track must be an integer (blank exports the saved-active track).');
+                return;
+            }
+            showCardResult(exportResult, null, 'export_captions running…');
+            callToolTracked('filmcraft.export_captions', { projectPath: path, outputPath: output, format: exportFormat.value, track: track }).then(function (res) {
+                showReceiptResult(exportResult, res, ['outputPath', 'format']);
+            }, function (err) {
+                showCardResult(exportResult, false, err.message);
+            });
+        }));
+        card.appendChild(exportButton);
+        card.appendChild(exportResult);
+        root.appendChild(card);
+    }
+
+    // -------------------------------------------------------------- audio mix
+    function mixerStripLabel(strip, index) {
+        return (strip && (strip.ref || strip.name)) ? String(strip.ref || strip.name) : 'strip ' + (index + 1);
+    }
+
+    function mixerStripSummary(strip) {
+        var parts = [];
+        if (strip && strip.name && strip.ref && strip.name !== strip.ref) parts.push(String(strip.name));
+        if (strip && strip.kind) parts.push(String(strip.kind));
+        parts.push('vol ' + (strip && strip.volumeDb !== undefined && strip.volumeDb !== null ? strip.volumeDb : '—') + ' dB');
+        parts.push('pan ' + (strip && strip.pan !== undefined && strip.pan !== null ? strip.pan : '—'));
+        if (strip && strip.muted) parts.push('muted');
+        if (strip && strip.solo) parts.push('solo');
+        if (strip && strip.mode) parts.push(String(strip.mode));
+        return parts.join(' · ');
+    }
+
+    function showMixerResult(container, result) {
+        var data = result.data;
+        var strips = data && Array.isArray(data.strips) ? data.strips : [];
+        if (!strips.length) {
+            showReceiptResult(container, result, null);
+            return;
+        }
+        container.textContent = '';
+        container.appendChild(el('div', result.isError ? 'result-status-error' : 'result-status-ok', result.isError ? 'isError: true' : 'ok'));
+        var list = el('div', 'kv-list');
+        for (var i = 0; i < strips.length; i++) {
+            list.appendChild(buildKv(mixerStripLabel(strips[i], i), mixerStripSummary(strips[i])));
+        }
+        container.appendChild(list);
+    }
+
+    function buildAudioMixCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Audio mix'));
+        card.appendChild(el('div', 'card-sub', 'Mixer inspection (read-only) and gated audio mutations — one Run per row, projectPath shared.'));
+        var projectPath = makeInput('text', 'path to .prproj / .fcproj');
+        card.appendChild(makeField('projectPath', projectPath));
+
+        card.appendChild(el('div', 'field-label', 'Mixer (filmcraft.inspect_mixer, read-only)'));
+        var mixerSequenceId = makeInput('number', 'sequence id (optional)');
+        card.appendChild(makeField('sequenceId (optional)', mixerSequenceId));
+        var mixerResult = el('div');
+        var mixerButton = el('button', null, 'Inspect mixer');
+        mixerButton.addEventListener('click', guard('inspect_mixer', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(mixerResult, false, 'projectPath is required.');
+                return;
+            }
+            var sequenceId = parseNumberInput(mixerSequenceId);
+            if (sequenceId !== undefined && !isInteger(sequenceId)) {
+                showCardResult(mixerResult, false, 'sequenceId must be an integer (blank inspects the saved-active sequence).');
+                return;
+            }
+            showCardResult(mixerResult, null, 'inspect_mixer running…');
+            callToolTracked('filmcraft.inspect_mixer', { projectPath: path, sequenceId: sequenceId }).then(function (res) {
+                showMixerResult(mixerResult, res);
+            }, function (err) {
+                showCardResult(mixerResult, false, err.message);
+            });
+        }));
+        card.appendChild(mixerButton);
+        card.appendChild(mixerResult);
+
+        card.appendChild(el('div', 'field-label', 'Clip gain (filmcraft.set_clip_audio_gain — gated, exactly one of clipOrdinal / clipId)'));
+        var gainOrdinal = makeInput('number', 'clip ordinal (1 = first audio clip)');
+        var gainClipId = makeInput('number', 'clipId (optional)');
+        var gainMode = makeModeSelect(GAIN_MODES);
+        var gainDb = makeInput('number', 'gain dB (-96 to 24)');
+        var gainRow = el('div', 'row');
+        var gainA = el('div');
+        var gainB = el('div');
+        gainA.appendChild(makeField('clipOrdinal (optional)', gainOrdinal));
+        gainB.appendChild(makeField('clipId (optional)', gainClipId));
+        gainRow.appendChild(gainA);
+        gainRow.appendChild(gainB);
+        card.appendChild(gainRow);
+        card.appendChild(makeField('mode', gainMode));
+        card.appendChild(makeField('db', gainDb));
+        var gainResult = el('div');
+        var gainButton = el('button', 'primary', 'Set audio gain');
+        gainButton.addEventListener('click', guard('set_clip_audio_gain', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(gainResult, false, 'projectPath is required.');
+                return;
+            }
+            var ordinal = parseNumberInput(gainOrdinal);
+            if (ordinal !== undefined && !isInteger(ordinal)) {
+                showCardResult(gainResult, false, 'clipOrdinal must be an integer >= 1 (1 = first audio clip).');
+                return;
+            }
+            var clipIdValue = parseNumberInput(gainClipId);
+            if (clipIdValue !== undefined && !isInteger(clipIdValue)) {
+                showCardResult(gainResult, false, 'clipId must be an integer (blank resolves the clip from clipOrdinal).');
+                return;
+            }
+            if (Boolean(ordinal !== undefined) === Boolean(clipIdValue !== undefined)) {
+                showCardResult(gainResult, false, 'Provide exactly one of clipOrdinal (1-based audio clip position) or clipId (runtime clip id).');
+                return;
+            }
+            var dbValue = parseNumberInput(gainDb);
+            if (dbValue === undefined || isNaN(dbValue) || dbValue < -96 || dbValue > 24) {
+                showCardResult(gainResult, false, 'db is required and must be between -96 and 24.');
+                return;
+            }
+            showCardResult(gainResult, null, 'set_clip_audio_gain running…');
+            approvedCall('filmcraft.set_clip_audio_gain', { projectPath: path, clipOrdinal: ordinal, clipId: clipIdValue, mode: gainMode.value, db: dbValue }).then(function (res) {
+                showReceiptResult(gainResult, res, ['clipId', 'mode', 'gainDb']);
+            }, function (err) {
+                showCardResult(gainResult, false, err.message);
+            });
+        }));
+        card.appendChild(gainButton);
+        card.appendChild(gainResult);
+
+        card.appendChild(el('div', 'field-label', 'Loudness (filmcraft.auto_match_loudness — gated)'));
+        var loudnessOrdinal = makeInput('number', 'clip ordinal (optional — blank matches all audio clips)');
+        var loudnessTarget = makeInput('number', 'target LUFS (-48 to -6)', '-16');
+        card.appendChild(makeField('clipOrdinal (optional)', loudnessOrdinal));
+        card.appendChild(makeField('targetLufs (server default -16)', loudnessTarget));
+        var loudnessResult = el('div');
+        var loudnessButton = el('button', 'primary', 'Auto match loudness');
+        loudnessButton.addEventListener('click', guard('auto_match_loudness', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(loudnessResult, false, 'projectPath is required.');
+                return;
+            }
+            var ordinal = parseNumberInput(loudnessOrdinal);
+            if (ordinal !== undefined && !isInteger(ordinal)) {
+                showCardResult(loudnessResult, false, 'clipOrdinal must be an integer >= 1 (blank matches all audio clips).');
+                return;
+            }
+            // The server schema defaults targetLufs to -16, so the resolved
+            // digest always carries a number — blank resolves to the default.
+            var targetLufs = parseNumberInput(loudnessTarget);
+            if (targetLufs === undefined) targetLufs = -16;
+            if (isNaN(targetLufs) || targetLufs < -48 || targetLufs > -6) {
+                showCardResult(loudnessResult, false, 'targetLufs must be a number between -48 and -6.');
+                return;
+            }
+            showCardResult(loudnessResult, null, 'auto_match_loudness running…');
+            approvedCall('filmcraft.auto_match_loudness', { projectPath: path, clipOrdinal: ordinal, targetLufs: targetLufs }).then(function (res) {
+                showReceiptResult(loudnessResult, res, ['targetLufs', 'classifiedAsDialogue']);
+            }, function (err) {
+                showCardResult(loudnessResult, false, err.message);
+            });
+        }));
+        card.appendChild(loudnessButton);
+        card.appendChild(loudnessResult);
+
+        card.appendChild(el('div', 'field-label', 'Ducking (filmcraft.generate_ducking — gated, ducks Music/Ambience clips)'));
+        var duckOrdinal = makeInput('number', 'clip ordinal (optional — blank ducks all audio clips)');
+        card.appendChild(makeField('clipOrdinal (optional)', duckOrdinal));
+        var duckResult = el('div');
+        var duckButton = el('button', 'primary', 'Generate ducking');
+        duckButton.addEventListener('click', guard('generate_ducking', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(duckResult, false, 'projectPath is required.');
+                return;
+            }
+            var ordinal = parseNumberInput(duckOrdinal);
+            if (ordinal !== undefined && !isInteger(ordinal)) {
+                showCardResult(duckResult, false, 'clipOrdinal must be an integer >= 1 (blank ducks all audio clips).');
+                return;
+            }
+            showCardResult(duckResult, null, 'generate_ducking running…');
+            approvedCall('filmcraft.generate_ducking', { projectPath: path, clipOrdinal: ordinal }).then(function (res) {
+                showReceiptResult(duckResult, res, ['sequenceId', 'clips']);
+            }, function (err) {
+                showCardResult(duckResult, false, err.message);
+            });
+        }));
+        card.appendChild(duckButton);
+        card.appendChild(duckResult);
+        root.appendChild(card);
+    }
+
+    // ---------------------------------------------------------- narration TTS
+    function showTtsVoicesResult(container, result) {
+        var data = result.data;
+        if (!data || typeof data !== 'object') {
+            showReceiptResult(container, result, null);
+            return;
+        }
+        container.textContent = '';
+        container.appendChild(el('div', result.isError ? 'result-status-error' : 'result-status-ok', result.isError ? 'isError: true' : 'ok'));
+        var list = el('div', 'kv-list');
+        list.appendChild(buildKv('installed', data.installed === true ? 'yes' : 'no'));
+        list.appendChild(buildKv('missingBytes', data.missingBytes !== undefined && data.missingBytes !== null ? data.missingBytes : '—'));
+        list.appendChild(buildKv('defaultVoice', data.defaultVoice !== undefined && data.defaultVoice !== null ? data.defaultVoice : '—'));
+        container.appendChild(list);
+        if (data.installed !== true && data.guidance) {
+            container.appendChild(el('div', 'inline-note', String(data.guidance)));
+        }
+    }
+
+    function buildNarrationCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Narration (TTS)'));
+        card.appendChild(el('div', 'card-sub', 'Voice catalog (read-only), voice package download (gated) and text-to-speech narration (gated).'));
+
+        card.appendChild(el('div', 'field-label', 'Voices (filmcraft.list_tts_voices, read-only)'));
+        var voicesResult = el('div');
+        var voicesButton = el('button', null, 'List TTS voices');
+        voicesButton.addEventListener('click', guard('list_tts_voices', function () {
+            showCardResult(voicesResult, null, 'list_tts_voices running…');
+            callToolTracked('filmcraft.list_tts_voices', {}).then(function (res) {
+                showTtsVoicesResult(voicesResult, res);
+            }, function (err) {
+                showCardResult(voicesResult, false, err.message);
+            });
+        }));
+        card.appendChild(voicesButton);
+        card.appendChild(voicesResult);
+
+        card.appendChild(el('div', 'field-label', 'Download voices (filmcraft.download_tts_voices — gated, no project needed)'));
+        var waitRow = el('div', 'checkbox-row');
+        var waitCheckbox = el('input');
+        waitCheckbox.type = 'checkbox';
+        waitCheckbox.checked = true;
+        waitRow.appendChild(waitCheckbox);
+        waitRow.appendChild(el('label', null, 'wait for the download to finish (~336 MB)'));
+        card.appendChild(waitRow);
+        var downloadResult = el('div');
+        var downloadButton = el('button', 'primary', 'Download voices');
+        downloadButton.addEventListener('click', guard('download_tts_voices', function () {
+            showCardResult(downloadResult, null, 'download_tts_voices running…');
+            approvedCall('filmcraft.download_tts_voices', { wait: waitCheckbox.checked === true }).then(function (res) {
+                showReceiptResult(downloadResult, res, ['installed']);
+            }, function (err) {
+                showCardResult(downloadResult, false, err.message);
+            });
+        }));
+        card.appendChild(downloadButton);
+        card.appendChild(downloadResult);
+
+        card.appendChild(el('div', 'field-label', 'Narration (filmcraft.create_tts_narration — gated)'));
+        var projectPath = makeInput('text', 'path to .prproj / .fcproj');
+        var narrationText = el('textarea');
+        narrationText.placeholder = 'Narration text (1–20000 characters)';
+        var voice = makeInput('text', 'voice name (optional, max 80)');
+        var pitch = makeOptionalSelect(TTS_PITCHES);
+        var pace = makeInput('number', 'pace 0.5–2 (optional)');
+        var track = makeInput('text', 'audio track', 'A1');
+        var atSeconds = makeInput('number', 'start seconds (optional)');
+        card.appendChild(makeField('projectPath', projectPath));
+        card.appendChild(makeField('text', narrationText));
+        card.appendChild(makeField('voice (optional)', voice));
+        card.appendChild(makeField('pitch (optional)', pitch));
+        card.appendChild(makeField('pace (optional)', pace));
+        card.appendChild(makeField('track (server default A1)', track));
+        card.appendChild(makeField('atSeconds (optional)', atSeconds));
+        var narrationResult = el('div');
+        var narrationButton = el('button', 'primary', 'Create narration');
+        narrationButton.addEventListener('click', guard('create_tts_narration', function () {
+            var path = projectPath.value.trim();
+            var text = narrationText.value.trim();
+            if (!path) {
+                showCardResult(narrationResult, false, 'projectPath is required.');
+                return;
+            }
+            if (!text) {
+                showCardResult(narrationResult, false, 'text is required (1–20000 characters).');
+                return;
+            }
+            if (text.length > 20000) {
+                showCardResult(narrationResult, false, 'text must be at most 20000 characters.');
+                return;
+            }
+            var voiceValue = voice.value.trim() || undefined;
+            if (voiceValue && voiceValue.length > 80) {
+                showCardResult(narrationResult, false, 'voice must be at most 80 characters.');
+                return;
+            }
+            var paceValue = parseNumberInput(pace);
+            if (paceValue !== undefined && (isNaN(paceValue) || paceValue < 0.5 || paceValue > 2)) {
+                showCardResult(narrationResult, false, 'pace must be a number between 0.5 and 2.');
+                return;
+            }
+            // The server schema defaults track to 'A1', so the resolved digest
+            // always carries a string — blank resolves to the default.
+            var trackValue = track.value.trim() || 'A1';
+            if (trackValue.length > 20) {
+                showCardResult(narrationResult, false, 'track must be at most 20 characters.');
+                return;
+            }
+            var atSecondsValue = parseNumberInput(atSeconds);
+            if (atSecondsValue !== undefined && (isNaN(atSecondsValue) || atSecondsValue < 0)) {
+                showCardResult(narrationResult, false, 'atSeconds must be a number >= 0.');
+                return;
+            }
+            showCardResult(narrationResult, null, 'create_tts_narration running…');
+            approvedCall('filmcraft.create_tts_narration', {
+                projectPath: path,
+                text: text,
+                voice: voiceValue,
+                pitch: pitch.value || undefined,
+                pace: paceValue,
+                track: trackValue,
+                atSeconds: atSecondsValue
+            }).then(function (res) {
+                showReceiptResult(narrationResult, res, ['clipId']);
+            }, function (err) {
+                showCardResult(narrationResult, false, err.message);
+            });
+        }));
+        card.appendChild(narrationButton);
+        card.appendChild(narrationResult);
+        root.appendChild(card);
+    }
+
+    // -------------------------------------------------------- markers & timing
+    function buildMarkersTimingCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Markers & timing'));
+        card.appendChild(el('div', 'card-sub', 'Markers, speed changes and scene edit detection — all gated mutations needing a producer approval.'));
+        var projectPath = makeInput('text', 'path to .prproj / .fcproj');
+        card.appendChild(makeField('projectPath', projectPath));
+
+        card.appendChild(el('div', 'field-label', 'Markers (filmcraft.add_markers — gated)'));
+        var markersSequenceId = makeInput('number', 'sequence id (optional)');
+        var markersJson = el('textarea');
+        markersJson.placeholder = '[{"seconds": 1.5, "name": "Intro", "comment": "…", "color": "Blue", "chapter": true}]';
+        card.appendChild(makeField('sequenceId (optional)', markersSequenceId));
+        card.appendChild(makeField('markers (JSON array, min 1, validated before send)', markersJson));
+        var markersResult = el('div');
+        var markersButton = el('button', 'primary', 'Add markers');
+        markersButton.addEventListener('click', guard('add_markers', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(markersResult, false, 'projectPath is required.');
+                return;
+            }
+            var sequenceId = parseNumberInput(markersSequenceId);
+            if (sequenceId !== undefined && !isInteger(sequenceId)) {
+                showCardResult(markersResult, false, 'sequenceId must be an integer (blank targets the saved-active sequence).');
+                return;
+            }
+            var markersRaw = markersJson.value.trim();
+            if (!markersRaw) {
+                showCardResult(markersResult, false, 'markers is required: a JSON array of at least one {seconds, …} entry.');
+                return;
+            }
+            var parsedMarkers = parseJsonText(markersRaw, 'markers');
+            if (!parsedMarkers.ok) {
+                showCardResult(markersResult, false, parsedMarkers.error);
+                return;
+            }
+            var markersError = validateMarkers(parsedMarkers.value);
+            if (markersError) {
+                showCardResult(markersResult, false, markersError);
+                return;
+            }
+            showCardResult(markersResult, null, 'add_markers running…');
+            approvedCall('filmcraft.add_markers', { projectPath: path, sequenceId: sequenceId, markers: normalizeMarkers(parsedMarkers.value) }).then(function (res) {
+                showReceiptResult(markersResult, res, ['sequenceId', 'markerCount']);
+            }, function (err) {
+                showCardResult(markersResult, false, err.message);
+            });
+        }));
+        card.appendChild(markersButton);
+        card.appendChild(markersResult);
+
+        card.appendChild(el('div', 'field-label', 'Speed (filmcraft.speed_clip — gated)'));
+        var speedOrdinal = makeInput('number', 'clip ordinal (1 = first clip)');
+        var speedPercent = makeInput('number', 'speed % (5–2000)');
+        var reverseRow = el('div', 'checkbox-row');
+        var reverse = el('input');
+        reverse.type = 'checkbox';
+        reverseRow.appendChild(reverse);
+        reverseRow.appendChild(el('label', null, 'reverse the clip'));
+        var maintainPitch = makeOptionalSelect(['true', 'false']);
+        var interpolation = makeOptionalSelect(SPEED_INTERPOLATIONS);
+        card.appendChild(makeField('clipOrdinal', speedOrdinal));
+        card.appendChild(makeField('speedPercent', speedPercent));
+        card.appendChild(reverseRow);
+        card.appendChild(makeField('maintainPitch (optional)', maintainPitch));
+        card.appendChild(makeField('interpolation (optional)', interpolation));
+        var speedResult = el('div');
+        var speedButton = el('button', 'primary', 'Speed clip');
+        speedButton.addEventListener('click', guard('speed_clip', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(speedResult, false, 'projectPath is required.');
+                return;
+            }
+            var ordinal = parseNumberInput(speedOrdinal);
+            if (ordinal === undefined || !isInteger(ordinal) || ordinal < 1) {
+                showCardResult(speedResult, false, 'clipOrdinal is required and must be an integer >= 1 (1 = first clip).');
+                return;
+            }
+            var percent = parseNumberInput(speedPercent);
+            if (percent === undefined || isNaN(percent) || percent < 5 || percent > 2000) {
+                showCardResult(speedResult, false, 'speedPercent is required and must be between 5 and 2000.');
+                return;
+            }
+            var maintainPitchValue = maintainPitch.value === 'true' ? true : (maintainPitch.value === 'false' ? false : undefined);
+            showCardResult(speedResult, null, 'speed_clip running…');
+            approvedCall('filmcraft.speed_clip', {
+                projectPath: path,
+                clipOrdinal: ordinal,
+                speedPercent: percent,
+                reverse: reverse.checked === true,
+                maintainPitch: maintainPitchValue,
+                interpolation: interpolation.value || undefined
+            }).then(function (res) {
+                showReceiptResult(speedResult, res, ['speed', 'observedSpeed', 'verified']);
+            }, function (err) {
+                showCardResult(speedResult, false, err.message);
+            });
+        }));
+        card.appendChild(speedButton);
+        card.appendChild(speedResult);
+
+        card.appendChild(el('div', 'field-label', 'Scene cuts (filmcraft.detect_scene_cuts — gated)'));
+        var detectOrdinal = makeInput('number', 'clip ordinal (1 = first video clip)');
+        var detectSensitivity = makeInput('number', 'sensitivity 0–100', '50');
+        var detectMinFrames = makeInput('number', 'min shot frames', '6');
+        var detectMarkersRow = el('div', 'checkbox-row');
+        var detectMarkers = el('input');
+        detectMarkers.type = 'checkbox';
+        detectMarkersRow.appendChild(detectMarkers);
+        detectMarkersRow.appendChild(el('label', null, 'generate markers for the cuts'));
+        card.appendChild(makeField('clipOrdinal', detectOrdinal));
+        card.appendChild(makeField('sensitivity (server default 50)', detectSensitivity));
+        card.appendChild(makeField('minShotFrames (server default 6)', detectMinFrames));
+        card.appendChild(detectMarkersRow);
+        var detectResult = el('div');
+        var detectButton = el('button', 'primary', 'Detect scene cuts');
+        detectButton.addEventListener('click', guard('detect_scene_cuts', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(detectResult, false, 'projectPath is required.');
+                return;
+            }
+            var ordinal = parseNumberInput(detectOrdinal);
+            if (ordinal === undefined || !isInteger(ordinal) || ordinal < 1) {
+                showCardResult(detectResult, false, 'clipOrdinal is required and must be an integer >= 1 (1 = first video clip).');
+                return;
+            }
+            // The server schema defaults sensitivity to 50 and minShotFrames
+            // to 6, so the resolved digest always carries numbers — blanks
+            // resolve to the defaults.
+            var sensitivity = parseNumberInput(detectSensitivity);
+            if (sensitivity === undefined) sensitivity = 50;
+            if (isNaN(sensitivity) || sensitivity < 0 || sensitivity > 100) {
+                showCardResult(detectResult, false, 'sensitivity must be a number between 0 and 100.');
+                return;
+            }
+            var minShotFrames = parseNumberInput(detectMinFrames);
+            if (minShotFrames === undefined) minShotFrames = 6;
+            if (!isInteger(minShotFrames) || minShotFrames < 1) {
+                showCardResult(detectResult, false, 'minShotFrames must be an integer >= 1.');
+                return;
+            }
+            showCardResult(detectResult, null, 'detect_scene_cuts running…');
+            approvedCall('filmcraft.detect_scene_cuts', {
+                projectPath: path,
+                clipOrdinal: ordinal,
+                sensitivity: sensitivity,
+                minShotFrames: minShotFrames,
+                generateMarkers: detectMarkers.checked === true
+            }).then(function (res) {
+                showReceiptResult(detectResult, res, ['clipId', 'cuts']);
+            }, function (err) {
+                showCardResult(detectResult, false, err.message);
+            });
+        }));
+        card.appendChild(detectButton);
+        card.appendChild(detectResult);
         root.appendChild(card);
     }
 
@@ -759,6 +1563,10 @@
         buildImportCard(root);
         buildInspectCard(root);
         buildExportCard(root);
+        buildCaptionsCard(root);
+        buildAudioMixCard(root);
+        buildNarrationCard(root);
+        buildMarkersTimingCard(root);
         buildProbeCard(root);
     }
 

@@ -20,6 +20,7 @@ Read-only / planning (no approval):
 - `effectcraft.describe_command` — one command's params doc; unknown ids fail with substring near-matches.
 - `effectcraft.inspect_project` — the CLI `info` summary (item tree, active comp, layer stack).
 - `effectcraft.get_property` / `effectcraft.layer_props` — typed property readback (`get` / `props --json`).
+- `effectcraft.list_fonts` — engine font catalogue (`text.fonts`).
 - `effectcraft.plan_scene` — pure IR → engine-command planning through the effectcraft-adapter (comp.new, layer.*, prop.set keyframes, expressions, effects).
 - `effectcraft.render_frame` — single-frame PNG (`render-frame`) with sha256 receipt; `--transparent` supported.
 - `effectcraft.render_scene` — stored-project workspace render through the adapter (checkpoints, FFprobe verification, fail-closed).
@@ -27,22 +28,37 @@ Read-only / planning (no approval):
 Mutations (producer approval required):
 
 - `effectcraft.run_command`, `effectcraft.run_batch` — journaled engine sessions via `run --commands --json` with per-step attributed results.
+- `effectcraft.add_mask` (rect/ellipse/rounded/polygon/star or free vertices), `effectcraft.set_track_matte` (alpha/luma × inverted/preserve), `effectcraft.set_blend_mode` (~30 modes, verified by property readback), `effectcraft.set_parent`, `effectcraft.add_marker`, `effectcraft.set_work_area`, `effectcraft.import_timeline` (FCPXML/FCP7 XML/OTIO/EDL/AAF/OMF, with comps-created receipt).
 
 Verified artifact generation (no approval, mirroring `video.render_project` policy):
 
 - `effectcraft.render_comp` — full render flag surface (`h264|hevc|av1|prores|webm`, fps, resolution, quality, channels, bitrate, ProRes profile, start/end) with independent FFprobe verification + sha256 receipt; refuses to overwrite.
+- `effectcraft.render_queue` — 1–10 render-queue jobs in one engine pass, each independently FFprobe-verified.
+- `effectcraft.export_lottie` — web-native JSON preview of a comp (valid-JSON receipt).
+- `effectcraft.export_timeline` — FCPXML/FCP7 XML/OTIO/EDL handoff out of a comp (XML-declaration receipt).
 
-Verified live on EffectCraft 0.24.1: `file.newProject` takes no params; `run --json` returns per-step `[{"command": id, "result": …|null}]`; there is no `export` subcommand (that's FilmCraft).
+The engine's JavaScript `script`/`--eval` surface is deliberately NOT exposed (`executionPolicy.allowArbitraryScript: false`).
+
+Verified live on EffectCraft 0.24.1: `file.newProject` takes no params; `run --json` returns per-step `[{"command": id, "result": …|null}]`; `layer.addMask`/`mask.new` return `{mask: <uid>}`; `renderQueue.render {wait}` returns per-item Done receipts; there is no `export` subcommand (that's FilmCraft).
 
 ## filmcraft-studio (`packages/filmcraft-mcp-server`)
 
-Read-only / planning: `filmcraft.check_engine`, `filmcraft.list_commands`, `filmcraft.describe_command`, `filmcraft.inspect_project`, `filmcraft.inspect_sequence` (activates sequences in a throwaway temp copy so the producer's project is never modified), `filmcraft.render_frame`, `filmcraft.probe_media` (never `--allow-offline`), `filmcraft.plan_editorial_assembly`.
+Read-only / planning: `filmcraft.check_engine`, `filmcraft.list_commands`, `filmcraft.describe_command`, `filmcraft.inspect_project`, `filmcraft.inspect_sequence` (activates sequences in a throwaway temp copy so the producer's project is never modified), `filmcraft.inspect_mixer` (strips: volume/pan/mute/solo/automation mode), `filmcraft.list_tts_voices` (voice package state + missingBytes), `filmcraft.render_frame`, `filmcraft.probe_media` (never `--allow-offline`), `filmcraft.plan_editorial_assembly`.
 
-Mutations (approval required): `filmcraft.import_interchange`, `filmcraft.apply_transition`, `filmcraft.run_command`, `filmcraft.run_batch`.
+Mutations (approval required):
 
-Verified artifact generation: `filmcraft.export_master` (`h264|hevc|prores|dnxhr|png|wav`) — offline media fails closed with the `offlineMedia` list and is never certified; independent FFprobe verification + sha256 receipt.
+- `filmcraft.import_interchange`, `filmcraft.apply_transition`, `filmcraft.run_command`, `filmcraft.run_batch`.
+- Captions: `filmcraft.add_captions` (cue timing validated client of the gate: non-overlapping, then newTrack → add → optional setStyle → list → save in one session), `filmcraft.import_captions` (SRT/VTT).
+- Audio: `filmcraft.set_clip_audio_gain` (set/adjust/normalize with readback), `filmcraft.auto_match_loudness` (Essential Sound auto-match with measured LUFS receipt), `filmcraft.generate_ducking` (requires Music/Ambience-typed clips — the engine's rule, surfaced verbatim).
+- Narration: `filmcraft.create_tts_narration` (fails closed with the voice package's missingBytes when not installed), `filmcraft.download_tts_voices` (the 335 MB Kokoro package is an explicit, approval-gated operator action).
+- Editorial: `filmcraft.add_markers` (named markers/chapters with tick times), `filmcraft.detect_scene_cuts` (scene edit detection with wait), `filmcraft.speed_clip` (speed/reverse/pitch/interpolation, verified via sequence readback).
 
-Verified live on FilmCraft 0.20.1: `export` appends plain text after its JSON receipt; `sequence.open` does not persist across CLI processes.
+Verified artifact generation (no approval):
+
+- `filmcraft.export_master` (`h264|hevc|prores|dnxhr|png|wav`) — offline media fails closed with the `offlineMedia` list and is never certified; independent FFprobe verification + sha256 receipt.
+- `filmcraft.export_captions` (srt/vtt/scc/mcc/stl/ttml/dfxp, parseability receipt) and `filmcraft.export_frame` (png/jpeg/tiff/bmp) — both sha256-receipted, overwrite-refusing; both target the saved-active sequence (the engine has no sequenceId parameter for them).
+
+Verified live on FilmCraft 0.20.1: `export` appends plain text after its JSON receipt; `sequence.open` does not persist across CLI processes; `timeline.place` returns `{clips, placed}` with video+linked-audio clip ids; `captions.newTrack`/`captions.add` return stable track/cue ids (C1/C2 labels re-assign in reverse creation order — only ids are stable handles); `essentialSound.autoMatch` refuses untyped clips (the tool classifies first and reports it); `tts.create` works with built-in basic voices without the big voice package.
 
 ## Approval gate
 

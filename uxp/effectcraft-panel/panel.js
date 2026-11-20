@@ -7,14 +7,22 @@
  * and the receipt log, never as uncaught exceptions. All timeouts live in the
  * shared client (5 s connect, 30 s calls, AbortController-based).
  *
+ * Cards: Engine, Tool console (command browser + run_command), Scene render,
+ * Comp render, Layer properties (gated: set_blend_mode / set_track_matte /
+ * set_parent / add_mask — one Run per row), Composition extras (gated:
+ * add_marker / set_work_area), Timeline interchange (gated: import_timeline),
+ * Export / queue (ungated: export_lottie / export_timeline / render_queue /
+ * list_fonts), Receipt log.
+ *
  * Approval flow: mutating calls build the approval locally via
  * MotionStudioMcpClient.createApproval — toolName is app-prefixed
  * ("effectcraft.run_command" etc.) and args are the SERVER's resolved
  * operation arguments (projectId, runId and timeoutMs: undefined included —
  * see approvedCall); the tool is then called with
  * { approval, projectId, runId, ...opArgs }. Tools the server does not gate
- * (render_scene, render_comp — sandboxed, verified artifact generation) call
- * the tool directly without an approval.
+ * (render_scene, render_comp, export_lottie, export_timeline, render_queue,
+ * list_fonts — sandboxed artifact generation / read-only) call the tool
+ * directly without an approval.
  */
 (function () {
     'use strict';
@@ -26,6 +34,21 @@
         runCommandTool: 'effectcraft.run_command',
         settingsPath: 'plugin-data:/motion-studio-settings.json'
     };
+
+    // Enum surfaces mirrored from packages/effectcraft-mcp-server/src/index.mjs
+    // — keep both sides in sync so the selects always send schema-valid values.
+    var BLEND_MODES = [
+        'Normal', 'Multiply', 'Screen', 'Overlay', 'Add', 'Lighten', 'Darken', 'ColorDodge', 'ColorBurn',
+        'HardLight', 'SoftLight', 'Difference', 'Exclusion', 'Hue', 'Saturation', 'Color', 'Luminosity',
+        'StencilAlpha', 'StencilLuma', 'SilhouetteAlpha', 'SilhouetteLuma', 'AlphaAdd', 'ClassicColorBurn',
+        'ClassicColorDodge', 'LinearBurn', 'LinearDodge', 'LinearLight', 'PinLight', 'VividLight', 'HardMix'
+    ];
+    var MASK_SHAPES = ['rect', 'ellipse', 'rounded', 'polygon', 'star'];
+    var TRACK_MATTE_KINDS = ['alpha', 'alphaInverted', 'luma', 'lumaInverted', 'preserve'];
+    var TIMELINE_EXPORT_FORMATS = ['fcpxml', 'xml', 'otio', 'edl'];
+    var TIMELINE_IMPORT_FORMATS = ['auto', 'fcpxml', 'xml', 'otio', 'edl', 'aaf', 'omf'];
+    var RENDER_QUEUE_FORMATS = ['h264', 'hevc', 'av1', 'prores', 'webm'];
+    var RENDER_QUEUE_RESOLUTIONS = ['full', 'half', 'third', 'quarter'];
 
     var mcp = (typeof window !== 'undefined' && window.MotionStudioMcpClient) ||
         (typeof globalThis !== 'undefined' && globalThis.MotionStudioMcpClient) ||
@@ -66,6 +89,12 @@
             select.appendChild(option);
         }
         return select;
+    }
+
+    function makeModeSelect(values) {
+        var options = [];
+        for (var i = 0; i < values.length; i++) options.push([values[i], values[i]]);
+        return makeSelect(options);
     }
 
     function makeField(labelText, input) {
@@ -675,9 +704,533 @@
         root.appendChild(card);
     }
 
+    // --------------------------------------------------- field parsing helpers
+    // Number inputs: blank means "not provided" — optional opArgs keys must
+    // stay present as undefined so the approval digest matches the server
+    // (the server destructures every field into its opArgs object, so a
+    // missing key and an undefined key digest identically there); anything
+    // else must parse to a finite number or NaN comes back for the caller to
+    // reject with a clear message BEFORE any call is made.
+    function parseNumberInput(input) {
+        var raw = String(input.value === undefined || input.value === null ? '' : input.value).trim();
+        if (!raw) return undefined;
+        var value = Number(raw);
+        return isFinite(value) ? value : NaN;
+    }
+
+    function parseJsonText(raw, what) {
+        try {
+            return { ok: true, value: JSON.parse(raw) };
+        } catch (err) {
+            return { ok: false, error: what + ' must be valid JSON: ' + (err && err.message ? err.message : String(err)) };
+        }
+    }
+
+    function isInteger(value) {
+        return isFinite(value) && value === Math.floor(value);
+    }
+
+    // ------------------------------------------ gated layer/comp/timeline cards
+    function buildLayerPropertiesCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Layer properties (gated)'));
+        card.appendChild(el('div', 'card-sub', 'Blend mode, track matte, parenting and masks on one layer of a saved comp — each row is its own gated mutation and needs a producer approval.'));
+        var projectPath = makeInput('text', 'path to .aep / .ecproj');
+        var compId = makeInput('text', 'comp id');
+        var layer = makeInput('text', 'layer name');
+        card.appendChild(makeField('projectPath', projectPath));
+        var idsRow = el('div', 'row');
+        var idsA = el('div');
+        var idsB = el('div');
+        idsA.appendChild(makeField('compId', compId));
+        idsB.appendChild(makeField('layer', layer));
+        idsRow.appendChild(idsA);
+        idsRow.appendChild(idsB);
+        card.appendChild(idsRow);
+
+        card.appendChild(el('div', 'field-label', 'Blend mode (effectcraft.set_blend_mode)'));
+        var blendMode = makeModeSelect(BLEND_MODES);
+        card.appendChild(makeField('mode', blendMode));
+        var blendResult = el('div');
+        var blendButton = el('button', 'primary', 'Set blend mode');
+        blendButton.addEventListener('click', guard('set_blend_mode', function () {
+            var path = projectPath.value.trim();
+            var comp = compId.value.trim();
+            var layerName = layer.value.trim();
+            if (!path || !comp || !layerName) {
+                showCardResult(blendResult, false, 'projectPath, compId and layer are required.');
+                return;
+            }
+            showCardResult(blendResult, null, 'set_blend_mode running…');
+            approvedCall('effectcraft.set_blend_mode', { projectPath: path, compId: comp, layer: layerName, mode: blendMode.value }).then(function (res) {
+                showReceiptResult(blendResult, res, ['mode', 'savePath']);
+            }, function (err) {
+                showCardResult(blendResult, false, err.message);
+            });
+        }));
+        card.appendChild(blendButton);
+        card.appendChild(blendResult);
+
+        card.appendChild(el('div', 'field-label', 'Track matte (effectcraft.set_track_matte)'));
+        var matteLayer = makeInput('text', 'matte layer name');
+        var matteKind = makeModeSelect(TRACK_MATTE_KINDS);
+        var matteRow = el('div', 'row');
+        var matteA = el('div');
+        var matteB = el('div');
+        matteA.appendChild(makeField('matteLayer', matteLayer));
+        matteB.appendChild(makeField('kind', matteKind));
+        matteRow.appendChild(matteA);
+        matteRow.appendChild(matteB);
+        card.appendChild(matteRow);
+        var matteResult = el('div');
+        var matteButton = el('button', 'primary', 'Set track matte');
+        matteButton.addEventListener('click', guard('set_track_matte', function () {
+            var path = projectPath.value.trim();
+            var comp = compId.value.trim();
+            var layerName = layer.value.trim();
+            var matte = matteLayer.value.trim();
+            if (!path || !comp || !layerName || !matte) {
+                showCardResult(matteResult, false, 'projectPath, compId, layer and matteLayer are required.');
+                return;
+            }
+            showCardResult(matteResult, null, 'set_track_matte running…');
+            approvedCall('effectcraft.set_track_matte', { projectPath: path, compId: comp, layer: layerName, matteLayer: matte, kind: matteKind.value }).then(function (res) {
+                showReceiptResult(matteResult, res, ['matteLayer', 'kind', 'savePath']);
+            }, function (err) {
+                showCardResult(matteResult, false, err.message);
+            });
+        }));
+        card.appendChild(matteButton);
+        card.appendChild(matteResult);
+
+        card.appendChild(el('div', 'field-label', 'Parent (effectcraft.set_parent)'));
+        var parentLayer = makeInput('text', 'parent layer name');
+        var compensateRow = el('div', 'checkbox-row');
+        var compensate = el('input');
+        compensate.type = 'checkbox';
+        compensateRow.appendChild(compensate);
+        compensateRow.appendChild(el('label', null, 'compensate for the transform (the layer keeps its position)'));
+        card.appendChild(makeField('parentLayer', parentLayer));
+        card.appendChild(compensateRow);
+        var parentResult = el('div');
+        var parentButton = el('button', 'primary', 'Set parent');
+        parentButton.addEventListener('click', guard('set_parent', function () {
+            var path = projectPath.value.trim();
+            var comp = compId.value.trim();
+            var layerName = layer.value.trim();
+            var parentName = parentLayer.value.trim();
+            if (!path || !comp || !layerName || !parentName) {
+                showCardResult(parentResult, false, 'projectPath, compId, layer and parentLayer are required.');
+                return;
+            }
+            showCardResult(parentResult, null, 'set_parent running…');
+            approvedCall('effectcraft.set_parent', { projectPath: path, compId: comp, layer: layerName, parentLayer: parentName, compensate: compensate.checked === true }).then(function (res) {
+                showReceiptResult(parentResult, res, ['parentLayer', 'compensate', 'savePath']);
+            }, function (err) {
+                showCardResult(parentResult, false, err.message);
+            });
+        }));
+        card.appendChild(parentButton);
+        card.appendChild(parentResult);
+
+        card.appendChild(el('div', 'field-label', 'Mask (effectcraft.add_mask)'));
+        var maskShape = makeModeSelect(MASK_SHAPES);
+        var maskMode = makeInput('text', 'mask mode (optional, max 40 chars)');
+        var maskRow = el('div', 'row');
+        var maskA = el('div');
+        var maskB = el('div');
+        maskA.appendChild(makeField('shape', maskShape));
+        maskB.appendChild(makeField('mode (optional)', maskMode));
+        maskRow.appendChild(maskA);
+        maskRow.appendChild(maskB);
+        card.appendChild(maskRow);
+        var maskRect = makeInput('text', '[x, y, w, h] for rect/ellipse/rounded/star');
+        card.appendChild(makeField('rect (JSON, exactly one of rect / vertices)', maskRect));
+        var maskRoundness = makeInput('number', 'roundness (optional, >= 0)');
+        card.appendChild(makeField('roundness (optional)', maskRoundness));
+        var maskVertices = el('textarea');
+        maskVertices.placeholder = '[[x, y], …] for polygon/star (3–200 points)';
+        card.appendChild(makeField('vertices (JSON, exactly one of rect / vertices)', maskVertices));
+        var maskResult = el('div');
+        var maskButton = el('button', 'primary', 'Add mask');
+        maskButton.addEventListener('click', guard('add_mask', function () {
+            var path = projectPath.value.trim();
+            var comp = compId.value.trim();
+            var layerName = layer.value.trim();
+            if (!path || !comp || !layerName) {
+                showCardResult(maskResult, false, 'projectPath, compId and layer are required.');
+                return;
+            }
+            var rect = undefined;
+            var rectRaw = maskRect.value.trim();
+            if (rectRaw) {
+                var parsedRect = parseJsonText(rectRaw, 'rect');
+                if (!parsedRect.ok) {
+                    showCardResult(maskResult, false, parsedRect.error);
+                    return;
+                }
+                var rectValue = parsedRect.value;
+                if (!Array.isArray(rectValue) || rectValue.length !== 4 || !rectValue.every(function (n) { return typeof n === 'number' && isFinite(n); })) {
+                    showCardResult(maskResult, false, 'rect must be a JSON array of four numbers [x, y, w, h].');
+                    return;
+                }
+                rect = rectValue;
+            }
+            var vertices = undefined;
+            var verticesRaw = maskVertices.value.trim();
+            if (verticesRaw) {
+                var parsedVertices = parseJsonText(verticesRaw, 'vertices');
+                if (!parsedVertices.ok) {
+                    showCardResult(maskResult, false, parsedVertices.error);
+                    return;
+                }
+                var points = parsedVertices.value;
+                var pointsOk = Array.isArray(points) && points.length >= 3 && points.length <= 200 && points.every(function (point) {
+                    return Array.isArray(point) && point.length === 2 && point.every(function (n) { return typeof n === 'number' && isFinite(n); });
+                });
+                if (!pointsOk) {
+                    showCardResult(maskResult, false, 'vertices must be a JSON array of 3–200 [x, y] point pairs.');
+                    return;
+                }
+                vertices = points;
+            }
+            if (Boolean(rect) === Boolean(vertices)) {
+                showCardResult(maskResult, false, 'Provide exactly one of rect (JSON [x, y, w, h]) or vertices (JSON [[x, y], …]).');
+                return;
+            }
+            var roundness = parseNumberInput(maskRoundness);
+            if (roundness !== undefined && (isNaN(roundness) || roundness < 0)) {
+                showCardResult(maskResult, false, 'roundness must be a number >= 0.');
+                return;
+            }
+            var maskModeValue = maskMode.value.trim() || undefined;
+            if (maskModeValue && maskModeValue.length > 40) {
+                showCardResult(maskResult, false, 'mode must be at most 40 characters.');
+                return;
+            }
+            showCardResult(maskResult, null, 'add_mask running…');
+            approvedCall('effectcraft.add_mask', { projectPath: path, compId: comp, layer: layerName, shape: maskShape.value, rect: rect, roundness: roundness, vertices: vertices, mode: maskModeValue }).then(function (res) {
+                showReceiptResult(maskResult, res, ['shape', 'path', 'savePath']);
+            }, function (err) {
+                showCardResult(maskResult, false, err.message);
+            });
+        }));
+        card.appendChild(maskButton);
+        card.appendChild(maskResult);
+        root.appendChild(card);
+    }
+
+    function buildCompExtrasCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Composition extras (gated)'));
+        card.appendChild(el('div', 'card-sub', 'Composition markers and the work area on a saved comp — both rows are gated mutations needing a producer approval.'));
+        var projectPath = makeInput('text', 'path to .aep / .ecproj');
+        var compId = makeInput('text', 'comp id');
+        card.appendChild(makeField('projectPath', projectPath));
+        card.appendChild(makeField('compId', compId));
+
+        card.appendChild(el('div', 'field-label', 'Marker (effectcraft.add_marker)'));
+        var seconds = makeInput('number', 'seconds (0–86400)');
+        var comment = makeInput('text', 'comment (optional, max 500)');
+        var markerRow = el('div', 'row');
+        var markerA = el('div');
+        var markerB = el('div');
+        markerA.appendChild(makeField('seconds', seconds));
+        markerB.appendChild(makeField('comment (optional)', comment));
+        markerRow.appendChild(markerA);
+        markerRow.appendChild(markerB);
+        card.appendChild(markerRow);
+        var markerResult = el('div');
+        var markerButton = el('button', 'primary', 'Add marker');
+        markerButton.addEventListener('click', guard('add_marker', function () {
+            var path = projectPath.value.trim();
+            var comp = compId.value.trim();
+            if (!path || !comp) {
+                showCardResult(markerResult, false, 'projectPath and compId are required.');
+                return;
+            }
+            var atSeconds = parseNumberInput(seconds);
+            if (atSeconds === undefined || isNaN(atSeconds) || atSeconds < 0 || atSeconds > 86400) {
+                showCardResult(markerResult, false, 'seconds is required and must be between 0 and 86400.');
+                return;
+            }
+            var commentValue = comment.value.trim() || undefined;
+            if (commentValue && commentValue.length > 500) {
+                showCardResult(markerResult, false, 'comment must be at most 500 characters.');
+                return;
+            }
+            showCardResult(markerResult, null, 'add_marker running…');
+            approvedCall('effectcraft.add_marker', { projectPath: path, compId: comp, seconds: atSeconds, comment: commentValue }).then(function (res) {
+                showReceiptResult(markerResult, res, ['seconds', 'comment', 'savePath']);
+            }, function (err) {
+                showCardResult(markerResult, false, err.message);
+            });
+        }));
+        card.appendChild(markerButton);
+        card.appendChild(markerResult);
+
+        card.appendChild(el('div', 'field-label', 'Work area (effectcraft.set_work_area)'));
+        var start = makeInput('number', 'start seconds');
+        var end = makeInput('number', 'end seconds');
+        var workRow = el('div', 'row');
+        var workA = el('div');
+        var workB = el('div');
+        workA.appendChild(makeField('start', start));
+        workB.appendChild(makeField('end', end));
+        workRow.appendChild(workA);
+        workRow.appendChild(workB);
+        card.appendChild(workRow);
+        var workResult = el('div');
+        var workButton = el('button', 'primary', 'Set work area');
+        workButton.addEventListener('click', guard('set_work_area', function () {
+            var path = projectPath.value.trim();
+            var comp = compId.value.trim();
+            if (!path || !comp) {
+                showCardResult(workResult, false, 'projectPath and compId are required.');
+                return;
+            }
+            var startSeconds = parseNumberInput(start);
+            if (startSeconds === undefined || isNaN(startSeconds) || startSeconds < 0) {
+                showCardResult(workResult, false, 'start is required and must be a number >= 0.');
+                return;
+            }
+            var endSeconds = parseNumberInput(end);
+            if (endSeconds === undefined || isNaN(endSeconds) || endSeconds < 0) {
+                showCardResult(workResult, false, 'end is required and must be a number >= 0.');
+                return;
+            }
+            if (endSeconds <= startSeconds) {
+                showCardResult(workResult, false, 'end must be greater than start.');
+                return;
+            }
+            showCardResult(workResult, null, 'set_work_area running…');
+            approvedCall('effectcraft.set_work_area', { projectPath: path, compId: comp, start: startSeconds, end: endSeconds }).then(function (res) {
+                showReceiptResult(workResult, res, ['start', 'end', 'savePath']);
+            }, function (err) {
+                showCardResult(workResult, false, err.message);
+            });
+        }));
+        card.appendChild(workButton);
+        card.appendChild(workResult);
+        root.appendChild(card);
+    }
+
+    function buildTimelineInterchangeCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Timeline interchange (gated)'));
+        card.appendChild(el('div', 'card-sub', 'Import a timeline interchange file (.xml/.fcpxml/.otio/.edl/.aaf/.omf) into a saved comp — gated mutation, producer approval required.'));
+        var projectPath = makeInput('text', 'path to .aep / .ecproj');
+        var timelinePath = makeInput('text', 'path to the timeline file');
+        var format = makeModeSelect(TIMELINE_IMPORT_FORMATS);
+        card.appendChild(makeField('projectPath', projectPath));
+        card.appendChild(makeField('timelinePath', timelinePath));
+        card.appendChild(makeField('format', format));
+        var runButton = el('button', 'primary', 'Import timeline');
+        var result = el('div');
+        runButton.addEventListener('click', guard('import_timeline', function () {
+            var path = projectPath.value.trim();
+            var timeline = timelinePath.value.trim();
+            if (!path || !timeline) {
+                showCardResult(result, false, 'projectPath and timelinePath are required.');
+                return;
+            }
+            showCardResult(result, null, 'import_timeline running…');
+            approvedCall('effectcraft.import_timeline', { projectPath: path, timelinePath: timeline, format: format.value }).then(function (res) {
+                showReceiptResult(result, res, ['timelinePath', 'format', 'compsCreated']);
+            }, function (err) {
+                showCardResult(result, false, err.message);
+            });
+        }));
+        card.appendChild(runButton);
+        card.appendChild(result);
+        root.appendChild(card);
+    }
+
+    function validateQueueJob(job, index) {
+        var where = 'jobs[' + index + ']';
+        if (!job || typeof job !== 'object' || Array.isArray(job)) return where + ' must be a JSON object.';
+        if (typeof job.compId !== 'string' || !job.compId.trim()) return where + '.compId must be a non-empty string.';
+        if (typeof job.outputPath !== 'string' || !job.outputPath.trim()) return where + '.outputPath must be a non-empty string.';
+        if (job.format !== undefined && RENDER_QUEUE_FORMATS.indexOf(job.format) === -1) return where + '.format must be one of: ' + RENDER_QUEUE_FORMATS.join(', ') + '.';
+        if (job.resolution !== undefined && RENDER_QUEUE_RESOLUTIONS.indexOf(job.resolution) === -1) return where + '.resolution must be one of: ' + RENDER_QUEUE_RESOLUTIONS.join(', ') + '.';
+        return null;
+    }
+
+    // The gate digests the zod-parsed payload: unknown keys are stripped and
+    // missing optional keys never materialize, so nested objects are rebuilt
+    // with exactly the keys the user provided (present-as-undefined is only
+    // correct at the TOP level of opArgs, where the server destructures every
+    // field into its digest object).
+    function normalizeQueueJob(job) {
+        var normalized = { compId: job.compId, outputPath: job.outputPath };
+        if (job.format !== undefined) normalized.format = job.format;
+        if (job.resolution !== undefined) normalized.resolution = job.resolution;
+        return normalized;
+    }
+
+    function buildExportQueueCard(root) {
+        var card = el('div', 'card');
+        card.appendChild(el('h3', 'card-title', 'Export / queue (ungated)'));
+        card.appendChild(el('div', 'card-sub', 'Sandboxed artifact generation and read-only lookups — these run without a producer approval.'));
+        var projectPath = makeInput('text', 'path to .aep / .ecproj');
+        card.appendChild(makeField('projectPath', projectPath));
+
+        card.appendChild(el('div', 'field-label', 'Lottie (effectcraft.export_lottie)'));
+        var lottieComp = makeInput('text', 'comp id');
+        var lottieOutput = makeInput('text', 'output .json / .lottie path');
+        var lottieFlagsRow = el('div', 'row');
+        var expressionsRow = el('div', 'checkbox-row');
+        var includeExpressions = el('input');
+        includeExpressions.type = 'checkbox';
+        expressionsRow.appendChild(includeExpressions);
+        expressionsRow.appendChild(el('label', null, 'includeExpressions'));
+        var shapesRow = el('div', 'checkbox-row');
+        var textAsShapes = el('input');
+        textAsShapes.type = 'checkbox';
+        shapesRow.appendChild(textAsShapes);
+        shapesRow.appendChild(el('label', null, 'textAsShapes'));
+        lottieFlagsRow.appendChild(expressionsRow);
+        lottieFlagsRow.appendChild(shapesRow);
+        card.appendChild(makeField('compId', lottieComp));
+        card.appendChild(makeField('outputPath', lottieOutput));
+        card.appendChild(lottieFlagsRow);
+        var lottieResult = el('div');
+        var lottieButton = el('button', 'primary', 'Export Lottie');
+        lottieButton.addEventListener('click', guard('export_lottie', function () {
+            var path = projectPath.value.trim();
+            var comp = lottieComp.value.trim();
+            var output = lottieOutput.value.trim();
+            if (!path || !comp || !output) {
+                showCardResult(lottieResult, false, 'projectPath, compId and outputPath are required.');
+                return;
+            }
+            if (!/\.(json|lottie)$/i.test(output)) {
+                showCardResult(lottieResult, false, 'outputPath must end in .json or .lottie: ' + output);
+                return;
+            }
+            showCardResult(lottieResult, null, 'export_lottie running…');
+            callToolTracked('effectcraft.export_lottie', {
+                projectPath: path,
+                compId: comp,
+                outputPath: output,
+                includeExpressions: includeExpressions.checked === true,
+                textAsShapes: textAsShapes.checked === true
+            }).then(function (res) {
+                showReceiptResult(lottieResult, res, ['outputPath', 'frames', 'layers']);
+            }, function (err) {
+                showCardResult(lottieResult, false, err.message);
+            });
+        }));
+        card.appendChild(lottieButton);
+        card.appendChild(lottieResult);
+
+        card.appendChild(el('div', 'field-label', 'Timeline export (effectcraft.export_timeline)'));
+        var tlComp = makeInput('text', 'comp id (optional)');
+        var tlOutput = makeInput('text', 'output path');
+        var tlFormat = makeModeSelect(TIMELINE_EXPORT_FORMATS);
+        card.appendChild(makeField('compId (optional)', tlComp));
+        card.appendChild(makeField('outputPath', tlOutput));
+        card.appendChild(makeField('format', tlFormat));
+        var tlResult = el('div');
+        var tlButton = el('button', 'primary', 'Export timeline');
+        tlButton.addEventListener('click', guard('export_timeline', function () {
+            var path = projectPath.value.trim();
+            var output = tlOutput.value.trim();
+            if (!path || !output) {
+                showCardResult(tlResult, false, 'projectPath and outputPath are required.');
+                return;
+            }
+            showCardResult(tlResult, null, 'export_timeline running…');
+            callToolTracked('effectcraft.export_timeline', {
+                projectPath: path,
+                compId: tlComp.value.trim() || undefined,
+                outputPath: output,
+                format: tlFormat.value
+            }).then(function (res) {
+                showReceiptResult(tlResult, res, ['outputPath', 'format']);
+            }, function (err) {
+                showCardResult(tlResult, false, err.message);
+            });
+        }));
+        card.appendChild(tlButton);
+        card.appendChild(tlResult);
+
+        card.appendChild(el('div', 'field-label', 'Render queue (effectcraft.render_queue)'));
+        var queueJobs = el('textarea');
+        queueJobs.placeholder = '[{"compId": "main", "outputPath": "D:/out/main.mp4", "format": "h264", "resolution": "full"}]';
+        card.appendChild(makeField('jobs (JSON array, 1–10, validated before send)', queueJobs));
+        var queueResult = el('div');
+        var queueButton = el('button', 'primary', 'Render queue');
+        queueButton.addEventListener('click', guard('render_queue', function () {
+            var path = projectPath.value.trim();
+            if (!path) {
+                showCardResult(queueResult, false, 'projectPath is required.');
+                return;
+            }
+            var jobsRaw = queueJobs.value.trim();
+            if (!jobsRaw) {
+                showCardResult(queueResult, false, 'jobs is required: a JSON array of 1–10 {compId, outputPath} job objects.');
+                return;
+            }
+            var parsedJobs = parseJsonText(jobsRaw, 'jobs');
+            if (!parsedJobs.ok) {
+                showCardResult(queueResult, false, parsedJobs.error);
+                return;
+            }
+            var jobs = parsedJobs.value;
+            if (!Array.isArray(jobs) || jobs.length < 1 || jobs.length > 10) {
+                showCardResult(queueResult, false, 'jobs must be a JSON array of 1–10 {compId, outputPath} job objects.');
+                return;
+            }
+            var normalizedJobs = [];
+            for (var i = 0; i < jobs.length; i++) {
+                var jobError = validateQueueJob(jobs[i], i);
+                if (jobError) {
+                    showCardResult(queueResult, false, jobError);
+                    return;
+                }
+                normalizedJobs.push(normalizeQueueJob(jobs[i]));
+            }
+            showCardResult(queueResult, null, 'render_queue running…');
+            callToolTracked('effectcraft.render_queue', { projectPath: path, jobs: normalizedJobs }).then(function (res) {
+                showReceiptResult(queueResult, res, ['allVerified']);
+            }, function (err) {
+                showCardResult(queueResult, false, err.message);
+            });
+        }));
+        card.appendChild(queueButton);
+        card.appendChild(queueResult);
+
+        card.appendChild(el('div', 'field-label', 'Font catalog (effectcraft.list_fonts, read-only)'));
+        var fontsQuery = makeInput('text', 'substring query (optional, max 120)');
+        card.appendChild(makeField('query (optional)', fontsQuery));
+        var fontsResult = el('div');
+        var fontsButton = el('button', null, 'List fonts');
+        fontsButton.addEventListener('click', guard('list_fonts', function () {
+            var query = fontsQuery.value.trim() || undefined;
+            if (query && query.length > 120) {
+                showCardResult(fontsResult, false, 'query must be at most 120 characters.');
+                return;
+            }
+            showCardResult(fontsResult, null, 'list_fonts running…');
+            callToolTracked('effectcraft.list_fonts', { query: query }).then(function (res) {
+                showReceiptResult(fontsResult, res, ['query', 'count']);
+            }, function (err) {
+                showCardResult(fontsResult, false, err.message);
+            });
+        }));
+        card.appendChild(fontsButton);
+        card.appendChild(fontsResult);
+        root.appendChild(card);
+    }
+
     function buildPanelCards(root) {
         buildSceneRenderCard(root);
         buildCompRenderCard(root);
+        buildLayerPropertiesCard(root);
+        buildCompExtrasCard(root);
+        buildTimelineInterchangeCard(root);
+        buildExportQueueCard(root);
     }
 
     // ------------------------------------------------- shared result helpers

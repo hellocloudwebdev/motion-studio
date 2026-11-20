@@ -401,10 +401,14 @@ test('both panel.js files build their UI, browse commands and run an approved co
     const restoreDom = installFakeDom(require(SHARED_PATH));
     t.after(restoreDom);
     const panelSpecs = [
-        ['effectcraft', require(EFFECTCRAFT_PANEL_JS), 'effectcraft.run_command', ['Render scene', 'Render comp']],
-        ['filmcraft', require(FILMCRAFT_PANEL_JS), 'filmcraft.run_command', ['Import interchange', 'Inspect project', 'Inspect sequence', 'Export master', 'Probe media']]
+        ['effectcraft', require(EFFECTCRAFT_PANEL_JS), 'effectcraft.run_command',
+            ['Render scene', 'Render comp', 'Set blend mode', 'Set track matte', 'Set parent', 'Add mask', 'Add marker', 'Set work area', 'Import timeline', 'Export Lottie', 'Export timeline', 'Render queue', 'List fonts'],
+            ['Layer properties (gated)', 'Composition extras (gated)', 'Timeline interchange (gated)', 'Export / queue (ungated)']],
+        ['filmcraft', require(FILMCRAFT_PANEL_JS), 'filmcraft.run_command',
+            ['Import interchange', 'Inspect project', 'Inspect sequence', 'Export master', 'Probe media', 'Export frame', 'Add captions', 'Import captions', 'Export captions', 'Inspect mixer', 'Set audio gain', 'Auto match loudness', 'Generate ducking', 'List TTS voices', 'Download voices', 'Create narration', 'Add markers', 'Speed clip', 'Detect scene cuts'],
+            ['Captions', 'Audio mix', 'Narration (TTS)', 'Markers & timing']]
     ];
-    for (const [name, panelModule, runTool, extraButtons] of panelSpecs) {
+    for (const [name, panelModule, runTool, extraButtons, newCardTitles] of panelSpecs) {
         assert.ok(panelModule.panels && panelModule.panels.main && typeof panelModule.panels.main.create === 'function', name + ': panels.main.create exported');
         const root = new FakeNode('div');
         panelModule.panels.main.create(root);
@@ -412,6 +416,10 @@ test('both panel.js files build their UI, browse commands and run an approved co
         const buttons = findAll(root, node => node.tagName === 'button').map(node => node.textContent);
         for (const expected of ['Connect', 'Disconnect', 'Clear saved settings', 'Refresh', 'Run', ...extraButtons]) {
             assert.ok(buttons.includes(expected), name + ': button "' + expected + '" present (got: ' + buttons.join(', ') + ')');
+        }
+        const cardTitles = findAll(root, node => node.tagName === 'h3').map(node => node.textContent);
+        for (const expected of newCardTitles) {
+            assert.ok(cardTitles.includes(expected), name + ': card "' + expected + '" present (got: ' + cardTitles.join(' | ') + ')');
         }
 
         // Connect to the live fixture through the UI.
@@ -525,6 +533,105 @@ test('panel-minted approvals validate against the real server approval gates', a
         assert.equal(refused.valid, false, toolName + ': tampered operation args are refused');
     }
 });
+
+test('new gated cards digest the exact server opArgs shape (blend mode row + audio gain row)', async (t) => {
+    const fixture = await startFixture();
+    t.after(() => fixture.close());
+    const restoreDom = installFakeDom(require(SHARED_PATH));
+    t.after(restoreDom);
+
+    // --- EffectCraft: the blend-mode row of the "Layer properties (gated)" card ---
+    const ecRoot = new FakeNode('div');
+    require(EFFECTCRAFT_PANEL_JS).panels.main.create(ecRoot);
+    emulateSelectDefaults(ecRoot);
+    const ecUrlInput = findAll(ecRoot, node => node.tagName === 'input' && node.placeholder && node.placeholder.indexOf('/mcp') !== -1)[0];
+    assert.ok(ecUrlInput, 'effectcraft: server URL field present');
+    ecUrlInput.value = fixture.url;
+    findAll(ecRoot, node => node.tagName === 'button' && node.textContent === 'Connect')[0].dispatch('click', {});
+    await waitMs(250);
+    const ecPill = findAll(ecRoot, node => node.className.indexOf('status-pill') !== -1)[0];
+    assert.match(ecPill.className, /is-connected/, 'effectcraft: connected to the fixture');
+
+    fillApprovalIdentity(ecRoot, 'p1', 'r1', ' producer ');
+    // Several cards share the projectPath/compId placeholders — fill every
+    // occurrence with the same value; only the blend-mode row is driven.
+    for (const input of findAll(ecRoot, node => node.tagName === 'input' && node.placeholder === 'path to .aep / .ecproj')) input.value = 'D:/motions/demo.ecproj';
+    for (const input of findAll(ecRoot, node => node.tagName === 'input' && node.placeholder === 'comp id')) input.value = 'main-comp';
+    const layerInput = findAll(ecRoot, node => node.tagName === 'input' && node.placeholder === 'layer name')[0];
+    assert.ok(layerInput, 'effectcraft: layer field present in the Layer properties card');
+    layerInput.value = 'Layer 1';
+    findAll(ecRoot, node => node.tagName === 'button' && node.textContent === 'Set blend mode')[0].dispatch('click', {});
+    await waitMs(250);
+
+    const ecReceipt = parseLatestCallReceipt(ecRoot);
+    assert.ok(ecReceipt, 'effectcraft: blend-mode call receipt logged');
+    assert.equal(ecReceipt.result.data.tool, 'effectcraft.set_blend_mode', 'effectcraft: set_blend_mode receipt newest-first');
+    const ecEchoed = ecReceipt.result.data.echoed;
+    // Exactly the server's resolved opArgs for effectcraft.set_blend_mode
+    // (projectPath included — the gate digests the destructured object):
+    // { projectId, runId, projectPath, compId, layer, mode, timeoutMs }.
+    const ecOpArgs = { projectId: 'p1', runId: 'r1', projectPath: 'D:/motions/demo.ecproj', compId: 'main-comp', layer: 'Layer 1', mode: 'Normal', timeoutMs: undefined };
+    assert.equal(ecEchoed.approval.argumentsSha256, createHash('sha256').update(stableStringify(ecOpArgs)).digest('hex'), 'effectcraft: digest covers exactly the server opArgs (timeoutMs present as undefined)');
+    assert.ok(!('timeoutMs' in ecEchoed), 'effectcraft: undefined timeoutMs is absent from the SENT JSON but present in the digest input');
+    assert.equal(ecEchoed.projectId, 'p1', 'effectcraft: projectId travels with the tool call');
+    assert.equal(ecEchoed.mode, 'Normal', 'effectcraft: blend mode select value sent verbatim');
+    assert.equal(ecEchoed.approval.approvedBy, 'producer', 'effectcraft: approvedBy trimmed into the approval');
+
+    // --- FilmCraft: the audio-gain row of the "Audio mix" card ---
+    const fcRoot = new FakeNode('div');
+    require(FILMCRAFT_PANEL_JS).panels.main.create(fcRoot);
+    emulateSelectDefaults(fcRoot);
+    const fcUrlInput = findAll(fcRoot, node => node.tagName === 'input' && node.placeholder && node.placeholder.indexOf('/mcp') !== -1)[0];
+    assert.ok(fcUrlInput, 'filmcraft: server URL field present');
+    fcUrlInput.value = fixture.url;
+    findAll(fcRoot, node => node.tagName === 'button' && node.textContent === 'Connect')[0].dispatch('click', {});
+    await waitMs(250);
+    const fcPill = findAll(fcRoot, node => node.className.indexOf('status-pill') !== -1)[0];
+    assert.match(fcPill.className, /is-connected/, 'filmcraft: connected to the fixture');
+
+    fillApprovalIdentity(fcRoot, 'p1', 'r1', ' producer ');
+    for (const input of findAll(fcRoot, node => node.tagName === 'input' && node.placeholder === 'path to .prproj / .fcproj')) input.value = 'D:/motions/demo.fcproj';
+    const ordinalInput = findAll(fcRoot, node => node.tagName === 'input' && node.placeholder === 'clip ordinal (1 = first audio clip)')[0];
+    assert.ok(ordinalInput, 'filmcraft: clipOrdinal field present in the Audio mix card');
+    ordinalInput.value = '1';
+    const dbInput = findAll(fcRoot, node => node.tagName === 'input' && node.placeholder === 'gain dB (-96 to 24)')[0];
+    assert.ok(dbInput, 'filmcraft: db field present in the Audio mix card');
+    dbInput.value = '-3';
+    // clipId stays blank: the optional key must be absent from the SENT JSON
+    // while still digesting as literal "undefined".
+    findAll(fcRoot, node => node.tagName === 'button' && node.textContent === 'Set audio gain')[0].dispatch('click', {});
+    await waitMs(250);
+
+    const fcReceipt = parseLatestCallReceipt(fcRoot);
+    assert.ok(fcReceipt, 'filmcraft: audio gain call receipt logged');
+    assert.equal(fcReceipt.result.data.tool, 'filmcraft.set_clip_audio_gain', 'filmcraft: set_clip_audio_gain receipt newest-first');
+    const fcEchoed = fcReceipt.result.data.echoed;
+    // Exactly the server's resolved opArgs for filmcraft.set_clip_audio_gain:
+    // { projectId, runId, projectPath, clipOrdinal, clipId, mode, db, timeoutMs }.
+    const fcOpArgs = { projectId: 'p1', runId: 'r1', projectPath: 'D:/motions/demo.fcproj', clipOrdinal: 1, clipId: undefined, mode: 'set', db: -3, timeoutMs: undefined };
+    assert.equal(fcEchoed.approval.argumentsSha256, createHash('sha256').update(stableStringify(fcOpArgs)).digest('hex'), 'filmcraft: digest covers exactly the server opArgs (clipId/timeoutMs present as undefined)');
+    assert.ok(!('clipId' in fcEchoed), 'filmcraft: blank optional clipId is absent from the SENT JSON but present in the digest input');
+    assert.ok(!('timeoutMs' in fcEchoed), 'filmcraft: undefined timeoutMs is absent from the SENT JSON but present in the digest input');
+    assert.equal(fcEchoed.clipOrdinal, 1, 'filmcraft: clipOrdinal parsed to a number');
+    assert.equal(fcEchoed.db, -3, 'filmcraft: db parsed to a number');
+    assert.equal(fcEchoed.mode, 'set', 'filmcraft: gain mode select default sent verbatim');
+    assert.equal(fcEchoed.approval.toolName, 'filmcraft.set_clip_audio_gain', 'filmcraft: approval toolName is app-prefixed');
+});
+
+function emulateSelectDefaults(root) {
+    // Real DOM selects report the first option as their value; FakeNode starts
+    // at '' — emulate the default selection before driving card handlers.
+    for (const select of findAll(root, node => node.tagName === 'select')) {
+        select.value = select.children.length ? select.children[0].value : '';
+    }
+}
+
+function fillApprovalIdentity(root, projectId, runId, approvedBy) {
+    const textInputs = findAll(root, node => node.tagName === 'input' && node.type === 'text');
+    textInputs.find(node => node.placeholder === 'project id').value = projectId;
+    textInputs.find(node => node.placeholder === 'run id').value = runId;
+    textInputs.find(node => node.placeholder === 'approved by').value = approvedBy;
+}
 
 function parseLatestCallReceipt(root) {
     // Receipt details start collapsed: class is "receipt-detail collapsed".
