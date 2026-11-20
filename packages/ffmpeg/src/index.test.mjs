@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { buildTranscodePlan, buildProbePlan, buildFinalizationPlan, parseProbeOutput, renderCaptions, runMediaCommand, finalizeMedia, buildSceneAssemblyPlan, normalizeAssemblyAudioInputs, assembleScenes, countVideoFrames } from './index.mjs';
@@ -246,5 +247,57 @@ test('empty audioInputs keeps the video-only assembly contract', async () => {
     assert.deepEqual(receipt.audioInputs, []);
     assert.equal(receipt.media.hasAudio, false);
     assert.equal(receipt.frameCount, 30);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('overlay plans validate boxes, positions, opacity and timing windows before any process', () => {
+  const base = { input: 'source.mp4', output: 'final.mp4', width: 320, height: 180, fps: 30, durationSeconds: 2 };
+  const logoPlan = buildFinalizationPlan({ ...base, overlays: [{ path: 'logo.png', position: 'top-right', width: 64, height: 32, opacity: 0.5, kind: 'logo' }] });
+  assert.equal(logoPlan.inputs.length, 2);
+  assert.equal(logoPlan.overlays[0].kind, 'logo');
+  assert.equal(logoPlan.overlays[0].box.width, 64);
+  const filters = logoPlan.args[logoPlan.args.indexOf('-filter_complex') + 1];
+  assert.match(filters, /\[1:v\]scale=64:32:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=0\.500\[ov0pre\]/);
+  assert.match(filters, /overlay=x=248:y=8:eof_action=repeat\[vout\]/);
+  const timed = buildFinalizationPlan({ ...base, overlays: [{ path: 'endcard.png', box: { x: 0, y: 0, width: 320, height: 180 }, startSeconds: 1, endSeconds: 2 }] });
+  const timedFilters = timed.args[timed.args.indexOf('-filter_complex') + 1];
+  assert.match(timedFilters, /enable='between\(t,1\.000,2\.000\)'/);
+  assert.throws(() => buildFinalizationPlan({ ...base, overlays: [{ path: 'logo.png', box: { x: 300, y: 0, width: 64, height: 64 } }] }), /must fit inside/);
+  assert.throws(() => buildFinalizationPlan({ ...base, overlays: [{ path: 'logo.png', position: 'middle' }] }), /position must be one of/);
+  assert.throws(() => buildFinalizationPlan({ ...base, overlays: [{ path: 'logo.png', opacity: 2 }] }), /opacity must be between 0 and 1/);
+  assert.throws(() => buildFinalizationPlan({ ...base, overlays: [{ path: 'logo.png', startSeconds: 2, endSeconds: 1 }] }), /endSeconds must be greater/);
+});
+
+// Raw pixel reads bypass runMediaCommand's utf8 stdout decoding — binary
+// rawvideo must be collected as Buffers. The crop is 2x2 because a 1x1 crop
+// of a yuv420p frame collapses the subsampled chroma plane to zero size.
+function rawPixel(file, x, y) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('ffmpeg', ['-v', 'error', '-ss', '1', '-i', file, '-vf', 'crop=2:2:' + x + ':' + y, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = [];
+    child.stdout.on('data', chunk => chunks.push(chunk));
+    child.once('error', reject);
+    child.once('close', code => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error('FFmpeg could not crop ' + file)));
+  });
+}
+
+test('a burned logo overlay lands in the requested corner of a verified master', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'ffmpeg-overlay-'));
+  try {
+    const source = path.join(root, 'source.mp4');
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', source]);
+    const logo = path.join(root, 'logo.png');
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:size=64x32:d=1', '-frames:v', '1', '-update', '1', logo]);
+    const plain = await finalizeMedia({ input: source, output: path.join(root, 'plain.mp4'), width: 320, height: 180, fps: 30, durationSeconds: 2 });
+    const withLogo = await finalizeMedia({ input: source, output: path.join(root, 'with-logo.mp4'), width: 320, height: 180, fps: 30, durationSeconds: 2, overlays: [{ path: logo, position: 'top-right', width: 64, height: 32, kind: 'logo' }] });
+    assert.equal(withLogo.verified, true);
+    assert.equal(withLogo.overlays.length, 1);
+    // The overlay box centre (x=280, y=24) must now be the red logo; the
+    // testsrc2 pattern underneath at the same coordinate is not solid red.
+    const overlaidPixel = await rawPixel(withLogo.output, 280, 24);
+    assert.equal(overlaidPixel.length, 12);
+    assert.ok(overlaidPixel[0] > 200 && overlaidPixel[1] < 60 && overlaidPixel[2] < 60, 'the overlay box centre is the red logo: ' + [...overlaidPixel.subarray(0, 3)].join(','));
+    const plainPixel = await rawPixel(plain.output, 280, 24);
+    assert.ok(!(plainPixel[0] > 200 && plainPixel[1] < 60 && plainPixel[2] < 60), 'the plain master is not red at the same coordinate');
   } finally { await rm(root, { recursive: true, force: true }); }
 });

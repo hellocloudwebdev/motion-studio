@@ -115,13 +115,27 @@ async function resolveAssetFile(sourceProjectDir, uri) {
   return resolved;
 }
 
-export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], variantSources = {}, engineProjects = [], signal } = {}) {
+export async function buildDeliveryPackage({ project, projectFile, sourceVideo, projectRoot, outputRoot, renderManifest, editorialAssembly = null, operationHistory = [], audioInputs = [], variantSources = {}, engineProjects = [], overlays = [], signal } = {}) {
   if (!project?.project?.id || !project?.delivery?.targets?.length) throw new Error('A valid project and at least one output profile are required.');
   const source = path.resolve(sourceVideo), root = path.resolve(projectRoot);
   let packageRoot = path.resolve(outputRoot || path.join(root, 'deliverables'));
   await access(source); await mkdir(packageRoot, { recursive: true });
   packageRoot = await realpath(packageRoot);
   const primary = project.delivery.targets.find(x => x.id === project.delivery.primaryTargetId) || project.delivery.targets[0];
+  // M1.3 overlays: a brand logo declared via brand.logoAssetId is burned into
+  // every directly finalized variant as a governed watermark (the asset itself
+  // still goes through the referenced-asset rights/hash pipeline below);
+  // explicit overlays (timed end cards, lower-thirds) ride along on the same
+  // single verified transcode path. Reflowed variants are rendered elsewhere
+  // and cannot carry them — recorded honestly as a limitation.
+  const sourceProjectDir = path.dirname(path.resolve(projectFile || path.join(root, 'project.json')));
+  const deliveryOverlays = Array.isArray(overlays) ? [...overlays] : [];
+  if (typeof project.brand?.logoAssetId === 'string') {
+    const logoAsset = (project.assets || []).find(asset => asset.id === project.brand.logoAssetId);
+    if (!logoAsset) throw new Error('brand.logoAssetId references an asset missing from the Canonical Video IR.');
+    const resolvedLogo = await resolveAssetFile(sourceProjectDir, logoAsset.uri);
+    deliveryOverlays.unshift({ path: resolvedLogo, kind: 'logo', position: project.brand.overlayPosition ?? 'bottom-right', ...(project.brand.overlayOpacity !== undefined ? { opacity: Number(project.brand.overlayOpacity) } : {}) });
+  }
   const variants = [];
   for (const target of project.delivery.targets) {
     const fps = target.frameRate.numerator / target.frameRate.denominator;
@@ -147,7 +161,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
       variants.push({ target, fit: 'reflow', output, bytes: (await stat(output)).size, verified: variantSource.manifest?.verified === true, media, mediaAnalysis, reflowed: true, ...(variantSource.manifest?.projectIrSha256 ? { reflowedIrSha256: variantSource.manifest.projectIrSha256 } : {}) });
       continue;
     }
-    const finalizeOptions = { output, width: target.width, height: target.height, fps, durationSeconds, videoCodec: target.videoCodec || defaultVideoCodec, audioCodec: target.audioCodec || defaultAudioCodec, crf: target.crf ?? 18, audioInputs, audioRequired: Boolean(target.audioRequired), signal };
+    const finalizeOptions = { output, width: target.width, height: target.height, fps, durationSeconds, videoCodec: target.videoCodec || defaultVideoCodec, audioCodec: target.audioCodec || defaultAudioCodec, crf: target.crf ?? 18, audioInputs, audioRequired: Boolean(target.audioRequired), overlays: deliveryOverlays, signal };
     let receipt;
     if (fit === 'contain') {
       receipt = await finalizeMedia({ input: source, ...finalizeOptions });
@@ -180,7 +194,6 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
   const assetRoot = assertInside(packageRoot, path.join(packageRoot, 'assets'));
   await mkdir(assetRoot, { recursive: true });
   await assertNoSymlinkPath(packageRoot, assetRoot);
-  const sourceProjectDir = path.dirname(path.resolve(projectFile || path.join(root, 'project.json')));
   const assetManifest = [];
   const referencedIds = referencedAssetIds(project);
   const assetsById = new Map((project.assets || []).map(asset => [asset.id, asset]));
@@ -310,6 +323,7 @@ export async function buildDeliveryPackage({ project, projectFile, sourceVideo, 
     .filter(variant => variant.fit === 'contain' && variant.target.width * canvas.height !== variant.target.height * canvas.width)
     .map(variant => ({ targetId: variant.target.id, kind: 'layout-reflow-pending', reason: 'Delivered by scaling the ' + canvas.width + 'x' + canvas.height + ' master to fit with black pad bars (contain); layout was not reflowed for this aspect ratio (roadmap P3.3).' }))
     : [];
+  if (variants.some(variant => variant.reflowed) && deliveryOverlays.length) layoutLimitations.push({ targetId: '(reflowed)', kind: 'overlay-not-applied-on-reflow', reason: 'Reflowed variants are rendered from their own IR layout before delivery; the brand logo/overlays are not composited onto them by the delivery step.' });
   const receipt = {
     schemaVersion: '1.0', projectId: project.project.id, projectRevision: project.project.revision || 1,
     createdAt: new Date().toISOString(),

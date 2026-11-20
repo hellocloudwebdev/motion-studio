@@ -377,3 +377,36 @@ test('M1.8: engine project references must live inside the project workspace', a
     } finally { await rm(outside, { recursive: true, force: true }); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('M1.3: the brand logo asset is burned into finalized variants as a watermark', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'motion-delivery-logo-'));
+  try {
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const logoPath = path.join(projectDir, 'logo.png');
+    await runMediaCommand('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:size=64x32:d=1', '-frames:v', '1', '-update', '1', logoPath]);
+    const logoFile = await readFile(logoPath);
+    const input = project([{ id: 'logo', kind: 'image', uri: 'logo.png', sha256: createHash('sha256').update(logoFile).digest('hex'), rightsStatus: 'user-owned' }]);
+    input.brand = { colors: { background: '#10243a' }, logoAssetId: 'logo', overlayPosition: 'top-right', overlayOpacity: 0.9 };
+    const projectFile = path.join(projectDir, 'project.json'), sourceVideo = path.join(root, 'source.mp4');
+    await writeFile(projectFile, JSON.stringify(input, null, 2) + '\n');
+    await makeVideo(sourceVideo);
+    const canonicalSha = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const result = await buildDeliveryPackage({ project: input, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly: null, operationHistory: [] });
+    assert.equal(result.acceptance.passed, true);
+    assert.equal(result.variants[0].overlays.length, 1, 'the finalized variant records its overlay');
+    assert.equal(result.variants[0].overlays[0].kind, 'logo');
+    assert.equal(result.variants[0].overlays[0].opacity, 0.9);
+    // top-right preset on the 320x180 master: default 18% box, 8px margin.
+    assert.deepEqual(result.variants[0].overlays[0].box, { x: 254, y: 8, width: 58, height: 32 });
+    // The logo asset still flows through the referenced-asset pipeline.
+    assert.equal(JSON.parse(await readFile(result.assetManifest, 'utf8')).assets[0].included, true);
+    // A declared logo that is missing from the IR fails closed.
+    const broken = structuredClone(input);
+    broken.brand.logoAssetId = 'missing-logo';
+    await assert.rejects(
+      () => buildDeliveryPackage({ project: broken, projectFile, sourceVideo, projectRoot: root, outputRoot: path.join(root, 'delivery-broken'), renderManifest: { productionReady: true, verified: true, projectIrSha256: canonicalSha, qa: { passed: true, defects: [] } }, editorialAssembly: null, operationHistory: [] }),
+      /brand\.logoAssetId references an asset missing/
+    );
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

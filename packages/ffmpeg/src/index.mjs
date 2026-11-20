@@ -39,7 +39,78 @@ export function parseProbeOutput(text) {
 const SAFE_VIDEO_CODECS = new Set(['libx264', 'libx265', 'prores_ks', 'libvpx-vp9']);
 const SAFE_AUDIO_CODECS = new Set(['aac', 'libmp3lame', 'libopus', 'pcm_s16le']);
 
-export function buildFinalizationPlan({ input, output, width, height, fps, durationSeconds, videoCodec = 'libx264', audioCodec = 'aac', crf = 18, audioInputs = [], subtitlePath, burnSubtitles = false, audioRequired = false } = {}) {
+// Roadmap M1.3 overlays: approved logos/watermarks and timed end cards burned
+// into the delivered master/variants by the same single verified transcode
+// path. Positions are box-or-preset; timed overlays use the enable window.
+const OVERLAY_POSITIONS = {
+  'top-left': (width, height, margin) => ({ x: margin, y: margin }),
+  'top-right': (width, height, margin) => ({ x: width - margin, y: margin }),
+  'bottom-left': (width, height, margin) => ({ x: margin, y: height - margin }),
+  'bottom-right': (width, height, margin) => ({ x: width - margin, y: height - margin })
+};
+
+function normalizeOverlays(overlays, { width, height, fps }) {
+  if (overlays === undefined) return [];
+  if (!Array.isArray(overlays)) throw new Error('overlays must be an array of { path, box|position, ... } overlay specs.');
+  const margin = Math.max(8, Math.round(Math.min(width, height) * 0.04));
+  return overlays.map((source, index) => {
+    if (!source || typeof source !== 'object') throw new Error('overlays[' + index + '] must be an object with a path.');
+    const file = assertSafePath(source.path, 'overlays[' + index + '].path');
+    const opacity = Number(source.opacity ?? 1);
+    if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new Error('overlays[' + index + '].opacity must be between 0 and 1.');
+    let box;
+    if (source.box !== undefined) {
+      const b = source.box;
+      if (!b || typeof b !== 'object') throw new Error('overlays[' + index + '].box must be an object { x, y, width, height }.');
+      const x = Math.round(Number(b.x)), y = Math.round(Number(b.y)), w = Math.round(Number(b.width)), h = Math.round(Number(b.height));
+      if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > width || y + h > height) throw new Error('overlays[' + index + '].box must fit inside the ' + width + 'x' + height + ' canvas.');
+      box = { x, y, width: w, height: h };
+    } else {
+      const position = String(source.position || 'bottom-right');
+      if (!OVERLAY_POSITIONS[position]) throw new Error('overlays[' + index + '].position must be one of ' + Object.keys(OVERLAY_POSITIONS).join(', ') + ' when no box is given.');
+      const boxWidth = Math.round(Number(source.width ?? Math.round(width * 0.18))), boxHeight = Math.round(Number(source.height ?? Math.round(height * 0.18)));
+      if (![boxWidth, boxHeight].every(Number.isFinite) || boxWidth <= 0 || boxHeight <= 0) throw new Error('overlays[' + index + '] width/height must be positive finite numbers.');
+      const anchor = OVERLAY_POSITIONS[position](width, height, margin);
+      box = { x: Math.max(0, Math.min(anchor.x - (position.includes('right') ? boxWidth : 0), width - boxWidth)), y: Math.max(0, Math.min(anchor.y - (position.includes('top') ? 0 : boxHeight), height - boxHeight)), width: boxWidth, height: boxHeight };
+    }
+    const startSeconds = source.startSeconds === undefined ? null : Number(source.startSeconds);
+    const endSeconds = source.endSeconds === undefined ? null : Number(source.endSeconds);
+    if (startSeconds !== null && (!Number.isFinite(startSeconds) || startSeconds < 0)) throw new Error('overlays[' + index + '].startSeconds must be a non-negative finite number.');
+    if (endSeconds !== null && (!Number.isFinite(endSeconds) || endSeconds <= 0)) throw new Error('overlays[' + index + '].endSeconds must be a positive finite number.');
+    if (startSeconds !== null && endSeconds !== null && endSeconds <= startSeconds) throw new Error('overlays[' + index + '].endSeconds must be greater than startSeconds.');
+    return {
+      path: file, box, opacity,
+      kind: ['logo', 'overlay', 'endcard'].includes(source.kind) ? source.kind : 'overlay',
+      ...(startSeconds !== null ? { startSeconds } : {}),
+      ...(endSeconds !== null ? { endSeconds } : {})
+    };
+  });
+}
+
+function buildOverlayChain(overlays, baseLabel, width, height) {
+  const filters = [];
+  let current = baseLabel;
+  overlays.forEach((overlay, index) => {
+    const inputIndex = index + 1;
+    const prepared = 'ov' + index + 'pre';
+    const chain = ['scale=' + overlay.box.width + ':' + overlay.box.height + ':force_original_aspect_ratio=decrease', 'format=rgba'];
+    if (overlay.opacity < 1) chain.push('colorchannelmixer=aa=' + overlay.opacity.toFixed(3));
+    filters.push('[' + inputIndex + ':v]' + chain.join(',') + '[' + prepared + ']');
+    const window = overlay.startSeconds !== undefined && overlay.endSeconds !== undefined
+      ? ':enable=\'between(t,' + overlay.startSeconds.toFixed(3) + ',' + overlay.endSeconds.toFixed(3) + ')\''
+      : overlay.startSeconds !== undefined
+        ? ':enable=\'gte(t,' + overlay.startSeconds.toFixed(3) + ')\''
+        : overlay.endSeconds !== undefined
+          ? ':enable=\'lte(t,' + overlay.endSeconds.toFixed(3) + ')\''
+          : '';
+    const out = index === overlays.length - 1 ? 'vout' : 'ov' + index;
+    filters.push('[' + current + '][' + prepared + ']overlay=x=' + overlay.box.x + ':y=' + overlay.box.y + ':eof_action=repeat' + window + '[' + out + ']');
+    current = out;
+  });
+  return { filters, finalLabel: current };
+}
+
+export function buildFinalizationPlan({ input, output, width, height, fps, durationSeconds, videoCodec = 'libx264', audioCodec = 'aac', crf = 18, audioInputs = [], subtitlePath, burnSubtitles = false, audioRequired = false, overlays = [] } = {}) {
   const base = buildTranscodePlan({ input, output, width, height, fps, videoCodec, audioCodec, crf });
   if (durationSeconds !== undefined && (!Number.isFinite(durationSeconds) || durationSeconds <= 0)) throw new Error('durationSeconds must be a positive finite number.');
   if (!SAFE_VIDEO_CODECS.has(videoCodec) || !SAFE_AUDIO_CODECS.has(audioCodec)) throw new Error('Codec is not in the delivery allowlist.');
@@ -54,11 +125,27 @@ export function buildFinalizationPlan({ input, output, width, height, fps, durat
     return { path: file, offset, volume, duration, fadeIn, fadeOut, duckAgainstNarration: source.duckAgainstNarration === true, label: ['narration', 'music', 'sfx'].includes(source.kind) ? source.kind : 'audio' };
   });
   if (audioRequired && !normalizedAudio.length) throw new Error('This delivery requires audio, but no audio inputs were supplied.');
+  const normalizedOverlays = normalizeOverlays(overlays, { width: Math.round(width), height: Math.round(height), fps });
   const target = assertSafePath(output, 'output');
   const inputs = [assertSafePath(input, 'input')];
   const args = ['-hide_banner', '-y', '-i', inputs[0]];
   for (const source of normalizedAudio) { args.push('-i', source.path); inputs.push(source.path); }
-  const filters = ['[0:v]scale=' + Math.round(width) + ':' + Math.round(height) + ':force_original_aspect_ratio=decrease,pad=' + Math.round(width) + ':' + Math.round(height) + ':(ow-iw)/2:(oh-ih)/2,fps=' + fps + '[vout]'];
+  for (const overlay of normalizedOverlays) { args.push('-i', overlay.path); inputs.push(overlay.path); }
+  const filters = ['[0:v]scale=' + Math.round(width) + ':' + Math.round(height) + ':force_original_aspect_ratio=decrease,pad=' + Math.round(width) + ':' + Math.round(height) + ':(ow-iw)/2:(oh-ih)/2,fps=' + fps + '[vbase]'];
+  let videoLabel = 'vbase';
+  if (subtitlePath && burnSubtitles) {
+    const escaped = assertSafePath(subtitlePath, 'subtitle').replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
+    filters.push("[vbase]subtitles='" + escaped + "'[vsub]");
+    videoLabel = 'vsub';
+  } else if (subtitlePath) {
+    // Subtitles are packaged as sidecar files unless burnSubtitles is set.
+  }
+  if (normalizedOverlays.length) {
+    const overlayChain = buildOverlayChain(normalizedOverlays, videoLabel, Math.round(width), Math.round(height));
+    filters.push(...overlayChain.filters);
+  } else {
+    filters.push('[' + videoLabel + ']null[vout]');
+  }
   if (normalizedAudio.length) {
     normalizedAudio.forEach((a, i) => {
       const chain = ['volume=' + a.volume];
@@ -89,14 +176,6 @@ export function buildFinalizationPlan({ input, output, width, height, fps, durat
     const audioPadding = durationSeconds === undefined ? '' : ',apad=whole_dur=' + durationSeconds.toFixed(6);
     filters.push(ducked.join('') + 'amix=inputs=' + ducked.length + ':duration=longest:normalize=0' + audioPadding + '[aout]');
   }
-  if (subtitlePath) {
-    const subtitles = assertSafePath(subtitlePath, 'subtitle');
-    if (burnSubtitles) {
-      const escaped = subtitles.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
-      filters[0] = filters[0].replace('[vout]', '[vscaled]');
-      filters.push("[vscaled]subtitles='" + escaped + "'[vout]");
-    }
-  }
   args.push('-filter_complex', filters.join(';'), '-map', '[vout]');
   if (normalizedAudio.length) args.push('-map', '[aout]'); else args.push('-map', '0:a?');
   args.push('-c:v', videoCodec);
@@ -108,7 +187,7 @@ export function buildFinalizationPlan({ input, output, width, height, fps, durat
   if (durationSeconds !== undefined) args.push('-t', Number(durationSeconds).toFixed(6));
   if (!target.toLowerCase().endsWith('.webm')) args.push('-movflags', '+faststart');
   args.push(target);
-  return { executable: 'ffmpeg', args, input: inputs[0], inputs, output: target, expected: { width: Math.round(width), height: Math.round(height), fps, durationSeconds, videoCodec, audioCodec, audioRequired, hasAudio: normalizedAudio.length > 0 }, audio: normalizedAudio, subtitlePath: subtitlePath ? assertSafePath(subtitlePath, 'subtitle') : null };
+  return { executable: 'ffmpeg', args, input: inputs[0], inputs, output: target, expected: { width: Math.round(width), height: Math.round(height), fps, durationSeconds, videoCodec, audioCodec, audioRequired, hasAudio: normalizedAudio.length > 0 }, audio: normalizedAudio, overlays: normalizedOverlays, subtitlePath: subtitlePath ? assertSafePath(subtitlePath, 'subtitle') : null };
 }
 
 export function runMediaCommand(executable, args, { cwd, signal, onProgress = () => {} } = {}) {
@@ -153,7 +232,7 @@ export async function finalizeMedia(options = {}) {
   if (!outputStat.isFile() || outputStat.size === 0) throw new Error('FFmpeg returned without a non-empty output file.');
   const media = await probeMedia(plan.output, options);
   const result = inspectMedia(media, { width: plan.expected.width, height: plan.expected.height, fps: plan.expected.fps, durationSeconds: plan.expected.durationSeconds, durationToleranceSeconds: 1 / plan.expected.fps + 0.02, audioRequired: plan.expected.audioRequired });
-  const receipt = { output: plan.output, bytes: outputStat.size, verified: result.passed, media: result.media, checks: result, createdAt: new Date().toISOString(), input: plan.input, audio: plan.audio, subtitlePath: plan.subtitlePath };
+  const receipt = { output: plan.output, bytes: outputStat.size, verified: result.passed, media: result.media, checks: result, createdAt: new Date().toISOString(), input: plan.input, audio: plan.audio, overlays: plan.overlays, subtitlePath: plan.subtitlePath };
   if (!result.passed) throw Object.assign(new Error('Final media failed independent FFprobe inspection.'), { receipt });
   return receipt;
 }
